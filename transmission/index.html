@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Transmission Engine</title>
+    <link rel="stylesheet" href="../styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="header">
+        <div>
+          <h1>Transmission Engine</h1>
+          <p class="sub">Stylized radio / comms device simulator</p>
+        </div>
+        <div class="headerActions">
+          <label class="file">
+            <input id="fileInput" type="file" accept=".wav,.mp3,audio/wav,audio/mpeg" />
+            <span>Upload WAV/MP3</span>
+          </label>
+          <button id="playBtn" class="primary" disabled>Play</button>
+          <button id="stopBtn" disabled>Stop</button>
+          <label class="toggle headerToggle">
+            <input id="loopToggle" type="checkbox" />
+            <span>Loop</span>
+          </label>
+          <button id="exportBtn" disabled>Export WAV</button>
+        </div>
+      </header>
+
+      <section class="panel">
+        <div class="controls">
+          <div class="control">
+            <div class="labelRow">
+              <label for="bandwidth">AM Bandwidth</label>
+              <span id="bandwidthVal" class="val"></span>
+            </div>
+            <input id="bandwidth" type="range" min="0" max="1" step="0.001" value="0.45" />
+          </div>
+
+          <div class="control">
+            <div class="labelRow">
+              <label for="drive">Drive / Device Age</label>
+              <span id="driveVal" class="val"></span>
+            </div>
+            <input id="drive" type="range" min="0" max="1" step="0.001" value="0.35" />
+          </div>
+
+          <div class="control">
+            <div class="labelRow">
+              <label for="badConnection">Bad Connection</label>
+              <span id="badConnectionVal" class="val"></span>
+            </div>
+            <input id="badConnection" type="range" min="0" max="1" step="0.001" value="0.25" />
+          </div>
+
+          <div class="control">
+            <div class="labelRow">
+              <label for="noiseProfile">Noise Profile</label>
+              <span id="noiseProfileVal" class="val"></span>
+            </div>
+            <input id="noiseProfile" type="range" min="0" max="1" step="0.001" value="0.2" />
+          </div>
+
+          <div class="controlRow">
+            <label class="toggle">
+              <input id="walkieMode" type="checkbox" />
+              <span>Walkie Mode</span>
+            </label>
+
+            <label class="toggle">
+              <input id="pinkNoise" type="checkbox" />
+              <span>Pink Noise</span>
+            </label>
+
+            <div class="selectWrap">
+              <label for="preset">Preset</label>
+              <select id="preset">
+                <option value="">Custom</option>
+                <option value="cheapAM">Cheap AM Radio</option>
+                <option value="policeScanner">Police Scanner</option>
+                <option value="storm">Storm Transmission</option>
+                <option value="wornWalkie">Worn Walkie</option>
+                <option value="ww2Field">WW2 Field Radio</option>
+                <option value="narrowScanner">Narrow Scanner</option>
+                <option value="dispatchHot">Dispatch Hot</option>
+                <option value="squelchHunt">Squelch Hunt</option>
+              </select>
+            </div>
+          </div>
+
+          <details class="advanced">
+            <summary>Advanced</summary>
+            <div class="advancedGrid">
+              <div class="control">
+                <div class="labelRow">
+                  <label for="hpHz">High-pass</label>
+                  <span id="hpHzVal" class="val"></span>
+                </div>
+                <input id="hpHz" type="range" min="40" max="1200" step="1" value="380" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="lpHz">Low-pass</label>
+                  <span id="lpHzVal" class="val"></span>
+                </div>
+                <input id="lpHz" type="range" min="1200" max="12000" step="1" value="5200" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="midGainDb">Mid Bump</label>
+                  <span id="midGainDbVal" class="val"></span>
+                </div>
+                <input id="midGainDb" type="range" min="-6" max="8" step="0.1" value="0" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="midFreq">Mid Freq</label>
+                  <span id="midFreqVal" class="val"></span>
+                </div>
+                <input id="midFreq" type="range" min="600" max="3500" step="1" value="1550" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="midQ">Mid Q</label>
+                  <span id="midQVal" class="val"></span>
+                </div>
+                <input id="midQ" type="range" min="0.4" max="5" step="0.01" value="1.2" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="boxDipDb">Box Dip</label>
+                  <span id="boxDipDbVal" class="val"></span>
+                </div>
+                <input id="boxDipDb" type="range" min="0" max="6" step="0.1" value="0" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="comp">Compression</label>
+                  <span id="compVal" class="val"></span>
+                </div>
+                <input id="comp" type="range" min="0" max="1" step="0.001" value="0.25" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="asym">Asymmetry</label>
+                  <span id="asymVal" class="val"></span>
+                </div>
+                <input id="asym" type="range" min="0" max="1" step="0.001" value="0.1" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="preDrive">Pre Drive</label>
+                  <span id="preDriveVal" class="val"></span>
+                </div>
+                <input id="preDrive" type="range" min="0" max="1" step="0.001" value="0.25" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="postDrive">Post Drive</label>
+                  <span id="postDriveVal" class="val"></span>
+                </div>
+                <input id="postDrive" type="range" min="0" max="1" step="0.001" value="0.35" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="crush">Crush</label>
+                  <span id="crushVal" class="val"></span>
+                </div>
+                <input id="crush" type="range" min="0" max="1" step="0.001" value="0" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="wowDepth">Wow</label>
+                  <span id="wowDepthVal" class="val"></span>
+                </div>
+                <input id="wowDepth" type="range" min="0" max="1" step="0.001" value="0.25" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="dropRate">Drop Rate</label>
+                  <span id="dropRateVal" class="val"></span>
+                </div>
+                <input id="dropRate" type="range" min="0" max="1" step="0.001" value="0.25" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="dropDepth">Drop Depth</label>
+                  <span id="dropDepthVal" class="val"></span>
+                </div>
+                <input id="dropDepth" type="range" min="0" max="1" step="0.001" value="0.35" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="crackle">Crackle</label>
+                  <span id="crackleVal" class="val"></span>
+                </div>
+                <input id="crackle" type="range" min="0" max="1" step="0.001" value="0.25" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="lfoRate">LFO Rate</label>
+                  <span id="lfoRateVal" class="val"></span>
+                </div>
+                <input id="lfoRate" type="range" min="0.1" max="6" step="0.01" value="0.7" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="noiseColor">Noise Color</label>
+                  <span id="noiseColorVal" class="val"></span>
+                </div>
+                <input id="noiseColor" type="range" min="0" max="1" step="0.001" value="0" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="hiss">Hiss</label>
+                  <span id="hissVal" class="val"></span>
+                </div>
+                <input id="hiss" type="range" min="0" max="1" step="0.001" value="0.2" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="walkieThresholdDb">Silence Thresh</label>
+                  <span id="walkieThresholdDbVal" class="val"></span>
+                </div>
+                <input id="walkieThresholdDb" type="range" min="-80" max="-20" step="0.5" value="-45" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="walkieMinSilenceMs">Min Silence</label>
+                  <span id="walkieMinSilenceMsVal" class="val"></span>
+                </div>
+                <input id="walkieMinSilenceMs" type="range" min="80" max="600" step="1" value="220" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="walkieClickMs">Click Length</label>
+                  <span id="walkieClickMsVal" class="val"></span>
+                </div>
+                <input id="walkieClickMs" type="range" min="5" max="25" step="0.5" value="12" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="walkieClickLevel">Click Level</label>
+                  <span id="walkieClickLevelVal" class="val"></span>
+                </div>
+                <input id="walkieClickLevel" type="range" min="0" max="1" step="0.001" value="0.65" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="walkieFx">Walkie FX</label>
+                  <span id="walkieFxVal" class="val"></span>
+                </div>
+                <select id="walkieFx">
+                  <option value="dispatch">Dispatch Beep</option>
+                  <option value="click">Click/Pop</option>
+                </select>
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="tuningEnable">Tuning Noise</label>
+                  <span id="tuningEnableVal" class="val"></span>
+                </div>
+                <input id="tuningEnable" type="checkbox" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="tuningMode">Tuning Mode</label>
+                  <span id="tuningModeVal" class="val"></span>
+                </div>
+                <select id="tuningMode">
+                  <option value="edges">Edges</option>
+                  <option value="search">Search</option>
+                </select>
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="tuningSource">Tuning Source</label>
+                  <span id="tuningSourceVal" class="val"></span>
+                </div>
+                <select id="tuningSource"></select>
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="tuningAmount">Tuning Amount</label>
+                  <span id="tuningAmountVal" class="val"></span>
+                </div>
+                <input id="tuningAmount" type="range" min="0" max="1" step="0.001" value="0.35" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="tuningSnippetMs">Snippet</label>
+                  <span id="tuningSnippetMsVal" class="val"></span>
+                </div>
+                <input id="tuningSnippetMs" type="range" min="40" max="500" step="1" value="140" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="tuningCutDepth">Tuning Cut</label>
+                  <span id="tuningCutDepthVal" class="val"></span>
+                </div>
+                <input id="tuningCutDepth" type="range" min="0" max="1" step="0.001" value="0.55" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="outGain">Output Gain</label>
+                  <span id="outGainVal" class="val"></span>
+                </div>
+                <input id="outGain" type="range" min="0" max="1.5" step="0.01" value="0.92" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="passes">Stack Passes</label>
+                  <span id="passesVal" class="val"></span>
+                </div>
+                <input id="passes" type="range" min="1" max="6" step="1" value="1" />
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <div class="meter">
+          <div class="status">
+            <div><span class="k">File</span> <span id="fileName" class="v">None</span></div>
+            <div><span class="k">Duration</span> <span id="duration" class="v">-</span></div>
+            <div><span class="k">Sample Rate</span> <span id="sampleRate" class="v">-</span></div>
+            <div><span class="k">State</span> <span id="state" class="v">Idle</span></div>
+          </div>
+          <div class="hint">
+            Tip: for AudioWorklet support, serve this folder (not <code>file://</code>). See <code>README.md</code>.
+          </div>
+        </div>
+      </section>
+
+      <footer class="footer">
+        <a href="../README.md" target="_blank" rel="noreferrer">README</a>
+        <span class="sep">ƒ?›</span>
+        <span class="muted">Preview and export use the same DSP graph.</span>
+      </footer>
+    </main>
+
+    <script type="module" src="../src/main.js"></script>
+  </body>
+</html>
+

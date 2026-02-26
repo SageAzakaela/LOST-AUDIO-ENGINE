@@ -1,0 +1,158 @@
+const WORKLET_URL = new URL("./camcorder-processor.js", import.meta.url);
+
+function now(ctx) {
+  return ctx.currentTime;
+}
+
+export async function ensureWorklet(ctx) {
+  if (ctx.__camcorderWorkletLoaded) return;
+  await ctx.audioWorklet.addModule(WORKLET_URL.href);
+  ctx.__camcorderWorkletLoaded = true;
+}
+
+export function defaultSettings() {
+  return {
+    coverage: 0.35,
+    movement: 0.25,
+    corruption: 0.18,
+    agc: 0.35,
+    wind: false,
+    windLevel: 0.95,
+    camLevel: 0.35,
+    windBedLevel: 0.85,
+    windHitLevel: 0.65,
+    windHitRate: 0.35,
+    camBedSource: "",
+    windBedSource: "",
+    windHitSource: "",
+
+    hpHz: 55,
+    lpHz: 9200,
+    boxDb: 3.2,
+    boxHz: 1650,
+
+    agcAmt: 0.55,
+    agcSpeed: 0.45,
+    clip: 0.25,
+
+    crush: 0.12,
+    bits: 12,
+    rate: 24000,
+
+    drop: 0.18,
+    dropMs: 28,
+    dropMode: "hold",
+    repeatMs: 48,
+    chirp: 0.15,
+
+    handling: 0.22,
+    rub: 0.18,
+    hiss: 0.12,
+
+    ceiling: 0.92,
+    outGain: 0.98,
+  };
+}
+
+function dropModeToIndex(mode) {
+  if (typeof mode === "number") return Math.round(Math.max(0, Math.min(3, mode)));
+  if (mode === "mute") return 1;
+  if (mode === "interp") return 2;
+  if (mode === "repeat") return 3;
+  return 0;
+}
+
+export async function buildCamcorderGraph(ctx, { seed }) {
+  await ensureWorklet(ctx);
+  const input = new GainNode(ctx, { gain: 1 });
+  const wind = new GainNode(ctx, { gain: 0 });
+  const mix = new GainNode(ctx, { gain: 1 });
+
+  const hp = new BiquadFilterNode(ctx, { type: "highpass", Q: 0.707, frequency: 55 });
+  const lp1 = new BiquadFilterNode(ctx, { type: "lowpass", Q: 0.85, frequency: 9200 });
+  const lp2 = new BiquadFilterNode(ctx, { type: "lowpass", Q: 0.85, frequency: 9200 });
+  const box = new BiquadFilterNode(ctx, { type: "peaking", Q: 1.2, frequency: 1650, gain: 3.2 });
+  const dip = new BiquadFilterNode(ctx, { type: "peaking", Q: 0.9, frequency: 650, gain: -1.2 });
+
+  const processor = new AudioWorkletNode(ctx, "camcorder", {
+    numberOfInputs: 1,
+    numberOfOutputs: 1,
+    outputChannelCount: [1],
+    processorOptions: { seed: seed >>> 0 },
+  });
+
+  const out = new GainNode(ctx, { gain: 1 });
+
+  input.connect(mix);
+  wind.connect(mix);
+  mix.connect(hp);
+  hp.connect(box);
+  box.connect(dip);
+  dip.connect(lp1);
+  lp1.connect(lp2);
+  lp2.connect(processor);
+  processor.connect(out);
+
+  function reset(seedNext) {
+    processor.port.postMessage({ type: "reset", seed: seedNext >>> 0 });
+  }
+
+  function applySettings(settings, { time = now(ctx), ramp = 0.02 } = {}) {
+    const t1 = time + ramp;
+    const s = { ...settings };
+
+    hp.frequency.cancelScheduledValues(time);
+    hp.frequency.setValueAtTime(hp.frequency.value, time);
+    hp.frequency.linearRampToValueAtTime(Math.max(10, Math.min(280, s.hpHz ?? 55)), t1);
+
+    const lpHz = Math.max(900, Math.min(22000, s.lpHz ?? 9200));
+    for (const l of [lp1, lp2]) {
+      l.frequency.cancelScheduledValues(time);
+      l.frequency.setValueAtTime(l.frequency.value, time);
+      l.frequency.linearRampToValueAtTime(lpHz, t1);
+    }
+
+    box.frequency.cancelScheduledValues(time);
+    box.frequency.setValueAtTime(box.frequency.value, time);
+    box.frequency.linearRampToValueAtTime(Math.max(650, Math.min(4200, s.boxHz ?? 1650)), t1);
+    box.gain.cancelScheduledValues(time);
+    box.gain.setValueAtTime(box.gain.value, time);
+    box.gain.linearRampToValueAtTime(Math.max(0, Math.min(14, s.boxDb ?? 3.2)), t1);
+    dip.gain.cancelScheduledValues(time);
+    dip.gain.setValueAtTime(dip.gain.value, time);
+    dip.gain.linearRampToValueAtTime(-0.35 * Math.max(0, Math.min(14, s.boxDb ?? 3.2)), t1);
+
+    processor.parameters.get("coverage")?.setValueAtTime(s.coverage ?? 0.35, time);
+    processor.parameters.get("movement")?.setValueAtTime(s.movement ?? 0.25, time);
+    processor.parameters.get("corruption")?.setValueAtTime(s.corruption ?? 0.18, time);
+    processor.parameters.get("agcDrive")?.setValueAtTime(s.agc ?? 0.35, time);
+    processor.parameters.get("wind")?.setValueAtTime(s.wind ? 1 : 0, time);
+    processor.parameters.get("windLevel")?.setValueAtTime(s.windLevel ?? 0.95, time);
+    wind.gain.cancelScheduledValues(time);
+    wind.gain.setValueAtTime(wind.gain.value, time);
+    wind.gain.linearRampToValueAtTime(s.wind ? Math.max(0, Math.min(1.5, s.windLevel ?? 0.95)) : 0, t1);
+
+    processor.parameters.get("agcAmt")?.setValueAtTime(s.agcAmt ?? 0.55, time);
+    processor.parameters.get("agcSpeed")?.setValueAtTime(s.agcSpeed ?? 0.45, time);
+    processor.parameters.get("clip")?.setValueAtTime(s.clip ?? 0.25, time);
+
+    processor.parameters.get("crush")?.setValueAtTime(s.crush ?? 0.12, time);
+    processor.parameters.get("bits")?.setValueAtTime(s.bits ?? 12, time);
+    processor.parameters.get("rate")?.setValueAtTime(s.rate ?? 24000, time);
+
+    processor.parameters.get("drop")?.setValueAtTime(s.drop ?? 0.18, time);
+    processor.parameters.get("dropMs")?.setValueAtTime(s.dropMs ?? 28, time);
+    processor.parameters.get("dropMode")?.setValueAtTime(dropModeToIndex(s.dropMode), time);
+    processor.parameters.get("repeatMs")?.setValueAtTime(s.repeatMs ?? 48, time);
+    processor.parameters.get("chirp")?.setValueAtTime(s.chirp ?? 0.15, time);
+
+    processor.parameters.get("handling")?.setValueAtTime(s.handling ?? 0.22, time);
+    processor.parameters.get("rub")?.setValueAtTime(s.rub ?? 0.18, time);
+    processor.parameters.get("hiss")?.setValueAtTime(s.hiss ?? 0.12, time);
+
+    processor.parameters.get("ceiling")?.setValueAtTime(s.ceiling ?? 0.92, time);
+    processor.parameters.get("outGain")?.setValueAtTime(s.outGain ?? 0.98, time);
+  }
+
+  return { input, wind, output: out, nodes: { input, wind, mix, hp, box, dip, lp1, lp2, processor, out }, reset, applySettings };
+}

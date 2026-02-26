@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CD Engine</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="header">
+        <div>
+          <h1>CD Engine</h1>
+          <p class="sub">Optical read error / jitter / concealment simulator</p>
+        </div>
+        <div class="headerActions">
+          <label class="file">
+            <input id="fileInput" type="file" accept=".wav,.mp3,audio/wav,audio/mpeg" />
+            <span>Upload WAV/MP3</span>
+          </label>
+          <button id="playBtn" class="primary" disabled>Play</button>
+          <button id="stopBtn" disabled>Stop</button>
+          <label class="toggle headerToggle">
+            <input id="loopToggle" type="checkbox" />
+            <span>Loop</span>
+          </label>
+          <button id="exportBtn" disabled>Export WAV</button>
+        </div>
+      </header>
+
+      <section class="panel">
+        <div class="controls">
+          <div class="control">
+            <div class="labelRow">
+              <label for="clarity">Clarity</label>
+              <span id="clarityVal" class="val"></span>
+            </div>
+            <input id="clarity" type="range" min="0" max="1" step="0.001" value="0.65" />
+          </div>
+
+          <div class="control">
+            <div class="labelRow">
+              <label for="damage">Disc Damage</label>
+              <span id="damageVal" class="val"></span>
+            </div>
+            <input id="damage" type="range" min="0" max="1" step="0.001" value="0.25" />
+          </div>
+
+          <div class="control">
+            <div class="labelRow">
+              <label for="tracking">Tracking</label>
+              <span id="trackingVal" class="val"></span>
+            </div>
+            <input id="tracking" type="range" min="0" max="1" step="0.001" value="0.22" />
+          </div>
+
+          <div class="control">
+            <div class="labelRow">
+              <label for="jitter">Clock Jitter</label>
+              <span id="jitterVal" class="val"></span>
+            </div>
+            <input id="jitter" type="range" min="0" max="1" step="0.001" value="0.18" />
+          </div>
+
+          <div class="control">
+            <div class="labelRow">
+              <label for="carComp">Car Stereo Comp</label>
+              <span id="carCompVal" class="val"></span>
+            </div>
+            <input id="carComp" type="range" min="0" max="1" step="0.001" value="0" />
+          </div>
+
+          <div class="controlRow">
+            <div class="selectWrap">
+              <label for="preset">Preset</label>
+              <select id="preset">
+                <option value="">Custom</option>
+                <option value="cleanPlayer">Clean Player</option>
+                <option value="dustyDisc">Dusty Disc</option>
+                <option value="scratchedHook">Scratched Hook</option>
+                <option value="portableSkip">Portable Skip</option>
+                <option value="carCdPlayer">Car CD Player</option>
+                <option value="rottedRip">Rotted Rip</option>
+              </select>
+            </div>
+            <label class="toggle">
+              <input id="softClip" type="checkbox" checked />
+              <span>Soft Clip</span>
+            </label>
+          </div>
+
+          <details class="advanced">
+            <summary>Advanced Tuning</summary>
+            <div class="advGrid">
+              <div class="control">
+                <div class="labelRow">
+                  <label for="mode">Conceal Mode</label>
+                  <span id="modeVal" class="val"></span>
+                </div>
+                <select id="mode">
+                  <option value="hold" selected>Hold</option>
+                  <option value="mute">Mute</option>
+                  <option value="interp">Interpolate</option>
+                  <option value="repeat">Repeat Frames</option>
+                </select>
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="errorRate">Error Rate</label>
+                  <span id="errorRateVal" class="val"></span>
+                </div>
+                <input id="errorRate" type="range" min="0" max="1" step="0.001" value="0.18" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="burstMs">Burst Length</label>
+                  <span id="burstMsVal" class="val"></span>
+                </div>
+                <input id="burstMs" type="range" min="4" max="260" step="1" value="24" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="repeatMs">Repeat Depth</label>
+                  <span id="repeatMsVal" class="val"></span>
+                </div>
+                <input id="repeatMs" type="range" min="6" max="220" step="1" value="42" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="scratchRate">Scratch Rate</label>
+                  <span id="scratchRateVal" class="val"></span>
+                </div>
+                <input id="scratchRate" type="range" min="0" max="1" step="0.001" value="0.25" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="scratchAmt">Scratch Amount</label>
+                  <span id="scratchAmtVal" class="val"></span>
+                </div>
+                <input id="scratchAmt" type="range" min="0" max="1" step="0.001" value="0.35" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="jitterMs">Jitter Depth</label>
+                  <span id="jitterMsVal" class="val"></span>
+                </div>
+                <input id="jitterMs" type="range" min="0" max="1.4" step="0.01" value="0.18" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="jitterRate">Jitter Rate</label>
+                  <span id="jitterRateVal" class="val"></span>
+                </div>
+                <input id="jitterRate" type="range" min="8" max="140" step="1" value="38" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="hfLoss">HF Loss</label>
+                  <span id="hfLossVal" class="val"></span>
+                </div>
+                <input id="hfLoss" type="range" min="0" max="1" step="0.001" value="0.1" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="servoNoise">Servo Noise</label>
+                  <span id="servoNoiseVal" class="val"></span>
+                </div>
+                <input id="servoNoise" type="range" min="0" max="1" step="0.001" value="0.12" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="ceiling">Ceiling</label>
+                  <span id="ceilingVal" class="val"></span>
+                </div>
+                <input id="ceiling" type="range" min="0.2" max="1" step="0.001" value="0.94" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="outGain">Output Gain</label>
+                  <span id="outGainVal" class="val"></span>
+                </div>
+                <input id="outGain" type="range" min="0" max="1.5" step="0.01" value="0.98" />
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <div class="meter">
+          <div class="status">
+            <div><span class="k">File</span> <span id="fileName" class="v">None</span></div>
+            <div><span class="k">Duration</span> <span id="duration" class="v">-</span></div>
+            <div><span class="k">Sample Rate</span> <span id="sampleRate" class="v">-</span></div>
+            <div><span class="k">State</span> <span id="state" class="v">Idle</span></div>
+          </div>
+          <div class="hint">
+            Tip: AudioWorklet requires HTTP(S) (not <code>file://</code>). See <code>README.md</code>.
+          </div>
+        </div>
+      </section>
+
+      <footer class="footer">
+        <a href="./README.md" target="_blank" rel="noreferrer">README</a>
+        <span class="sep">ƒ?›</span>
+        <span class="muted">Preview and export use the same DSP graph.</span>
+      </footer>
+    </main>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

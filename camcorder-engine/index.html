@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Camcorder Engine</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="header">
+        <div>
+          <h1>Camcorder Engine</h1>
+          <p class="sub">Tiny camera mic + AGC + handling noise + digital corruption simulator</p>
+        </div>
+        <div class="headerActions">
+          <label class="file">
+            <input id="fileInput" type="file" accept=".wav,.mp3,audio/wav,audio/mpeg" />
+            <span>Upload WAV/MP3</span>
+          </label>
+          <button id="playBtn" class="primary" disabled>Play</button>
+          <button id="stopBtn" disabled>Stop</button>
+          <label class="toggle headerToggle">
+            <input id="loopToggle" type="checkbox" />
+            <span>Loop</span>
+          </label>
+          <button id="exportBtn" disabled>Export WAV</button>
+        </div>
+      </header>
+
+      <section class="panel">
+        <div class="controls">
+          <div class="control">
+            <div class="labelRow">
+              <label for="coverage">Mic Coverage</label>
+              <span id="coverageVal" class="val"></span>
+            </div>
+            <input id="coverage" type="range" min="0" max="1" step="0.001" value="0.35" />
+          </div>
+
+          <div class="control">
+            <div class="labelRow">
+              <label for="movement">Movement</label>
+              <span id="movementVal" class="val"></span>
+            </div>
+            <input id="movement" type="range" min="0" max="1" step="0.001" value="0.25" />
+          </div>
+
+          <div class="control">
+            <div class="labelRow">
+              <label for="corruption">Corruption</label>
+              <span id="corruptionVal" class="val"></span>
+            </div>
+            <input id="corruption" type="range" min="0" max="1" step="0.001" value="0.18" />
+          </div>
+
+          <div class="control">
+            <div class="labelRow">
+              <label for="agc">AGC / Drive</label>
+              <span id="agcVal" class="val"></span>
+            </div>
+            <input id="agc" type="range" min="0" max="1" step="0.001" value="0.35" />
+          </div>
+
+          <div class="controlRow">
+            <div class="selectWrap">
+              <label for="preset">Preset</label>
+              <select id="preset">
+                <option value="">Custom</option>
+                <option value="minidv">MiniDV Windy Walk</option>
+                <option value="windyTape">Wind Hits (Loud)</option>
+                <option value="dslrAuto">Early DSLR (Quiet Room)</option>
+                <option value="actionCam">Action Cam Sprint</option>
+                <option value="foundFootage">Found Footage (Corrupt)</option>
+                <option value="pocketCam">Pocket Cam (Wind Bed)</option>
+              </select>
+            </div>
+
+            <label class="toggle">
+              <input id="wind" type="checkbox" />
+              <span>Recording SFX</span>
+            </label>
+          </div>
+
+          <details class="advanced">
+            <summary>Advanced Tuning</summary>
+            <div class="advGrid">
+              <div class="control wide">
+                <div class="labelRow">
+                  <label>Recording SFX</label>
+                  <span id="windGroupVal" class="val"></span>
+                </div>
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="windLevel">SFX Master</label>
+                  <span id="windLevelVal" class="val"></span>
+                </div>
+                <input id="windLevel" type="range" min="0" max="1.5" step="0.001" value="0.95" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="camLevel">Cam Motor</label>
+                  <span id="camLevelVal" class="val"></span>
+                </div>
+                <input id="camLevel" type="range" min="0" max="1" step="0.001" value="0.35" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="windBedLevel">Wind Bed</label>
+                  <span id="windBedLevelVal" class="val"></span>
+                </div>
+                <input id="windBedLevel" type="range" min="0" max="1" step="0.001" value="0.85" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="windHitLevel">Wind Hits</label>
+                  <span id="windHitLevelVal" class="val"></span>
+                </div>
+                <input id="windHitLevel" type="range" min="0" max="1" step="0.001" value="0.65" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="windHitRate">Hit Rate</label>
+                  <span id="windHitRateVal" class="val"></span>
+                </div>
+                <input id="windHitRate" type="range" min="0" max="1" step="0.001" value="0.35" />
+              </div>
+
+              <div class="control wide">
+                <div class="labelRow">
+                  <label for="camBedSource">Cam Motor Source</label>
+                  <span id="camBedSourceVal" class="val"></span>
+                </div>
+                <select id="camBedSource">
+                  <option value="">(none)</option>
+                </select>
+              </div>
+
+              <div class="control wide">
+                <div class="labelRow">
+                  <label for="windBedSource">Wind Bed Source</label>
+                  <span id="windBedSourceVal" class="val"></span>
+                </div>
+                <select id="windBedSource">
+                  <option value="">(none)</option>
+                </select>
+              </div>
+
+              <div class="control wide">
+                <div class="labelRow">
+                  <label for="windHitSource">Wind Hits Source</label>
+                  <span id="windHitSourceVal" class="val"></span>
+                </div>
+                <select id="windHitSource">
+                  <option value="">(none)</option>
+                </select>
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="hpHz">High-pass</label>
+                  <span id="hpHzVal" class="val"></span>
+                </div>
+                <input id="hpHz" type="range" min="10" max="280" step="1" value="55" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="lpHz">Low-pass</label>
+                  <span id="lpHzVal" class="val"></span>
+                </div>
+                <input id="lpHz" type="range" min="1400" max="18000" step="10" value="9200" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="boxDb">Boxiness</label>
+                  <span id="boxDbVal" class="val"></span>
+                </div>
+                <input id="boxDb" type="range" min="0" max="12" step="0.05" value="3.2" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="boxHz">Box Freq</label>
+                  <span id="boxHzVal" class="val"></span>
+                </div>
+                <input id="boxHz" type="range" min="650" max="3200" step="10" value="1650" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="agcAmt">AGC Amount</label>
+                  <span id="agcAmtVal" class="val"></span>
+                </div>
+                <input id="agcAmt" type="range" min="0" max="1" step="0.001" value="0.55" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="agcSpeed">AGC Speed</label>
+                  <span id="agcSpeedVal" class="val"></span>
+                </div>
+                <input id="agcSpeed" type="range" min="0" max="1" step="0.001" value="0.45" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="clip">Clip</label>
+                  <span id="clipVal" class="val"></span>
+                </div>
+                <input id="clip" type="range" min="0" max="1" step="0.001" value="0.25" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="crush">ADC Crush</label>
+                  <span id="crushVal" class="val"></span>
+                </div>
+                <input id="crush" type="range" min="0" max="1" step="0.001" value="0.12" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="bits">Bit Depth</label>
+                  <span id="bitsVal" class="val"></span>
+                </div>
+                <input id="bits" type="range" min="6" max="16" step="1" value="12" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="rate">Sample Rate</label>
+                  <span id="rateVal" class="val"></span>
+                </div>
+                <input id="rate" type="range" min="8000" max="48000" step="100" value="24000" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="drop">Dropouts</label>
+                  <span id="dropVal" class="val"></span>
+                </div>
+                <input id="drop" type="range" min="0" max="1" step="0.001" value="0.18" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="dropMs">Drop Length</label>
+                  <span id="dropMsVal" class="val"></span>
+                </div>
+                <input id="dropMs" type="range" min="6" max="260" step="1" value="28" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="dropMode">Conceal</label>
+                  <span id="dropModeVal" class="val"></span>
+                </div>
+                <select id="dropMode">
+                  <option value="hold" selected>Hold</option>
+                  <option value="mute">Mute</option>
+                  <option value="interp">Interpolate</option>
+                  <option value="repeat">Repeat</option>
+                </select>
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="repeatMs">Repeat Depth</label>
+                  <span id="repeatMsVal" class="val"></span>
+                </div>
+                <input id="repeatMs" type="range" min="8" max="240" step="1" value="48" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="chirp">Chirp Bursts</label>
+                  <span id="chirpVal" class="val"></span>
+                </div>
+                <input id="chirp" type="range" min="0" max="1" step="0.001" value="0.15" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="handling">Handling Thumps</label>
+                  <span id="handlingVal" class="val"></span>
+                </div>
+                <input id="handling" type="range" min="0" max="1" step="0.001" value="0.22" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="rub">Rub Noise</label>
+                  <span id="rubVal" class="val"></span>
+                </div>
+                <input id="rub" type="range" min="0" max="1" step="0.001" value="0.18" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="hiss">Mic Hiss</label>
+                  <span id="hissVal" class="val"></span>
+                </div>
+                <input id="hiss" type="range" min="0" max="1" step="0.001" value="0.12" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="ceiling">Ceiling</label>
+                  <span id="ceilingVal" class="val"></span>
+                </div>
+                <input id="ceiling" type="range" min="0.2" max="1" step="0.001" value="0.92" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="outGain">Output Gain</label>
+                  <span id="outGainVal" class="val"></span>
+                </div>
+                <input id="outGain" type="range" min="0" max="1.5" step="0.01" value="0.98" />
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <div class="meter">
+          <div class="status">
+            <div><span class="k">File</span> <span id="fileName" class="v">None</span></div>
+            <div><span class="k">Duration</span> <span id="duration" class="v">-</span></div>
+            <div><span class="k">Sample Rate</span> <span id="sampleRate" class="v">-</span></div>
+            <div><span class="k">State</span> <span id="state" class="v">Idle</span></div>
+          </div>
+          <div class="hint">
+            Tip: AudioWorklet requires HTTP(S) (not <code>file://</code>). See <code>README.md</code>.
+          </div>
+        </div>
+      </section>
+
+      <footer class="footer">
+        <a href="./README.md" target="_blank" rel="noreferrer">README</a>
+        <span class="sep">ƒ?›</span>
+        <span class="muted">Preview and export use the same DSP graph.</span>
+      </footer>
+    </main>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

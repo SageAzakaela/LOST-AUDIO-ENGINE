@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Open Mic Night</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="header">
+        <div class="title">
+          <h1>Open Mic Night</h1>
+          <p class="sub">Hot mic + feedback + show-behind-the-walls muffling.</p>
+        </div>
+        <div class="actions">
+          <a class="linkBtn" href="../" rel="noreferrer">Lost Audio Engine</a>
+          <label class="file">
+            <input id="fileInput" type="file" accept=".wav,.mp3,audio/wav,audio/mpeg" />
+            <span>Upload WAV/MP3</span>
+          </label>
+          <button id="playBtn" class="primary" disabled>Play</button>
+          <button id="stopBtn" disabled>Stop</button>
+          <label class="toggle">
+            <input id="loopToggle" type="checkbox" />
+            <span>Loop</span>
+          </label>
+          <button id="exportBtn" disabled>Export WAV</button>
+        </div>
+      </header>
+
+      <section class="panel">
+        <div class="controls">
+          <div class="control wide">
+            <div class="labelRow">
+              <label>Main Clip (Built-in)</label>
+              <span class="val" id="clipVal"></span>
+            </div>
+            <select id="clipSelect"></select>
+          </div>
+
+          <div class="control wide">
+            <div class="labelRow">
+              <label>Bed / Ambience</label>
+              <span class="val" id="crowdVal"></span>
+            </div>
+            <select id="crowdSelect"></select>
+          </div>
+
+          <div class="control">
+            <div class="labelRow">
+              <label for="crowdLevel">Crowd Level</label>
+              <span class="val" id="crowdLevelVal"></span>
+            </div>
+            <input id="crowdLevel" type="range" min="0" max="1" step="0.001" value="0.25" />
+          </div>
+
+          <div class="divider"></div>
+
+          <details class="sequence">
+            <summary>Sequence (intro → song → outro)</summary>
+            <div class="grid">
+              <div class="control">
+                <div class="labelRow">
+                  <label class="toggle">
+                    <input id="sequenceToggle" type="checkbox" />
+                    <span>Enable</span>
+                  </label>
+                  <span class="val" id="sequenceVal"></span>
+                </div>
+                <div class="help">Use intro/outro speech + a main song, with crossfades and beds.</div>
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="xfadeMs">Crossfade</label>
+                  <span class="val" id="xfadeMsVal"></span>
+                </div>
+                <input id="xfadeMs" type="range" min="0" max="2000" step="1" value="250" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="mainUploadHint">Main Upload</label>
+                  <span class="val">top bar</span>
+                </div>
+                <div id="mainUploadHint" class="help">Use the Upload button above for the main song (or pick a built-in main clip).</div>
+              </div>
+
+              <div class="control wide">
+                <div class="labelRow">
+                  <label>Intro (Built-in)</label>
+                  <span class="val" id="introVal"></span>
+                </div>
+                <select id="introSelect"></select>
+              </div>
+              <div class="control wide">
+                <div class="labelRow">
+                  <label class="file inline">
+                    <input id="introFile" type="file" accept=".wav,.mp3,audio/wav,audio/mpeg" />
+                    <span>Upload Intro</span>
+                  </label>
+                  <span class="val" id="introFileVal"></span>
+                </div>
+              </div>
+
+              <div class="control wide">
+                <div class="labelRow">
+                  <label>Outro (Built-in)</label>
+                  <span class="val" id="outroVal"></span>
+                </div>
+                <select id="outroSelect"></select>
+              </div>
+              <div class="control wide">
+                <div class="labelRow">
+                  <label class="file inline">
+                    <input id="outroFile" type="file" accept=".wav,.mp3,audio/wav,audio/mpeg" />
+                    <span>Upload Outro</span>
+                  </label>
+                  <span class="val" id="outroFileVal"></span>
+                </div>
+              </div>
+
+              <div class="divider"></div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label class="toggle">
+                    <input id="cheerToggle" type="checkbox" />
+                    <span>Cheer Out</span>
+                  </label>
+                  <span class="val" id="cheerVal"></span>
+                </div>
+                <select id="cheerSelect"></select>
+              </div>
+              <div class="control">
+                <div class="labelRow">
+                  <label for="cheerLevel">Cheer Level</label>
+                  <span class="val" id="cheerLevelVal"></span>
+                </div>
+                <input id="cheerLevel" type="range" min="0" max="1" step="0.001" value="0.6" />
+              </div>
+              <div class="control">
+                <div class="labelRow">
+                  <label for="cheerWhen">Cheer Timing</label>
+                  <span class="val"></span>
+                </div>
+                <select id="cheerWhen">
+                  <option value="songEnd">At Song End</option>
+                  <option value="outroStart">At Outro Start</option>
+                </select>
+              </div>
+
+              <div class="divider"></div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label>Bed Slot 1</label>
+                  <span class="val" id="bed1Val"></span>
+                </div>
+                <select id="bed1Select"></select>
+              </div>
+              <div class="control">
+                <div class="labelRow">
+                  <label for="bed1Level">Level</label>
+                  <span class="val" id="bed1LevelVal"></span>
+                </div>
+                <input id="bed1Level" type="range" min="0" max="1" step="0.001" value="0.25" />
+              </div>
+              <div class="control">
+                <div class="labelRow">
+                  <label for="bed1Where">Plays In</label>
+                  <span class="val"></span>
+                </div>
+                <select id="bed1Where">
+                  <option value="all">All</option>
+                  <option value="intro">Intro</option>
+                  <option value="main">Main</option>
+                  <option value="outro">Outro</option>
+                </select>
+                <label class="toggle small">
+                  <input id="bed1Random" type="checkbox" checked />
+                  <span>Random Start</span>
+                </label>
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label>Bed Slot 2</label>
+                  <span class="val" id="bed2Val"></span>
+                </div>
+                <select id="bed2Select"></select>
+              </div>
+              <div class="control">
+                <div class="labelRow">
+                  <label for="bed2Level">Level</label>
+                  <span class="val" id="bed2LevelVal"></span>
+                </div>
+                <input id="bed2Level" type="range" min="0" max="1" step="0.001" value="0.0" />
+              </div>
+              <div class="control">
+                <div class="labelRow">
+                  <label for="bed2Where">Plays In</label>
+                  <span class="val"></span>
+                </div>
+                <select id="bed2Where">
+                  <option value="all">All</option>
+                  <option value="intro">Intro</option>
+                  <option value="main">Main</option>
+                  <option value="outro">Outro</option>
+                </select>
+                <label class="toggle small">
+                  <input id="bed2Random" type="checkbox" checked />
+                  <span>Random Start</span>
+                </label>
+              </div>
+            </div>
+          </details>
+
+          <div class="control">
+            <div class="labelRow">
+              <label for="hotMic">Hot Mic</label>
+              <span class="val" id="hotMicVal"></span>
+            </div>
+            <input id="hotMic" type="range" min="0" max="1" step="0.001" value="0.55" />
+          </div>
+
+          <div class="control">
+            <div class="labelRow">
+              <label for="fbFreq">Feedback Pitch</label>
+              <span class="val" id="fbFreqVal"></span>
+            </div>
+            <input id="fbFreq" type="range" min="200" max="5000" step="1" value="1800" />
+          </div>
+
+          <div class="control">
+            <div class="labelRow">
+              <label for="ringQ">Ringing</label>
+              <span class="val" id="ringQVal"></span>
+            </div>
+            <input id="ringQ" type="range" min="1" max="40" step="0.1" value="16" />
+          </div>
+
+          <div class="control">
+            <div class="labelRow">
+              <label for="wall">Behind Wall</label>
+              <span class="val" id="wallVal"></span>
+            </div>
+            <input id="wall" type="range" min="0" max="1" step="0.001" value="0.65" />
+          </div>
+
+          <div class="control">
+            <div class="labelRow">
+              <label for="room">Outside Space</label>
+              <span class="val" id="roomVal"></span>
+            </div>
+            <input id="room" type="range" min="0" max="1" step="0.001" value="0.55" />
+          </div>
+
+          <div class="control">
+            <div class="labelRow">
+              <label for="outGain">Output</label>
+              <span class="val" id="outGainVal"></span>
+            </div>
+            <input id="outGain" type="range" min="0" max="1.5" step="0.01" value="0.95" />
+          </div>
+
+          <details class="advanced">
+            <summary>Advanced</summary>
+            <div class="grid">
+              <div class="control">
+                <div class="labelRow">
+                  <label for="fbDelayMs">Feedback Delay</label>
+                  <span class="val" id="fbDelayMsVal"></span>
+                </div>
+                <input id="fbDelayMs" type="range" min="8" max="70" step="0.1" value="24" />
+              </div>
+              <div class="control">
+                <div class="labelRow">
+                  <label for="fbTone">Feedback Tone</label>
+                  <span class="val" id="fbToneVal"></span>
+                </div>
+                <input id="fbTone" type="range" min="0" max="1" step="0.001" value="0.55" />
+              </div>
+              <div class="control">
+                <div class="labelRow">
+                  <label for="limit">Limiter</label>
+                  <span class="val" id="limitVal"></span>
+                </div>
+                <input id="limit" type="range" min="0" max="1" step="0.001" value="0.65" />
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <aside class="meter">
+          <div class="status">
+            <div><span class="k">Source</span> <span id="sourceName" class="v">None</span></div>
+            <div><span class="k">Duration</span> <span id="duration" class="v">-</span></div>
+            <div><span class="k">Sample Rate</span> <span id="sampleRate" class="v">-</span></div>
+            <div><span class="k">State</span> <span id="state" class="v">Idle</span></div>
+          </div>
+          <div class="hint">Serve over HTTP(S) for AudioWorklet support.</div>
+        </aside>
+      </section>
+
+      <footer class="footer">
+        <span class="muted">Tip: push <span class="kbd">Hot Mic</span> and <span class="kbd">Ringing</span> until it screams.</span>
+      </footer>
+    </main>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

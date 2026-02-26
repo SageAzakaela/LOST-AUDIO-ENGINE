@@ -1,0 +1,49 @@
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.tmp
+*.bak
+*.swp
+.idea/
+.vscode/
+
+# JUCE + CMake build outputs (all modules)
+**/build/
+**/cmake-build-*/
+**/CMakeFiles/
+**/CMakeCache.txt
+**/cmake_install.cmake
+**/Makefile
+**/compile_commands.json
+**/_deps/
+
+# Visual Studio / MSBuild artifacts
+**/.vs/
+**/*.sln
+**/*.vcxproj
+**/*.vcxproj.filters
+**/*.vcxproj.user
+**/*.VC.db
+**/*.VC.opendb
+**/*.obj
+**/*.pch
+**/*.pdb
+**/*.ilk
+**/*.idb
+**/*.ipch
+**/*.tlog
+**/*.lastbuildstate
+**/*.log
+**/*.exp
+**/*.lib
+**/*.dll
+**/*.exe
+
+# JUCE-generated helper/build artefacts
+**/*_artefacts/
+**/JuceLibraryCode/
+**/juce_vst3_helper*
+**/*_rc_lib*
+
+# Plugin bundles copied into workspace
+**/*.vst3/

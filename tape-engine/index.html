@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tape Engine</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="header">
+        <div>
+          <h1>Tape Engine</h1>
+          <p class="sub">Cassette / VHS-style tape deck simulator</p>
+        </div>
+        <div class="headerActions">
+          <label class="file">
+            <input id="fileInput" type="file" accept=".wav,.mp3,audio/wav,audio/mpeg" />
+            <span>Upload WAV/MP3</span>
+          </label>
+          <button id="playBtn" class="primary" disabled>Play</button>
+          <button id="stopBtn" disabled>Stop</button>
+          <label class="toggle headerToggle">
+            <input id="loopToggle" type="checkbox" />
+            <span>Loop</span>
+          </label>
+          <button id="exportBtn" disabled>Export WAV</button>
+        </div>
+      </header>
+
+      <section class="panel">
+        <div class="controls">
+          <div class="control">
+            <div class="labelRow">
+              <label for="quality">Tape Quality</label>
+              <span id="qualityVal" class="val"></span>
+            </div>
+            <input id="quality" type="range" min="0" max="1" step="0.001" value="0.55" />
+          </div>
+
+          <div class="control">
+            <div class="labelRow">
+              <label for="age">Age / Drive</label>
+              <span id="ageVal" class="val"></span>
+            </div>
+            <input id="age" type="range" min="0" max="1" step="0.001" value="0.35" />
+          </div>
+
+          <div class="control">
+            <div class="labelRow">
+              <label for="wow">Wow / Flutter</label>
+              <span id="wowVal" class="val"></span>
+            </div>
+            <input id="wow" type="range" min="0" max="1" step="0.001" value="0.25" />
+          </div>
+
+          <div class="control">
+            <div class="labelRow">
+              <label for="glitch">Dropouts</label>
+              <span id="glitchVal" class="val"></span>
+            </div>
+            <input id="glitch" type="range" min="0" max="1" step="0.001" value="0.18" />
+          </div>
+
+          <div class="controlRow">
+            <div class="selectWrap">
+              <label for="preset">Preset</label>
+              <select id="preset">
+                <option value="">Custom</option>
+                <option value="freshCassette">Fresh Cassette</option>
+                <option value="wornCassette">Worn Cassette</option>
+                <option value="vhsHiFi">VHS Hi‑Fi</option>
+                <option value="vhsLinear">VHS Linear</option>
+                <option value="dictaphone">Dictaphone</option>
+                <option value="rewindMelt">Rewind Melt</option>
+              </select>
+            </div>
+
+            <label class="toggle">
+              <input id="sfxEnable" type="checkbox" />
+              <span>Tape Noise SFX</span>
+            </label>
+          </div>
+
+          <details class="advanced">
+            <summary>Advanced Tuning</summary>
+            <div class="advGrid">
+              <div class="control">
+                <div class="labelRow">
+                  <label for="hpHz">High-pass</label>
+                  <span id="hpHzVal" class="val"></span>
+                </div>
+                <input id="hpHz" type="range" min="10" max="240" step="1" value="35" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="lpHz">Low-pass</label>
+                  <span id="lpHzVal" class="val"></span>
+                </div>
+                <input id="lpHz" type="range" min="1800" max="18000" step="10" value="11000" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="headBumpDb">Head Bump</label>
+                  <span id="headBumpDbVal" class="val"></span>
+                </div>
+                <input id="headBumpDb" type="range" min="0" max="10" step="0.05" value="2.2" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="headBumpHz">Bump Freq</label>
+                  <span id="headBumpHzVal" class="val"></span>
+                </div>
+                <input id="headBumpHz" type="range" min="40" max="160" step="1" value="85" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="drive">Saturation</label>
+                  <span id="driveVal" class="val"></span>
+                </div>
+                <input id="drive" type="range" min="0" max="1" step="0.001" value="0.35" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="comp">Compression</label>
+                  <span id="compVal" class="val"></span>
+                </div>
+                <input id="comp" type="range" min="0" max="1" step="0.001" value="0.28" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="speed">Speed</label>
+                  <span id="speedVal" class="val"></span>
+                </div>
+                <input id="speed" type="range" min="0.85" max="1.15" step="0.001" value="1" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="wowDepthMs">Wow Depth</label>
+                  <span id="wowDepthMsVal" class="val"></span>
+                </div>
+                <input id="wowDepthMs" type="range" min="0" max="14" step="0.1" value="3.5" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="flutterDepthMs">Flutter Depth</label>
+                  <span id="flutterDepthMsVal" class="val"></span>
+                </div>
+                <input id="flutterDepthMs" type="range" min="0" max="6" step="0.05" value="1.2" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="hiss">Hiss</label>
+                  <span id="hissVal" class="val"></span>
+                </div>
+                <input id="hiss" type="range" min="0" max="1" step="0.001" value="0.12" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="hum">Hum</label>
+                  <span id="humVal" class="val"></span>
+                </div>
+                <input id="hum" type="range" min="0" max="1" step="0.001" value="0.05" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="dropout">Dropout Amount</label>
+                  <span id="dropoutVal" class="val"></span>
+                </div>
+                <input id="dropout" type="range" min="0" max="1" step="0.001" value="0.18" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="dropoutMs">Dropout Length</label>
+                  <span id="dropoutMsVal" class="val"></span>
+                </div>
+                <input id="dropoutMs" type="range" min="8" max="220" step="1" value="38" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="ceiling">Ceiling</label>
+                  <span id="ceilingVal" class="val"></span>
+                </div>
+                <input id="ceiling" type="range" min="0.2" max="1" step="0.001" value="0.92" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="outGain">Output Gain</label>
+                  <span id="outGainVal" class="val"></span>
+                </div>
+                <input id="outGain" type="range" min="0" max="1.5" step="0.01" value="0.98" />
+              </div>
+
+              <div class="control wide">
+                <div class="labelRow">
+                  <label for="sfxSource">SFX Source</label>
+                  <span id="sfxSourceVal" class="val"></span>
+                </div>
+                <select id="sfxSource">
+                  <option value="">(none loaded)</option>
+                </select>
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="sfxLevel">SFX Level</label>
+                  <span id="sfxLevelVal" class="val"></span>
+                </div>
+                <input id="sfxLevel" type="range" min="0" max="1" step="0.001" value="0.22" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="sfxMode">SFX Mode</label>
+                  <span id="sfxModeVal" class="val"></span>
+                </div>
+                <select id="sfxMode">
+                  <option value="bed" selected>Loop Bed</option>
+                  <option value="edges">Start/End Only</option>
+                  <option value="sequence">Sequence (Start+Bed+End)</option>
+                </select>
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <div class="meter">
+          <div class="status">
+            <div><span class="k">File</span> <span id="fileName" class="v">None</span></div>
+            <div><span class="k">Duration</span> <span id="duration" class="v">-</span></div>
+            <div><span class="k">Sample Rate</span> <span id="sampleRate" class="v">-</span></div>
+            <div><span class="k">State</span> <span id="state" class="v">Idle</span></div>
+          </div>
+          <div class="hint">
+            Tip: AudioWorklet requires HTTP(S) (not <code>file://</code>). See <code>README.md</code>.
+          </div>
+        </div>
+      </section>
+
+      <footer class="footer">
+        <a href="./README.md" target="_blank" rel="noreferrer">README</a>
+        <span class="sep">ƒ?›</span>
+        <span class="muted">Preview and export use the same DSP graph.</span>
+      </footer>
+    </main>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

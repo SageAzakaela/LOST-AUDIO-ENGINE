@@ -1,0 +1,18 @@
+{
+  "banks": [
+    {
+      "id": "cassette",
+      "name": "Cassette Deck",
+      "bed": ["OASD_Casette_Working_09.wav"],
+      "start": ["OASD_Turn_ON_12.wav", "OASD_New_Cassette_19.wav", "OASD_Play_Button_06.wav"],
+      "end": ["OASD_Stop_16.wav", "OASD_Casette_End_11.wav", "OASD_Turn_OFF_13.wav"]
+    },
+    {
+      "id": "vhs",
+      "name": "VHS Deck",
+      "bed": ["OASD_VHS_Working_05.wav"],
+      "start": ["OASD_VHS_IN_03.wav", "OASD_Play_Button_17.wav"],
+      "end": ["OASD_Stop_16.wav", "OASD_VHS_Out_01.wav"]
+    }
+  ]
+}

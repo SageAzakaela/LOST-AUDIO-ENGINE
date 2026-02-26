@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cartridge Engine</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="header">
+        <div>
+          <h1>Cartridge Engine</h1>
+          <p class="sub">Retro cartridge / console audio degrader</p>
+        </div>
+        <div class="headerActions">
+          <label class="file">
+            <input id="fileInput" type="file" accept=".wav,.mp3,audio/wav,audio/mpeg" />
+            <span>Upload WAV/MP3</span>
+          </label>
+          <button id="playBtn" class="primary" disabled>Play</button>
+          <button id="stopBtn" disabled>Stop</button>
+          <label class="toggle headerToggle">
+            <input id="loopToggle" type="checkbox" />
+            <span>Loop</span>
+          </label>
+          <button id="exportBtn" disabled>Export WAV</button>
+        </div>
+      </header>
+
+      <section class="panel">
+        <div class="controls">
+          <div class="control">
+            <div class="labelRow">
+              <label for="quality">Console Quality</label>
+              <span id="qualityVal" class="val"></span>
+            </div>
+            <input id="quality" type="range" min="0" max="1" step="0.001" value="0.55" />
+          </div>
+
+          <div class="control">
+            <div class="labelRow">
+              <label for="codec">Compression / Codec</label>
+              <span id="codecVal" class="val"></span>
+            </div>
+            <input id="codec" type="range" min="0" max="1" step="0.001" value="0.25" />
+          </div>
+
+          <div class="control">
+            <div class="labelRow">
+              <label for="grit">Hardware Grit</label>
+              <span id="gritVal" class="val"></span>
+            </div>
+            <input id="grit" type="range" min="0" max="1" step="0.001" value="0.25" />
+          </div>
+
+          <div class="control">
+            <div class="labelRow">
+              <label for="noise">Noise / Whine</label>
+              <span id="noiseVal" class="val"></span>
+            </div>
+            <input id="noise" type="range" min="0" max="1" step="0.001" value="0.15" />
+          </div>
+
+          <div class="controlRow">
+            <div class="selectWrap">
+              <label for="preset">Preset</label>
+              <select id="preset">
+                <option value="">Custom</option>
+                <option value="gameboy">Handheld (Game Boy-ish)</option>
+                <option value="nes">8-bit Console (NES-ish)</option>
+                <option value="snes">16-bit Console (SNES-ish)</option>
+                <option value="ps1">CD Era ADPCM (PS1-ish)</option>
+                <option value="gba">GBA/DS Sample Bank</option>
+                <option value="genesis">Genesis-ish Crunch</option>
+                <option value="pcSpeaker">PC Speaker / Tiny</option>
+                <option value="tracker">90s Tracker Sample</option>
+                <option value="blipTest">Bleeps + Conduction Space</option>
+                <option value="arcadeCab">Arcade Cabinet Edge</option>
+                <option value="crystalChip">Crystal Chiptune</option>
+                <option value="cutsceneADPCM">Cutscene ADPCM Wow</option>
+                <option value="overclock">Overclocked Handheld</option>
+              </select>
+            </div>
+
+            <label class="toggle">
+              <input id="dither" type="checkbox" checked />
+              <span>Dither</span>
+            </label>
+
+            <label class="toggle">
+              <input id="noiseShaping" type="checkbox" />
+              <span>Noise Shaping</span>
+            </label>
+          </div>
+
+          <details class="advanced">
+            <summary>Advanced Tuning</summary>
+            <div class="advGrid">
+              <div class="control">
+                <div class="labelRow">
+                  <label for="bleepsEnable">Bleeps/Blips</label>
+                  <span id="bleepsEnableVal" class="val"></span>
+                </div>
+                <label class="toggle">
+                  <input id="bleepsEnable" type="checkbox" />
+                  <span>Enable</span>
+                </label>
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="bleepsMix">Bleeps Mix</label>
+                  <span id="bleepsMixVal" class="val"></span>
+                </div>
+                <input id="bleepsMix" type="range" min="0" max="1" step="0.001" value="0.18" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="bleepsRate">Bleeps Rate</label>
+                  <span id="bleepsRateVal" class="val"></span>
+                </div>
+                <input id="bleepsRate" type="range" min="0" max="18" step="0.1" value="3" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="bleepsWave">Wave</label>
+                  <span id="bleepsWaveVal" class="val"></span>
+                </div>
+                <select id="bleepsWave">
+                  <option value="random" selected>Random</option>
+                  <option value="pulse">Pulse</option>
+                  <option value="saw">Saw</option>
+                  <option value="tri">Triangle</option>
+                </select>
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="bleepsVibrato">Vibrato</label>
+                  <span id="bleepsVibratoVal" class="val"></span>
+                </div>
+                <input id="bleepsVibrato" type="range" min="0" max="1" step="0.001" value="0.35" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="bleepsPitch">Pitch Range</label>
+                  <span id="bleepsPitchVal" class="val"></span>
+                </div>
+                <input id="bleepsPitch" type="range" min="0" max="1" step="0.001" value="0.55" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="microDelayMs">Microdelay</label>
+                  <span id="microDelayMsVal" class="val"></span>
+                </div>
+                <input id="microDelayMs" type="range" min="0" max="30" step="0.1" value="8" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="microDelayMix">Microdelay Mix</label>
+                  <span id="microDelayMixVal" class="val"></span>
+                </div>
+                <input id="microDelayMix" type="range" min="0" max="1" step="0.001" value="0.18" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="verb">Conduction Verb</label>
+                  <span id="verbVal" class="val"></span>
+                </div>
+                <input id="verb" type="range" min="0" max="1" step="0.001" value="0.22" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="verbMs">Verb Time</label>
+                  <span id="verbMsVal" class="val"></span>
+                </div>
+                <input id="verbMs" type="range" min="10" max="120" step="1" value="45" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="wet">Wet/Dry</label>
+                  <span id="wetVal" class="val"></span>
+                </div>
+                <input id="wet" type="range" min="0" max="1" step="0.001" value="1" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="ceiling">Ceiling</label>
+                  <span id="ceilingVal" class="val"></span>
+                </div>
+                <input id="ceiling" type="range" min="0.2" max="1" step="0.001" value="0.92" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="limiter">Limiter</label>
+                  <span id="limiterVal" class="val"></span>
+                </div>
+                <input id="limiter" type="range" min="0" max="1" step="0.001" value="0.35" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="edge">Aliasing Edge</label>
+                  <span id="edgeVal" class="val"></span>
+                </div>
+                <input id="edge" type="range" min="0" max="1" step="0.001" value="0.25" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="noiseTrack">Bus Noise Tracking</label>
+                  <span id="noiseTrackVal" class="val"></span>
+                </div>
+                <input id="noiseTrack" type="range" min="0" max="1" step="0.001" value="0.6" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="dcDrift">DC Drift</label>
+                  <span id="dcDriftVal" class="val"></span>
+                </div>
+                <input id="dcDrift" type="range" min="0" max="1" step="0.001" value="0.15" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="hpHz">Output High-pass</label>
+                  <span id="hpHzVal" class="val"></span>
+                </div>
+                <input id="hpHz" type="range" min="20" max="240" step="1" value="70" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="speaker">Speaker Sim</label>
+                  <span id="speakerVal" class="val"></span>
+                </div>
+                <input id="speaker" type="range" min="0" max="1" step="0.001" value="0.45" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="bits">Bit Depth</label>
+                  <span id="bitsVal" class="val"></span>
+                </div>
+                <input id="bits" type="range" min="2" max="16" step="1" value="10" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="rate">Sample Rate</label>
+                  <span id="rateVal" class="val"></span>
+                </div>
+                <input id="rate" type="range" min="6000" max="48000" step="100" value="24000" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="jitter">Clock Jitter</label>
+                  <span id="jitterVal" class="val"></span>
+                </div>
+                <input id="jitter" type="range" min="0" max="1" step="0.001" value="0.05" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="lpHz">Low-pass</label>
+                  <span id="lpHzVal" class="val"></span>
+                </div>
+                <input id="lpHz" type="range" min="2500" max="18000" step="50" value="9000" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="preEmph">Pre-Emphasis</label>
+                  <span id="preEmphVal" class="val"></span>
+                </div>
+                <input id="preEmph" type="range" min="0" max="1" step="0.001" value="0.2" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="mulaw">μ-law Mix</label>
+                  <span id="mulawVal" class="val"></span>
+                </div>
+                <input id="mulaw" type="range" min="0" max="1" step="0.001" value="0.25" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="blockMs">Block Hold</label>
+                  <span id="blockMsVal" class="val"></span>
+                </div>
+                <input id="blockMs" type="range" min="0" max="60" step="1" value="8" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="sat">DAC Saturation</label>
+                  <span id="satVal" class="val"></span>
+                </div>
+                <input id="sat" type="range" min="0" max="1" step="0.001" value="0.25" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="hum">Hum</label>
+                  <span id="humVal" class="val"></span>
+                </div>
+                <input id="hum" type="range" min="0" max="1" step="0.001" value="0.08" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="whine">Bus Whine</label>
+                  <span id="whineVal" class="val"></span>
+                </div>
+                <input id="whine" type="range" min="0" max="1" step="0.001" value="0.15" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="outGain">Output Gain</label>
+                  <span id="outGainVal" class="val"></span>
+                </div>
+                <input id="outGain" type="range" min="0" max="1.5" step="0.01" value="0.95" />
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <div class="meter">
+          <div class="status">
+            <div><span class="k">File</span> <span id="fileName" class="v">None</span></div>
+            <div><span class="k">Duration</span> <span id="duration" class="v">-</span></div>
+            <div><span class="k">Sample Rate</span> <span id="sampleRate" class="v">-</span></div>
+            <div><span class="k">State</span> <span id="state" class="v">Idle</span></div>
+          </div>
+          <div class="hint">
+            Tip: AudioWorklet requires HTTP(S) (not <code>file://</code>). See <code>README.md</code>.
+          </div>
+        </div>
+      </section>
+
+      <footer class="footer">
+        <a href="./README.md" target="_blank" rel="noreferrer">README</a>
+        <span class="sep">•</span>
+        <span class="muted">Preview and export use the same DSP graph.</span>
+      </footer>
+    </main>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
