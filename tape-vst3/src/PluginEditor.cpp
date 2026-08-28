@@ -87,7 +87,7 @@ void TapeEngineAudioProcessorEditor::TapeLookAndFeel::drawRotarySlider(
     const auto pointerLength = capRadius * 0.74f;
     const auto pointerWidth = juce::jmax(2.0f, radius * 0.07f);
     pointer.addRoundedRectangle(-pointerWidth * 0.5f, -pointerLength, pointerWidth, pointerLength, pointerWidth * 0.5f);
-    g.setColour(bone);
+    g.setColour(juce::Colour(bone));
     g.fillPath(pointer, juce::AffineTransform::rotation(angle).translated(centre.x, centre.y));
 }
 
@@ -117,7 +117,7 @@ void TapeEngineAudioProcessorEditor::TapeLookAndFeel::drawToggleButton(
     const auto dotX = button.getToggleState() ? switchArea.getRight() - dot - 3.0f : switchArea.getX() + 3.0f;
     g.setColour(button.getToggleState() ? juce::Colour(cyan) : juce::Colour(dimBone));
     g.fillEllipse(dotX, switchArea.getY() + 3.0f, dot, dot);
-    g.setColour(bone);
+    g.setColour(juce::Colour(bone));
     g.setFont(labelFont(12.0f, true));
     g.drawFittedText(button.getButtonText(), bounds.toNearestInt().withTrimmedLeft(8),
                      juce::Justification::centredLeft, 1);
@@ -127,7 +127,7 @@ void TapeEngineAudioProcessorEditor::TapeLookAndFeel::drawComboBox(
     juce::Graphics& g, int width, int height, bool, int, int, int, int, juce::ComboBox&)
 {
     auto bounds = juce::Rectangle<float>(0.0f, 0.0f, (float) width, (float) height).reduced(0.5f);
-    g.setColour(deepInk);
+    g.setColour(juce::Colour(deepInk));
     g.fillRoundedRectangle(bounds, 3.0f);
     g.setColour(juce::Colour(0xff625b4e));
     g.drawRoundedRectangle(bounds, 3.0f, 1.0f);
@@ -135,7 +135,7 @@ void TapeEngineAudioProcessorEditor::TapeLookAndFeel::drawComboBox(
     const auto cx = (float) width - 15.0f;
     const auto cy = (float) height * 0.52f;
     arrow.addTriangle(cx - 4.0f, cy - 2.0f, cx + 4.0f, cy - 2.0f, cx, cy + 3.0f);
-    g.setColour(cyan);
+    g.setColour(juce::Colour(cyan));
     g.fillPath(arrow);
 }
 
@@ -151,9 +151,9 @@ void TapeEngineAudioProcessorEditor::Panel::paint(juce::Graphics& g)
     g.fillRoundedRectangle(bounds, 8.0f);
     g.setColour(juce::Colour(0xff524c42));
     g.drawRoundedRectangle(bounds, 8.0f, 1.0f);
-    g.setColour(cyan);
+    g.setColour(juce::Colour(cyan));
     g.fillRect(juce::Rectangle<float>(14.0f, 13.0f, 20.0f, 2.0f));
-    g.setColour(dimBone);
+    g.setColour(juce::Colour(dimBone));
     g.setFont(labelFont(11.0f, true));
     g.drawText(title, 42, 5, getWidth() - 54, 22, juce::Justification::centredLeft);
 }
@@ -191,7 +191,7 @@ void TapeEngineAudioProcessorEditor::DeckDisplay::paint(juce::Graphics& g)
     for (float x = plate.getX(); x < plate.getRight(); x += 5.0f)
         g.drawVerticalLine((int) x, plate.getY(), plate.getBottom());
 
-    g.setColour(ink);
+    g.setColour(juce::Colour(ink));
     g.setFont(labelFont(12.0f, true));
     g.drawText("LOST AUDIO // TYPE II", plate.removeFromTop(24.0f), juce::Justification::centredLeft);
 
@@ -205,7 +205,7 @@ void TapeEngineAudioProcessorEditor::DeckDisplay::paint(juce::Graphics& g)
     g.drawRoundedRectangle(cassette, 8.0f, 2.0f);
 
     auto window = cassette.reduced(cassette.getWidth() * 0.12f, cassette.getHeight() * 0.18f);
-    g.setColour(deepInk);
+    g.setColour(juce::Colour(deepInk));
     g.fillRoundedRectangle(window, 5.0f);
     g.setColour(juce::Colour(0xff69434a));
     g.drawRoundedRectangle(window, 5.0f, 1.0f);
@@ -217,7 +217,7 @@ void TapeEngineAudioProcessorEditor::DeckDisplay::paint(juce::Graphics& g)
     g.drawLine(left.x, left.y + reelRadius, right.x, right.y + reelRadius, 3.0f);
 
     const auto drawReel = [&g, this, reelRadius](juce::Point<float> centre, float offset) {
-        g.setColour(bone);
+        g.setColour(juce::Colour(bone));
         g.fillEllipse(centre.x - reelRadius, centre.y - reelRadius, reelRadius * 2.0f, reelRadius * 2.0f);
         g.setColour(juce::Colour(ink));
         g.drawEllipse(centre.x - reelRadius, centre.y - reelRadius, reelRadius * 2.0f, reelRadius * 2.0f, 2.0f);

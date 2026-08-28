@@ -11,6 +11,8 @@
 class TapeEngineAudioProcessor final : public juce::AudioProcessor
 {
 public:
+    using juce::AudioProcessor::processBlock;
+
     TapeEngineAudioProcessor();
     ~TapeEngineAudioProcessor() override = default;
 
