@@ -49,3 +49,27 @@ jobs:
           name: ubuntu-chromium-browser-evidence
           path: .artifacts/platform-browser-results.json
           if-no-files-found: warn
+
+  tape-v2-windows:
+    needs: source-and-dsp
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - name: Configure pinned JUCE and Tape V2
+        run: cmake -S . -B build-tape -DLAE_BUILD_PLUGINS=ON -DBUILD_TESTING=OFF
+      - name: Build Windows VST3
+        run: cmake --build build-tape --config Release --target TapeEngine_VST3 --parallel 2
+      - name: Verify test bundle
+        shell: pwsh
+        run: |
+          $bundle = "build-tape/tape-vst3/TapeEngine_artefacts/Release/VST3/Tape Engine.vst3"
+          if (-not (Test-Path -LiteralPath $bundle)) {
+            throw "Tape V2 bundle was not produced at $bundle"
+          }
+      - name: Upload Windows Tape V2 test build
+        uses: actions/upload-artifact@v7
+        with:
+          name: lost-audio-tape-v2-windows-vst3
+          path: build-tape/tape-vst3/TapeEngine_artefacts/Release/VST3/Tape Engine.vst3
+          if-no-files-found: error
