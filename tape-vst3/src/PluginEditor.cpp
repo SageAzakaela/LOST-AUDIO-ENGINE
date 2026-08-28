@@ -106,20 +106,22 @@ void TapeEngineAudioProcessorEditor::TapeLookAndFeel::drawButtonBackground(
 void TapeEngineAudioProcessorEditor::TapeLookAndFeel::drawToggleButton(
     juce::Graphics& g, juce::ToggleButton& button, bool highlighted, bool)
 {
-    auto bounds = button.getLocalBounds().toFloat();
-    const auto switchArea = bounds.removeFromLeft(42.0f).reduced(2.0f, 7.0f);
+    const auto bounds = button.getLocalBounds().toFloat();
+    const auto switchArea = juce::Rectangle<float>(bounds.getX() + 4.0f,
+                                                    bounds.getCentreY() - 10.0f,
+                                                    38.0f, 20.0f);
     g.setColour(button.getToggleState() ? juce::Colour(cyan).withAlpha(0.34f)
                                         : juce::Colour(highlighted ? panelLift : deepInk));
     g.fillRoundedRectangle(switchArea, switchArea.getHeight() * 0.5f);
     g.setColour(button.getToggleState() ? juce::Colour(cyan) : juce::Colour(0xff6b655b));
     g.drawRoundedRectangle(switchArea, switchArea.getHeight() * 0.5f, 1.0f);
-    const auto dot = switchArea.getHeight() - 6.0f;
+    const auto dot = 14.0f;
     const auto dotX = button.getToggleState() ? switchArea.getRight() - dot - 3.0f : switchArea.getX() + 3.0f;
     g.setColour(button.getToggleState() ? juce::Colour(cyan) : juce::Colour(dimBone));
-    g.fillEllipse(dotX, switchArea.getY() + 3.0f, dot, dot);
+    g.fillEllipse(dotX, switchArea.getCentreY() - dot * 0.5f, dot, dot);
     g.setColour(juce::Colour(bone));
     g.setFont(labelFont(12.0f, true));
-    g.drawFittedText(button.getButtonText(), bounds.toNearestInt().withTrimmedLeft(8),
+    g.drawFittedText(button.getButtonText(), bounds.toNearestInt().withTrimmedLeft(50),
                      juce::Justification::centredLeft, 1);
 }
 

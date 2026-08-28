@@ -1,5 +1,5 @@
 #define AppName "Lost Audio Engine - Tape Engine"
-#define AppVersion "0.1.0"
+#define AppVersion "0.1.1"
 #define AppPublisher "B&E Digital"
 #define AppUrl "https://bande.digital/tools/lost/"
 
@@ -43,7 +43,7 @@ VersionInfoCompany={#AppPublisher}
 VersionInfoDescription={#AppName} VST3 Installer
 VersionInfoProductName={#AppName}
 VersionInfoProductVersion={#AppVersion}
-VersionInfoVersion=0.1.0.0
+VersionInfoVersion=0.1.1.0
 
 [Files]
 Source: "{#BundleDir}\*"; DestDir: "{commoncf64}\VST3\Tape Engine.vst3"; Flags: ignoreversion recursesubdirs createallsubdirs
