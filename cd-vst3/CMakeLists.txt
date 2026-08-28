@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(CDEngineVST3 VERSION 0.1.0 LANGUAGES CXX)
+project(CDEngineVST3 VERSION 0.2.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -46,6 +46,7 @@ target_compile_definitions(CDEngine
 
 target_link_libraries(CDEngine
   PRIVATE
+    LostAudio::Core
     juce::juce_dsp
     juce::juce_audio_utils
   PUBLIC

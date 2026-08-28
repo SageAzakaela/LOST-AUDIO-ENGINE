@@ -249,7 +249,7 @@ Exit: the web reference has evidence-backed Windows/Linux support, platform fail
 1. Pin JUCE and establish clean cross-platform CMake/CI builds.
 2. Build the shared parameter/preset schema and migration system.
 3. Implement a portable realtime-safe DSP core plus JUCE and WebAssembly/AudioWorklet adapters.
-4. Port the complete web Tape graph first, including deterministic transport behavior, then use the proven boundary for Transmission and Comms. (Tape, Transmission, and Comms now have first shared-core V2 slices; listening and host approval remain.)
+4. Port the complete web Tape graph first, including deterministic transport behavior, then use the proven boundary for Transmission, Comms, and CD. (All four now have first shared-core V2 slices; listening and host approval remain.)
 5. Create reusable Surface/Advanced UI components while retaining distinct device art direction.
 6. Run parity, plugin validation, DAW recall/automation smoke tests, and level-matched listening.
 
@@ -262,7 +262,7 @@ Port and validate in families:
 1. Tape;
 2. Comms and Conference; (Comms' first V2 slice is implemented; Conference remains next.)
 3. Camcorder;
-4. CD and Cartridge;
+4. CD and Cartridge; (CD's first stereo shared-core V2 slice is implemented; Cartridge remains.)
 5. Television and Occlusion;
 6. Open Mic Night after feedback safety and asset review.
 

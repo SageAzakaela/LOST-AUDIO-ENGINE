@@ -70,6 +70,32 @@ and material separation between hardware modes. Audible comparison against
 frozen web renders, parameter smoothing, DAW recall/automation, and hands-on UI
 approval remain open gates.
 
+## CD V2 vertical slice
+
+CD now uses a fourth dependency-free processor in `native/core`. The legacy
+VST read stereo input, averaged left and right into one sample, processed one
+delay/history path, and wrote the identical result back to both outputs. V2
+keeps disc position, sector failures, correction attempts, and tracking events
+physically correlated while maintaining independent channel delay, history,
+concealment, repeat, HF, compression, and output state. Radial scratches and
+five alternate damage geometries, decoder correction, real history skips,
+servo hunt, jitter, car-stereo levelling, stereo link/width, and direct Damage
+and Skip triggers complete the first native model.
+
+Surface macros are mapped in the audio processor and never rewrite the explicit
+concealment mode. Repeat therefore stays Repeat until the user, host automation,
+state recall, or a preset changes it. V2 appends advanced parameters without
+changing the existing `CdEg` identity, and saves `engineId=cd` with
+`schemaVersion=2`.
+
+The resizable no-scroll optical deck provides Surface/Advanced views, live L/R
+input and output meters, transport-state indicators, six focused advanced
+panels, and sixteen reset-safe profiles. Portable tests protect exact reported
+latency, latency-aligned stereo dry mix, separate channel histories, queued
+manual skips, seed and host-block-size determinism, macro influence, and finite
+bounded output. Audible web-reference comparison, parameter smoothing, DAW
+recall/automation, and hands-on UI approval remain open gates.
+
 ## Developer builds
 
 During V2 development, build plugins locally and test the generated `.vst3`
@@ -86,7 +112,7 @@ The bundle is generated at:
 build-tape/tape-vst3/TapeEngine_artefacts/Release/VST3/Tape Engine.vst3
 ```
 
-CI uploads the current Tape, Transmission, and Comms bundles together as
+CI uploads the current Tape, Transmission, Comms, and CD bundles together as
 `lost-audio-v2-windows-dev-vst3` for build inspection. They are unsigned, are
 not releases, and may be rejected by Windows
 Smart App Control after download. A locally compiled bundle is the supported

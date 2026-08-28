@@ -1,9 +1,10 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include <lost_audio/core/CDProcessor.h>
+
 #include <array>
-#include <random>
-#include <vector>
+#include <atomic>
 
 class CDEngineAudioProcessor final : public juce::AudioProcessor
 {
@@ -33,48 +34,26 @@ public:
 
     void getStateInformation(juce::MemoryBlock&) override;
     void setStateInformation(const void*, int) override;
-    juce::AudioProcessorValueTreeState& getAPVTS() { return apvts; }
+    juce::AudioProcessorValueTreeState& getAPVTS() noexcept { return apvts; }
+
+    void triggerDamage(float strength = 1.0f) noexcept { cd.triggerDamage(strength); }
+    void triggerSkip(float strength = 1.0f) noexcept { cd.triggerSkip(strength); }
+    [[nodiscard]] float inputPeak(int channel) const noexcept;
+    [[nodiscard]] float outputPeak(int channel) const noexcept;
+    [[nodiscard]] bool damageActive() const noexcept { return damageActiveFlag.load(std::memory_order_relaxed); }
+    [[nodiscard]] bool skipActive() const noexcept { return skipActiveFlag.load(std::memory_order_relaxed); }
 
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
 private:
-    struct CoreState
-    {
-        std::vector<float> delay;
-        int di = 0;
-
-        std::vector<float> ring;
-        int ri = 0;
-
-        float jPhase = 0.0f;
-        float jNoise = 0.0f;
-
-        int errRemain = 0;
-        int errTotal = 0;
-        float lastGood = 0.0f;
-        float errStart = 0.0f;
-        float errEnd = 0.0f;
-
-        int clickRemain = 0;
-        int clickTotal = 0;
-        float clickAmp = 0.0f;
-        float clickSign = 1.0f;
-
-        float servoPhaseA = 0.0f;
-        float servoPhaseB = 0.0f;
-
-        float hfZ = 0.0f;
-        float limEnv = 0.0f;
-    };
-
-    float nextWhite();
-    float readDelay(float delaySamps) const;
+    [[nodiscard]] float value(const char* parameterID) const noexcept;
 
     juce::AudioProcessorValueTreeState apvts;
-
-    CoreState core;
-    std::minstd_rand rng;
-    std::uniform_real_distribution<float> unif { 0.0f, 1.0f };
+    lost_audio::core::CDProcessor cd;
+    std::array<std::atomic<float>, 2> inputPeaks {};
+    std::array<std::atomic<float>, 2> outputPeaks {};
+    std::atomic<bool> damageActiveFlag { false };
+    std::atomic<bool> skipActiveFlag { false };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(CDEngineAudioProcessor)
 };
