@@ -1,4 +1,4 @@
-const WORKLET_URL = new URL("./comms-processor.js", import.meta.url);
+const WORKLET_URL = new URL("./comms-processor.js?v=20260827.26", import.meta.url);
 
 function now(ctx) {
   return ctx.currentTime;
@@ -17,6 +17,8 @@ export function defaultSettings() {
     drive: 0.35,
     glitch: 0.2,
     noise: 0.18,
+    character: 0.45,
+    distance: 0.15,
     alarmTone: false,
 
     hpHz: 280,
@@ -31,6 +33,10 @@ export function defaultSettings() {
     hum: 0.25,
     hiss: 0.22,
     toneMix: 0.35,
+    transducer: 0.45,
+    lineAge: 0.2,
+    duplex: 0.08,
+    speakerRattle: 0.12,
     ceiling: 0.92,
     outGain: 0.95,
 
@@ -73,6 +79,13 @@ export async function buildCommsGraph(ctx, { seed }) {
     processorOptions: { seed: seed >>> 0 },
   });
 
+  // The electrical path is followed by a physical reproducer: receiver,
+  // intercom box, horn or alarm driver. These modes intentionally do not share
+  // one generic "radio" presence curve.
+  const bodyLow = new BiquadFilterNode(ctx, { type: "peaking", frequency: 920, Q: 1.4, gain: 2 });
+  const bodyHigh = new BiquadFilterNode(ctx, { type: "peaking", frequency: 2350, Q: 2, gain: 1.5 });
+  const bodyNotch = new BiquadFilterNode(ctx, { type: "peaking", frequency: 1250, Q: 1.6, gain: -0.8 });
+
   const echoDelay = new DelayNode(ctx, { delayTime: 0.18, maxDelayTime: 2.5 });
   const echoFbFilter = new BiquadFilterNode(ctx, { type: "lowpass", Q: 0.707, frequency: 2800 });
   const echoFbGain = new GainNode(ctx, { gain: 0.28 });
@@ -84,6 +97,8 @@ export async function buildCommsGraph(ctx, { seed }) {
 
   const dryGain = new GainNode(ctx, { gain: 1 });
   const sum = new GainNode(ctx, { gain: 1 });
+  const distanceLowpass = new BiquadFilterNode(ctx, { type: "lowpass", Q: 0.707, frequency: 14000 });
+  const perspectiveGain = new GainNode(ctx, { gain: 1 });
   const out = new GainNode(ctx, { gain: 1 });
 
   input.connect(hp1);
@@ -93,25 +108,30 @@ export async function buildCommsGraph(ctx, { seed }) {
   hump.connect(lp1);
   lp1.connect(lp2);
   lp2.connect(processor);
+  processor.connect(bodyLow);
+  bodyLow.connect(bodyHigh);
+  bodyHigh.connect(bodyNotch);
 
   // Echo (parallel)
-  processor.connect(echoDelay);
+  bodyNotch.connect(echoDelay);
   echoDelay.connect(echoWet);
   echoDelay.connect(echoFbFilter);
   echoFbFilter.connect(echoFbGain);
   echoFbGain.connect(echoDelay);
 
   // Room (parallel)
-  processor.connect(convolver);
+  bodyNotch.connect(convolver);
   convolver.connect(verbDampFilter);
   verbDampFilter.connect(verbWet);
 
   // Dry + wet sum
-  processor.connect(dryGain);
+  bodyNotch.connect(dryGain);
   dryGain.connect(sum);
   echoWet.connect(sum);
   verbWet.connect(sum);
-  sum.connect(out);
+  sum.connect(distanceLowpass);
+  distanceLowpass.connect(perspectiveGain);
+  perspectiveGain.connect(out);
 
   function makeRoomIR(ms, seedLocal) {
     const sr = ctx.sampleRate;
@@ -193,6 +213,34 @@ export async function buildCommsGraph(ctx, { seed }) {
     dip.gain.setValueAtTime(dip.gain.value, time);
     dip.gain.linearRampToValueAtTime(-0.35 * midDb, t1);
 
+    const mode = typeof s.mode === "string" ? s.mode : "landline";
+    const character = Math.max(0, Math.min(1, s.transducer ?? s.character ?? 0.45));
+    const bodyProfile =
+      mode === "cell"
+        ? { lowHz: 1080, lowDb: 2.4, lowQ: 1.15, highHz: 2850, highDb: 2.7, highQ: 2.1, notchHz: 1820, notchDb: -1.1 }
+        : mode === "intercom"
+          ? { lowHz: 710, lowDb: 6.8, lowQ: 2.05, highHz: 2180, highDb: 7.2, highQ: 2.75, notchHz: 1280, notchDb: -3.2 }
+          : mode === "pa"
+            ? { lowHz: 460, lowDb: 5.2, lowQ: 1.45, highHz: 1580, highDb: 5.8, highQ: 1.75, notchHz: 910, notchDb: -2.6 }
+            : mode === "alarm"
+              ? { lowHz: 920, lowDb: 5.8, lowQ: 2.3, highHz: 2740, highDb: 4.6, highQ: 2.5, notchHz: 1640, notchDb: -1.8 }
+              : { lowHz: 840, lowDb: 4.8, lowQ: 1.55, highHz: 2380, highDb: 4.4, highQ: 2.25, notchHz: 1320, notchDb: -1.9 };
+
+    const tuneBody = (node, frequency, gain, q) => {
+      node.frequency.cancelScheduledValues(time);
+      node.frequency.setValueAtTime(node.frequency.value, time);
+      node.frequency.linearRampToValueAtTime(frequency, t1);
+      node.gain.cancelScheduledValues(time);
+      node.gain.setValueAtTime(node.gain.value, time);
+      node.gain.linearRampToValueAtTime(gain * character, t1);
+      node.Q.cancelScheduledValues(time);
+      node.Q.setValueAtTime(node.Q.value, time);
+      node.Q.linearRampToValueAtTime(q, t1);
+    };
+    tuneBody(bodyLow, bodyProfile.lowHz, bodyProfile.lowDb, bodyProfile.lowQ);
+    tuneBody(bodyHigh, bodyProfile.highHz, bodyProfile.highDb, bodyProfile.highQ);
+    tuneBody(bodyNotch, bodyProfile.notchHz, bodyProfile.notchDb, 1.6 + character * 0.9);
+
     processor.parameters.get("drive")?.setValueAtTime(s.drive ?? 0.35, time);
     processor.parameters.get("comp")?.setValueAtTime(s.comp ?? 0.45, time);
     processor.parameters.get("bits")?.setValueAtTime(s.bits ?? 12, time);
@@ -202,6 +250,10 @@ export async function buildCommsGraph(ctx, { seed }) {
     processor.parameters.get("hum")?.setValueAtTime(s.hum ?? 0.25, time);
     processor.parameters.get("hiss")?.setValueAtTime(s.hiss ?? 0.22, time);
     processor.parameters.get("toneMix")?.setValueAtTime(s.toneMix ?? 0.35, time);
+    processor.parameters.get("transducer")?.setValueAtTime(character, time);
+    processor.parameters.get("lineAge")?.setValueAtTime(s.lineAge ?? 0.2, time);
+    processor.parameters.get("duplex")?.setValueAtTime(s.duplex ?? 0.08, time);
+    processor.parameters.get("speakerRattle")?.setValueAtTime(s.speakerRattle ?? 0.12, time);
     processor.parameters.get("alarm")?.setValueAtTime(s.alarmTone ? 1 : 0, time);
     processor.parameters.get("mode")?.setValueAtTime(modeToIndex(s.mode), time);
     processor.parameters.get("ceiling")?.setValueAtTime(s.ceiling ?? 0.92, time);
@@ -212,7 +264,9 @@ export async function buildCommsGraph(ctx, { seed }) {
     const echoMs = Math.max(10, Math.min(2500, s.echoMs ?? 180));
     const echoFb = Math.max(0, Math.min(0.92, s.echoFb ?? 0.28));
     const echoTone = Math.max(0, Math.min(1, s.echoTone ?? 0.55));
-    const echoWetGain = Math.min(1.25, echoMix * 0.95);
+    const distance = Math.max(0, Math.min(1, s.distance ?? 0.15));
+    const sceneScale = mode === "pa" ? 0.42 : mode === "intercom" || mode === "alarm" ? 0.28 : 0.14;
+    const echoWetGain = Math.min(1.25, echoMix * 0.95 + distance * sceneScale * 0.35);
     echoWet.gain.cancelScheduledValues(time);
     echoWet.gain.setValueAtTime(echoWet.gain.value, time);
     echoWet.gain.linearRampToValueAtTime(echoWetGain, t1);
@@ -229,7 +283,7 @@ export async function buildCommsGraph(ctx, { seed }) {
 
     // Room
     const verbMix = Math.max(0, Math.min(1, s.verbMix ?? 0));
-    const verbWetGain = Math.min(1.35, verbMix * 1.15);
+    const verbWetGain = Math.min(1.35, verbMix * 1.15 + distance * sceneScale);
     verbWet.gain.cancelScheduledValues(time);
     verbWet.gain.setValueAtTime(verbWet.gain.value, time);
     verbWet.gain.linearRampToValueAtTime(verbWetGain, t1);
@@ -242,10 +296,18 @@ export async function buildCommsGraph(ctx, { seed }) {
 
     // Gentle dry attenuation as wet increases so the effect is obvious.
     const wetAmt = Math.max(echoMix, verbMix);
-    const dry = Math.max(0.55, 1 - wetAmt * 0.5);
+    const dry = Math.max(0.28, (1 - wetAmt * 0.5) * (1 - distance * 0.62));
     dryGain.gain.cancelScheduledValues(time);
     dryGain.gain.setValueAtTime(dryGain.gain.value, time);
     dryGain.gain.linearRampToValueAtTime(dry, t1);
+
+    const distanceCut = 14500 - Math.pow(distance, 0.72) * 11600;
+    distanceLowpass.frequency.cancelScheduledValues(time);
+    distanceLowpass.frequency.setValueAtTime(distanceLowpass.frequency.value, time);
+    distanceLowpass.frequency.linearRampToValueAtTime(distanceCut, t1);
+    perspectiveGain.gain.cancelScheduledValues(time);
+    perspectiveGain.gain.setValueAtTime(perspectiveGain.gain.value, time);
+    perspectiveGain.gain.linearRampToValueAtTime(1 - distance * 0.28, t1);
   }
 
   return {
@@ -260,6 +322,9 @@ export async function buildCommsGraph(ctx, { seed }) {
       lp1,
       lp2,
       processor,
+      bodyLow,
+      bodyHigh,
+      bodyNotch,
       echoDelay,
       echoFbFilter,
       echoFbGain,
@@ -269,6 +334,8 @@ export async function buildCommsGraph(ctx, { seed }) {
       verbWet,
       dryGain,
       sum,
+      distanceLowpass,
+      perspectiveGain,
       out,
     },
     reset,

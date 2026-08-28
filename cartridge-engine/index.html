@@ -40,7 +40,7 @@
 
           <div class="control">
             <div class="labelRow">
-              <label for="codec">Compression / Codec</label>
+              <label for="codec">Codec Amount</label>
               <span id="codecVal" class="val"></span>
             </div>
             <input id="codec" type="range" min="0" max="1" step="0.001" value="0.25" />
@@ -56,7 +56,7 @@
 
           <div class="control">
             <div class="labelRow">
-              <label for="noise">Noise / Whine</label>
+              <label for="noise">System Noise</label>
               <span id="noiseVal" class="val"></span>
             </div>
             <input id="noise" type="range" min="0" max="1" step="0.001" value="0.15" />
@@ -75,11 +75,16 @@
                 <option value="genesis">Genesis-ish Crunch</option>
                 <option value="pcSpeaker">PC Speaker / Tiny</option>
                 <option value="tracker">90s Tracker Sample</option>
-                <option value="blipTest">Bleeps + Conduction Space</option>
+                <option value="blipTest">Source-Follow Chip Voice</option>
                 <option value="arcadeCab">Arcade Cabinet Edge</option>
                 <option value="crystalChip">Crystal Chiptune</option>
                 <option value="cutsceneADPCM">Cutscene ADPCM Wow</option>
                 <option value="overclock">Overclocked Handheld</option>
+                <option value="handheldClean">Handheld Clean</option>
+                <option value="adpcmLight">ADPCM Light</option>
+                <option value="snesSoft">16-bit Sample Soft</option>
+                <option value="ps1Soft">CD-era ADPCM Soft</option>
+                <option value="arcadeRoomTone">Arcade Cabinet Room Tone</option>
               </select>
             </div>
 
@@ -130,11 +135,22 @@
                   <span id="bleepsWaveVal" class="val"></span>
                 </div>
                 <select id="bleepsWave">
-                  <option value="random" selected>Random</option>
-                  <option value="pulse">Pulse</option>
+                  <option value="alternate">Pulse / Triangle Alternating</option>
+                  <option value="pulse" selected>Pulse</option>
                   <option value="saw">Saw</option>
                   <option value="tri">Triangle</option>
+                  <option value="noise">LFSR Noise</option>
                 </select>
+              </div>
+
+              <div class="control">
+                <div class="labelRow"><label for="bleepsTrigger">Trigger</label><span id="bleepsTriggerVal" class="val"></span></div>
+                <select id="bleepsTrigger"><option value="transient" selected>Follow Source Transients</option><option value="clock">Chip Clock</option><option value="hybrid">Transient + Clock</option></select>
+              </div>
+
+              <div class="control">
+                <div class="labelRow"><label for="bleepsScale">Scale</label><span id="bleepsScaleVal" class="val"></span></div>
+                <select id="bleepsScale"><option value="pentatonic">Minor Pentatonic</option><option value="minor" selected>Natural Minor</option><option value="major">Major</option><option value="chromatic">Arcade Chromatic</option></select>
               </div>
 
               <div class="control">
@@ -243,10 +259,15 @@
 
               <div class="control">
                 <div class="labelRow">
-                  <label for="speaker">Speaker Sim</label>
+                  <label for="speaker">Speaker Amount</label>
                   <span id="speakerVal" class="val"></span>
                 </div>
                 <input id="speaker" type="range" min="0" max="1" step="0.001" value="0.45" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow"><label for="speakerModel">Speaker Model</label><span id="speakerModelVal" class="val"></span></div>
+                <select id="speakerModel"><option value="direct">Direct Line Out</option><option value="handheld" selected>Tiny Handheld</option><option value="television">Television Speaker</option><option value="cabinet">Arcade Cabinet</option><option value="pc">PC Beeper</option></select>
               </div>
 
               <div class="control">
@@ -298,8 +319,13 @@
               </div>
 
               <div class="control">
+                <div class="labelRow"><label for="codecMode">Sample Codec</label><span id="codecModeVal" class="val"></span></div>
+                <select id="codecMode"><option value="pcm">Linear PCM</option><option value="dpcm">Delta PCM</option><option value="adpcm" selected>Adaptive DPCM</option><option value="brr">Block Predictive</option><option value="mulaw">Mu-law Companded</option></select>
+              </div>
+
+              <div class="control">
                 <div class="labelRow">
-                  <label for="blockMs">Block Hold</label>
+                  <label for="blockMs">Predictor Block</label>
                   <span id="blockMsVal" class="val"></span>
                 </div>
                 <input id="blockMs" type="range" min="0" max="60" step="1" value="8" />
@@ -360,6 +386,6 @@
       </footer>
     </main>
 
-    <script type="module" src="./src/main.js"></script>
+    <script type="module" src="./src/main.js?v=20260827.26"></script>
   </body>
 </html>

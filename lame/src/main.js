@@ -1,7 +1,7 @@
-import { buildLameGraph, buildMasterLane } from "./audio/graph.js";
+import { buildLameGraph, buildMasterLane, ensureMasterWorklets } from "./audio/graph.js?v=20260827.43";
 import { encodeWavPcm16 } from "./audio/wav.js";
-import { mapBandwidth } from "../../src/audio/graph.js";
-import { ENGINE_PRESETS, MASTER_PRESETS } from "./presets.js";
+import { mapBandwidth } from "../../src/audio/graph.js?v=20260827.4";
+import { ENGINE_PRESETS, MASTER_PRESETS } from "./presets.js?v=20260827.33";
 
 const TUNING_MANIFEST_URL = new URL("../../audio/manifest.json", import.meta.url);
 const TAPE_SFX_MANIFEST_URL = new URL("../../tape-engine/audio/manifest.json", import.meta.url);
@@ -18,6 +18,32 @@ const els = {
   viewSelect: document.querySelector("#viewSelect"),
   saveMasterPresetBtn: document.querySelector("#saveMasterPresetBtn"),
   deleteMasterPresetBtn: document.querySelector("#deleteMasterPresetBtn"),
+  guideBtn: document.querySelector("#guideBtn"),
+  welcomeCoach: document.querySelector("#welcomeCoach"),
+  welcomeCoachClose: document.querySelector("#welcomeCoachClose"),
+  welcomeTourBtn: document.querySelector("#welcomeTourBtn"),
+  welcomeGuideBtn: document.querySelector("#welcomeGuideBtn"),
+  guideDialog: document.querySelector("#guideDialog"),
+  guideCloseBtn: document.querySelector("#guideCloseBtn"),
+  guideStartTourBtn: document.querySelector("#guideStartTourBtn"),
+  tourPanel: document.querySelector("#tourPanel"),
+  tourProgress: document.querySelector("#tourProgress"),
+  tourEyebrow: document.querySelector("#tourEyebrow"),
+  tourTitle: document.querySelector("#tourTitle"),
+  tourBody: document.querySelector("#tourBody"),
+  tourPrevBtn: document.querySelector("#tourPrevBtn"),
+  tourNextBtn: document.querySelector("#tourNextBtn"),
+  tourCloseBtn: document.querySelector("#tourCloseBtn"),
+  accessGate: document.querySelector("#accessGate"),
+  accessForm: document.querySelector("#accessForm"),
+  accessEmail: document.querySelector("#accessEmail"),
+  accessStatus: document.querySelector("#accessStatus"),
+  accessState: document.querySelector("#accessState"),
+
+  inputTrim: document.querySelector("#inputTrim"),
+  monitorVolume: document.querySelector("#monitorVolume"),
+  inputTrimVal: document.querySelector("#inputTrimVal"),
+  monitorVolumeVal: document.querySelector("#monitorVolumeVal"),
 
   masterGain: document.querySelector("#masterGain"),
   masterHpHz: document.querySelector("#masterHpHz"),
@@ -42,6 +68,60 @@ const els = {
   state: document.querySelector("#state"),
 
   moduleRow: document.querySelector("#moduleRow"),
+  deviceLibrary: document.querySelector("#deviceLibrary"),
+  inspectorContent: document.querySelector("#inspectorContent"),
+  rackCount: document.querySelector("#rackCount"),
+  rackEmpty: document.querySelector("#rackEmpty"),
+  sourceWaveformCanvas: document.querySelector("#sourceWaveformCanvas"),
+  processedWaveformCanvas: document.querySelector("#processedWaveformCanvas"),
+  transportSeek: document.querySelector("#transportSeek"),
+  transportTime: document.querySelector("#transportTime"),
+  scopeState: document.querySelector("#scopeState"),
+  loopStart: document.querySelector("#loopStart"),
+  loopEnd: document.querySelector("#loopEnd"),
+  monitorBtn: document.querySelector("#monitorBtn"),
+  panicBtn: document.querySelector("#panicBtn"),
+  toolDrawer: document.querySelector("#toolDrawer"),
+  drawerBody: document.querySelector("#drawerBody"),
+  drawerToggle: document.querySelector("#drawerToggle"),
+  masterEqBands: document.querySelector("#masterEqBands"),
+  masterNoiseLearn: document.querySelector("#masterNoiseLearn"),
+  masterNoiseThreshold: document.querySelector("#masterNoiseThreshold"),
+  masterNoiseReductionDb: document.querySelector("#masterNoiseReductionDb"),
+  masterNoiseAttack: document.querySelector("#masterNoiseAttack"),
+  masterNoiseRelease: document.querySelector("#masterNoiseRelease"),
+  masterNoiseMix: document.querySelector("#masterNoiseMix"),
+  masterSaturation: document.querySelector("#masterSaturation"),
+  masterDelayTime: document.querySelector("#masterDelayTime"),
+  masterDelayFeedback: document.querySelector("#masterDelayFeedback"),
+  masterDelayDamping: document.querySelector("#masterDelayDamping"),
+  masterDelayMix: document.querySelector("#masterDelayMix"),
+  masterReverbPreDelay: document.querySelector("#masterReverbPreDelay"),
+  masterReverbDecay: document.querySelector("#masterReverbDecay"),
+  masterReverbDamping: document.querySelector("#masterReverbDamping"),
+  masterReverbMix: document.querySelector("#masterReverbMix"),
+  masterNoiseThresholdVal: document.querySelector("#masterNoiseThresholdVal"),
+  masterNoiseReductionDbVal: document.querySelector("#masterNoiseReductionDbVal"),
+  masterNoiseAttackVal: document.querySelector("#masterNoiseAttackVal"),
+  masterNoiseReleaseVal: document.querySelector("#masterNoiseReleaseVal"),
+  masterNoiseMixVal: document.querySelector("#masterNoiseMixVal"),
+  noiseReducerState: document.querySelector("#noiseReducerState"),
+  masterSaturationVal: document.querySelector("#masterSaturationVal"),
+  masterDelayTimeVal: document.querySelector("#masterDelayTimeVal"),
+  masterDelayFeedbackVal: document.querySelector("#masterDelayFeedbackVal"),
+  masterDelayDampingVal: document.querySelector("#masterDelayDampingVal"),
+  masterDelayMixVal: document.querySelector("#masterDelayMixVal"),
+  masterReverbPreDelayVal: document.querySelector("#masterReverbPreDelayVal"),
+  masterReverbDecayVal: document.querySelector("#masterReverbDecayVal"),
+  masterReverbDampingVal: document.querySelector("#masterReverbDampingVal"),
+  masterReverbMixVal: document.querySelector("#masterReverbMixVal"),
+  masterPeakDb: document.querySelector("#masterPeakDb"),
+  masterRmsDb: document.querySelector("#masterRmsDb"),
+  masterLufs: document.querySelector("#masterLufs"),
+  masterHeadroom: document.querySelector("#masterHeadroom"),
+  masterLevelFill: document.querySelector("#masterLevelFill"),
+  masterPeakHold: document.querySelector("#masterPeakHold"),
+  masterEqCanvas: document.querySelector("#masterEqCanvas"),
 
   automationView: document.querySelector("#automationView"),
   automationTracks: document.querySelector("#automationTracks"),
@@ -60,6 +140,21 @@ function clamp01(x) {
 }
 function pct01(x) {
   return `${Math.round(clamp01(x) * 100)}%`;
+}
+function inputTrimValue() {
+  const value = Number(els.inputTrim?.value ?? 0.5);
+  return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0.5;
+}
+function monitorVolumeValue() {
+  const value = Number(els.monitorVolume?.value ?? 0.7);
+  return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0.7;
+}
+function formatGainDb(value) {
+  return value <= 0.000001 ? "MUTE" : `${(20 * Math.log10(value)).toFixed(1)} dB`;
+}
+function refreshTransportLevelLabels() {
+  if (els.inputTrimVal) els.inputTrimVal.textContent = formatGainDb(inputTrimValue());
+  if (els.monitorVolumeVal) els.monitorVolumeVal.textContent = formatGainDb(monitorVolumeValue());
 }
 function fmtTime(seconds) {
   if (!Number.isFinite(seconds)) return "-";
@@ -156,6 +251,173 @@ const tvSfxCache = new Map(); // filename -> AudioBuffer (mono)
 
 const LS_ENGINE_PRESETS = "lae:userEnginePresets:v1";
 const LS_MASTER_PRESETS = "lae:userMasterPresets:v1";
+const LS_MONITOR_VOLUME = "lae:monitorVolume:v1";
+const LS_GUIDE_SEEN = "lae:guideSeen:v1";
+const LS_ACCESS_STARTED = "lae:accessTrialStarted:v1";
+const LS_ACCESS_USED_MS = "lae:accessTrialUsedMs:v1";
+const ACCESS_TRIAL_MS = 15 * 60 * 1000;
+const ACCESS_GATE_ENABLED = /(^|\.)bande\.digital$/i.test(window.location.hostname);
+
+let accessUnlocked = false;
+let accessTrialStarted = false;
+let accessUsedMs = 0;
+let accessLastTick = 0;
+let accessPersistAt = 0;
+let accessTimer = 0;
+
+function readAccessTrial() {
+  try {
+    accessTrialStarted = localStorage.getItem(LS_ACCESS_STARTED) === "true";
+    const saved = Number(localStorage.getItem(LS_ACCESS_USED_MS));
+    accessUsedMs = Number.isFinite(saved) ? Math.max(0, saved) : 0;
+  } catch {
+    accessTrialStarted = false;
+    accessUsedMs = 0;
+  }
+}
+
+function persistAccessTrial() {
+  if (!accessTrialStarted || accessUnlocked) return;
+  try {
+    localStorage.setItem(LS_ACCESS_STARTED, "true");
+    localStorage.setItem(LS_ACCESS_USED_MS, String(Math.round(accessUsedMs)));
+  } catch {
+    // The session still works when browser storage is unavailable.
+  }
+}
+
+function accessRemainingMs() {
+  return Math.max(0, ACCESS_TRIAL_MS - accessUsedMs);
+}
+
+function refreshAccessState() {
+  if (!els.accessState) return;
+  if (accessUnlocked) {
+    els.accessState.textContent = "UNLIMITED";
+    return;
+  }
+  const remaining = accessTrialStarted ? accessRemainingMs() : ACCESS_TRIAL_MS;
+  const seconds = Math.ceil(remaining / 1000);
+  const minutesPart = Math.floor(seconds / 60);
+  const secondsPart = String(seconds % 60).padStart(2, "0");
+  els.accessState.textContent = `${minutesPart}:${secondsPart} FREE`;
+}
+
+function beginAccessTrial() {
+  if (accessUnlocked || accessTrialStarted) return;
+  accessTrialStarted = true;
+  accessUsedMs = 0;
+  accessLastTick = performance.now();
+  persistAccessTrial();
+  refreshAccessState();
+}
+
+function setAccessUnlocked() {
+  accessUnlocked = true;
+  if (els.accessGate) els.accessGate.hidden = true;
+  document.body.classList.remove("access-gated");
+  try {
+    localStorage.removeItem(LS_ACCESS_STARTED);
+    localStorage.removeItem(LS_ACCESS_USED_MS);
+  } catch {
+    // The signed server cookie remains authoritative.
+  }
+  refreshAccessState();
+}
+
+function showAccessGate() {
+  if (accessUnlocked || !els.accessGate || window.matchMedia("(max-width: 960px)").matches) return;
+  accessUsedMs = ACCESS_TRIAL_MS;
+  persistAccessTrial();
+  stopPlayback({ resetTransport: false });
+  els.accessGate.hidden = false;
+  document.body.classList.add("access-gated");
+  setState("Session paused");
+  window.setTimeout(() => els.accessEmail?.focus(), 0);
+  refreshAccessState();
+}
+
+function hasToolAccess() {
+  if (accessUnlocked) return true;
+  if (!accessTrialStarted) beginAccessTrial();
+  if (accessRemainingMs() > 0) return true;
+  showAccessGate();
+  return false;
+}
+
+function tickAccessTimer(now = performance.now()) {
+  if (!accessLastTick) accessLastTick = now;
+  const elapsed = Math.max(0, Math.min(2000, now - accessLastTick));
+  accessLastTick = now;
+  if (accessTrialStarted && !accessUnlocked && document.visibilityState === "visible" && els.accessGate?.hidden) {
+    accessUsedMs += elapsed;
+    if (now - accessPersistAt >= 5000) {
+      persistAccessTrial();
+      accessPersistAt = now;
+    }
+    if (accessRemainingMs() <= 0) showAccessGate();
+  }
+  refreshAccessState();
+}
+
+async function initAccessGate() {
+  if (!ACCESS_GATE_ENABLED) {
+    setAccessUnlocked();
+    return;
+  }
+  readAccessTrial();
+  refreshAccessState();
+  try {
+    const response = await fetch("/api/color-systems/lost-access", { cache: "no-store", credentials: "same-origin" });
+    if (response.ok && (await response.json()).unlocked === true) setAccessUnlocked();
+  } catch {
+    // A network issue never takes away the initial free session.
+  }
+  if (!accessUnlocked && accessTrialStarted && accessRemainingMs() <= 0) showAccessGate();
+  accessLastTick = performance.now();
+  if (!accessTimer) accessTimer = window.setInterval(() => tickAccessTimer(), 1000);
+  document.addEventListener("visibilitychange", () => {
+    tickAccessTimer();
+    persistAccessTrial();
+  });
+  window.addEventListener("pagehide", persistAccessTrial);
+  els.accessForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!els.accessForm.checkValidity()) {
+      els.accessForm.reportValidity();
+      return;
+    }
+    const submit = els.accessForm.querySelector('button[type="submit"]');
+    const form = new FormData(els.accessForm);
+    if (submit) submit.disabled = true;
+    if (els.accessStatus) {
+      els.accessStatus.className = "access-gate__status";
+      els.accessStatus.textContent = "CONNECTING TO B&E…";
+    }
+    try {
+      const response = await fetch(els.accessForm.action, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ email: form.get("email"), source: form.get("source"), gotcha: form.get("gotcha") }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || result.unlocked !== true) throw new Error(result.error || "The unlock did not reach B&E. Please try again.");
+      if (els.accessStatus) {
+        els.accessStatus.className = "access-gate__status is-success";
+        els.accessStatus.textContent = result.alreadyCaptured ? "WELCOME BACK — THE ENGINE IS UNLOCKED." : "SIGNAL RECEIVED — THE ENGINE IS UNLOCKED.";
+      }
+      window.setTimeout(setAccessUnlocked, 450);
+    } catch (error) {
+      if (els.accessStatus) {
+        els.accessStatus.className = "access-gate__status is-error";
+        els.accessStatus.textContent = error?.message || "The unlock did not reach B&E. Please try again.";
+      }
+    } finally {
+      if (submit) submit.disabled = false;
+    }
+  });
+}
 
 function loadJson(key, fallback) {
   try {
@@ -534,11 +796,16 @@ function scheduleCamcorderSfx(ctx, windNode, settings, seed, { startTime = 0, du
   return created;
 }
 
-async function ensureTapeBankDecoded(bankId) {
+async function ensureTapeBankDecoded(bankId, { mode = "sequence" } = {}) {
   const bank = tapeBankById(bankId);
   if (!bank) return null;
   const files = new Set();
-  for (const list of [bank.bed, bank.start, bank.end]) {
+  const wantsBed = mode === "bed" || mode === "sequence";
+  const wantsEdges = mode === "edges" || mode === "sequence";
+  const lists = [];
+  if (wantsBed) lists.push(bank.bed);
+  if (wantsEdges) lists.push(bank.start, bank.end);
+  for (const list of lists) {
     if (!Array.isArray(list)) continue;
     for (const f of list) if (typeof f === "string" && f) files.add(f);
   }
@@ -579,9 +846,26 @@ function setState(text) {
 
 function readMasterSettings() {
   return {
+    inputTrim: inputTrimValue(),
     masterGain: parseFloat(els.masterGain.value),
     masterHpHz: parseFloat(els.masterHpHz?.value ?? "20"),
     masterLpHz: parseFloat(els.masterLpHz?.value ?? "20000"),
+    masterEqBands: Object.fromEntries(masterEqInputs().map((input) => [String(input.dataset.eqFrequency), parseFloat(input.value || "0")])),
+    masterNoiseLearn: Boolean(els.masterNoiseLearn?.checked),
+    masterNoiseThreshold: parseFloat(els.masterNoiseThreshold?.value ?? "-55"),
+    masterNoiseReductionDb: parseFloat(els.masterNoiseReductionDb?.value ?? "12"),
+    masterNoiseAttack: parseFloat(els.masterNoiseAttack?.value ?? "12"),
+    masterNoiseRelease: parseFloat(els.masterNoiseRelease?.value ?? "220"),
+    masterNoiseMix: parseFloat(els.masterNoiseMix?.value ?? "0"),
+    masterSaturation: parseFloat(els.masterSaturation?.value ?? "0"),
+    masterDelayTime: parseFloat(els.masterDelayTime?.value ?? "180"),
+    masterDelayFeedback: parseFloat(els.masterDelayFeedback?.value ?? "0.18"),
+    masterDelayDamping: parseFloat(els.masterDelayDamping?.value ?? "8000"),
+    masterDelayMix: parseFloat(els.masterDelayMix?.value ?? "0"),
+    masterReverbPreDelay: parseFloat(els.masterReverbPreDelay?.value ?? "18"),
+    masterReverbDecay: parseFloat(els.masterReverbDecay?.value ?? "1.35"),
+    masterReverbDamping: parseFloat(els.masterReverbDamping?.value ?? "6500"),
+    masterReverbMix: parseFloat(els.masterReverbMix?.value ?? "0"),
     masterComp: parseFloat(els.masterComp?.value ?? "0"),
     ceiling: parseFloat(els.ceiling.value),
     limiter: parseFloat(els.limiter.value),
@@ -591,13 +875,35 @@ function readMasterSettings() {
 
 function refreshMasterLabels() {
   const s = readMasterSettings();
+  refreshTransportLevelLabels();
   els.masterGainVal.textContent = `${s.masterGain.toFixed(2)}x`;
   if (els.masterHpHzVal) els.masterHpHzVal.textContent = fmtHz(s.masterHpHz);
   if (els.masterLpHzVal) els.masterLpHzVal.textContent = fmtHz(s.masterLpHz);
+  for (const input of masterEqInputs()) {
+    const value = parseFloat(input.value || "0");
+    const output = document.querySelector(`#${input.id}Val`);
+    if (output) output.textContent = `${value >= 0 ? "+" : ""}${value.toFixed(1)} dB`;
+  }
+  if (els.masterNoiseThresholdVal) els.masterNoiseThresholdVal.textContent = `${s.masterNoiseThreshold.toFixed(1)} dB`;
+  if (els.masterNoiseReductionDbVal) els.masterNoiseReductionDbVal.textContent = `${s.masterNoiseReductionDb.toFixed(1)} dB`;
+  if (els.masterNoiseAttackVal) els.masterNoiseAttackVal.textContent = `${Math.round(s.masterNoiseAttack)} ms`;
+  if (els.masterNoiseReleaseVal) els.masterNoiseReleaseVal.textContent = `${Math.round(s.masterNoiseRelease)} ms`;
+  if (els.masterNoiseMixVal) els.masterNoiseMixVal.textContent = pct01(s.masterNoiseMix);
+  if (els.noiseReducerState) els.noiseReducerState.textContent = s.masterNoiseLearn ? "TRACKING FLOOR" : "MANUAL THRESHOLD";
+  if (els.masterSaturationVal) els.masterSaturationVal.textContent = pct01(s.masterSaturation);
+  if (els.masterDelayTimeVal) els.masterDelayTimeVal.textContent = `${Math.round(s.masterDelayTime)} ms`;
+  if (els.masterDelayFeedbackVal) els.masterDelayFeedbackVal.textContent = pct01(s.masterDelayFeedback);
+  if (els.masterDelayDampingVal) els.masterDelayDampingVal.textContent = fmtHz(s.masterDelayDamping);
+  if (els.masterDelayMixVal) els.masterDelayMixVal.textContent = pct01(s.masterDelayMix);
+  if (els.masterReverbPreDelayVal) els.masterReverbPreDelayVal.textContent = `${Math.round(s.masterReverbPreDelay)} ms`;
+  if (els.masterReverbDecayVal) els.masterReverbDecayVal.textContent = `${s.masterReverbDecay.toFixed(2)} s`;
+  if (els.masterReverbDampingVal) els.masterReverbDampingVal.textContent = fmtHz(s.masterReverbDamping);
+  if (els.masterReverbMixVal) els.masterReverbMixVal.textContent = pct01(s.masterReverbMix);
   if (els.masterCompVal) els.masterCompVal.textContent = pct01(s.masterComp);
   els.ceilingVal.textContent = `${Math.round(s.ceiling * 100)}%`;
   els.limiterVal.textContent = pct01(s.limiter);
   els.optsVal.textContent = `${els.softClip.checked ? "SoftClip" : "NoClip"} | ${els.monoOut.checked ? "Mono" : "Stereo"}`;
+  drawMasterEqResponse();
 }
 
 let sourceBuffer = null;
@@ -613,10 +919,43 @@ const realtime = {
   stereo: false,
   extraSources: [],
   endTimers: [],
+  tapeBedSources: [],
   tvBedSources: [],
   playWindow: null, // { baseTime, audioStartAt, tapeEndStopAt }
+  analyser: null,
+  monitorGain: null,
+  scopeData: null,
+  sourceStartedAt: 0,
+  sourceOffsetSec: 0,
 };
+
+const MASTER_EQ_BANDS = [
+  ["31", 31, "31"], ["63", 63, "63"], ["125", 125, "125"], ["250", 250, "250"], ["500", 500, "500"],
+  ["1k", 1000, "1K"], ["2k", 2000, "2K"], ["4k", 4000, "4K"], ["8k", 8000, "8K"], ["16k", 16000, "16K"],
+];
+
+function initMasterEqBands() {
+  if (!els.masterEqBands || els.masterEqBands.childElementCount) return;
+  for (const [key, frequency, label] of MASTER_EQ_BANDS) {
+    const control = document.createElement("div");
+    control.className = "control";
+    control.innerHTML = `<div class="labelRow"><label for="masterEq${key}">${label} HZ</label><span id="masterEq${key}Val" class="val">+0.0 dB</span></div><input id="masterEq${key}" type="range" min="-12" max="12" step="0.1" value="0" data-eq-frequency="${frequency}" />`;
+    els.masterEqBands.appendChild(control);
+  }
+}
+
+function masterEqInputs() {
+  return Array.from(els.masterEqBands?.querySelectorAll("input[data-eq-frequency]") || []);
+}
+
+initMasterEqBands();
 let graphStale = true;
+let selectedModuleId = null;
+let libraryFilter = "all";
+let monitorDry = false;
+const transport = { position: 0, frame: 0 };
+const masterMeter = { peakHold: 0, holdUntil: 0 };
+const liveAutomation = { lanes: new Map(), target: "", dragging: null, applying: false, lastMasterUi: 0 };
 
 const automationRt = {
   ctx: null,
@@ -625,6 +964,7 @@ const automationRt = {
   layers: [], // [{ graph, gainNode, enabledNode }]
   sum: null,
   master: null,
+  monitorGain: null,
   sources: [],
   playing: false,
   stopAt: 0,
@@ -635,16 +975,16 @@ let viewSnapshot = null; // Map(instanceId -> { enabled, wet })
 
 function makeDefaultModules() {
   let nextInstanceId = 1;
-  const defaultCartridgePrimary = { quality: 0.55, codec: 0.25, grit: 0.25, noise: 0.15 };
+  const defaultCartridgePrimary = { quality: 0.55, codec: 0.25, grit: 0.25, noise: 0.08 };
   const defaultCartridgeMacro = computeCartridgeMacroTargets(defaultCartridgePrimary);
   const defaultCdPrimary = { clarity: 0.65, damage: 0.25, tracking: 0.22, jitter: 0.18 };
   const defaultCdMacro = computeCdMacroTargets(defaultCdPrimary);
-  return [
+  const defaults = [
     {
       instanceId: nextInstanceId++,
       type: "occlusion",
       name: "Obfuscation",
-      desc: "Occlusion: next room / behind a wall",
+      desc: "Wall, cavity, and resonant-body transmission",
       enabled: false,
       wet: 1,
       presetKey: "",
@@ -652,12 +992,19 @@ function makeDefaultModules() {
         distance: 0.35,
         wall: 0.45,
         material: "drywall",
+        construction: "stud",
         sourceRoom: 0.35,
         listenerRoom: 0.45,
 
         hpHz: 50,
         lpHz: 5200,
+        resonance: 0.48,
+        cavity: 0.52,
+        rattle: 0.08,
+        looseness: 0.34,
+        smear: 0.38,
         leak: 0.08,
+        leakTone: 0.52,
         roomMix: 0.22,
         predelayMs: 12,
         outGain: 1,
@@ -668,7 +1015,7 @@ function makeDefaultModules() {
       type: "transmission",
       name: "Transmission",
       desc: "AM/Walkie: EQ + drive + dropouts + noise + tuning",
-      enabled: true,
+      enabled: false,
       wet: 1,
       presetKey: "",
       params: {
@@ -716,7 +1063,7 @@ function makeDefaultModules() {
       instanceId: nextInstanceId++,
       type: "comms",
       name: "Comms",
-      desc: "Telephone/Intercom/PA: narrowband + codec + echo/room",
+      desc: "Phones, intercoms and PA systems as physical scene devices",
       enabled: false,
       wet: 1,
       presetKey: "",
@@ -726,6 +1073,8 @@ function makeDefaultModules() {
         drive: 0.35,
         glitch: 0.2,
         noise: 0.18,
+        character: 0.45,
+        distance: 0.15,
         alarmTone: false,
 
         // Advanced / direct controls (match standalone defaults).
@@ -741,6 +1090,10 @@ function makeDefaultModules() {
         hum: 0.25,
         hiss: 0.22,
         toneMix: 0.35,
+        transducer: 0.45,
+        lineAge: 0.2,
+        duplex: 0.08,
+        speakerRattle: 0.12,
         ceiling: 0.92,
         outGain: 0.95,
 
@@ -767,7 +1120,7 @@ function makeDefaultModules() {
         age: 0.35,
         wow: 0.25,
         glitch: 0.18,
-        sfxEnable: false,
+        sfxEnable: true,
 
         // Advanced / direct controls (match standalone defaults).
         hpHz: 35,
@@ -786,8 +1139,8 @@ function makeDefaultModules() {
         ceiling: 0.92,
         outGain: 0.98,
 
-        sfxSource: "",
-        sfxLevel: 0.22,
+        sfxSource: "cassette",
+        sfxLevel: 0.46,
         sfxMode: "bed",
       },
     },
@@ -814,9 +1167,9 @@ function makeDefaultModules() {
         noiseHiss: 0.55,
         noiseCrackle: 0.08,
 
-        bedEnable: false,
-        bedLevel: 0.22,
-        bedSource: "",
+        bedEnable: true,
+        bedLevel: 0.5,
+        bedSource: "crt.mp3",
 
         outGain: 1,
       },
@@ -825,7 +1178,7 @@ function makeDefaultModules() {
       instanceId: nextInstanceId++,
       type: "cartridge",
       name: "Cartridge",
-      desc: "Retro hardware: bitcrush/codec + grit + micro delay/verb",
+      desc: "Sample memory, console codecs, DACs and physical game speakers",
       enabled: false,
       wet: 1,
       presetKey: "",
@@ -833,7 +1186,7 @@ function makeDefaultModules() {
         quality: 0.55,
         codec: 0.25,
         grit: 0.25,
-        noise: 0.15,
+        noise: 0.08,
 
         // Macro-derived defaults (standalone applies macro targets on load).
         bits: defaultCartridgeMacro.bits,
@@ -842,6 +1195,7 @@ function makeDefaultModules() {
         jitter: defaultCartridgeMacro.jitter,
         preEmph: defaultCartridgeMacro.preEmph,
         mulaw: defaultCartridgeMacro.mulaw,
+        codecMode: "adpcm",
         blockMs: defaultCartridgeMacro.blockMs,
         sat: defaultCartridgeMacro.sat,
         hum: defaultCartridgeMacro.hum,
@@ -850,24 +1204,27 @@ function makeDefaultModules() {
 
         // Direct controls (match standalone defaults).
         bleepsEnable: false,
-        bleepsMix: 0.18,
+        bleepsMix: 0.12,
         bleepsRate: 3,
-        bleepsWave: "random",
-        bleepsVibrato: 0.35,
+        bleepsWave: "pulse",
+        bleepsTrigger: "transient",
+        bleepsScale: "minor",
+        bleepsVibrato: 0.12,
         bleepsPitch: 0.55,
 
         microDelayMs: 8,
-        microDelayMix: 0.18,
-        verb: 0.22,
+        microDelayMix: 0.06,
+        verb: 0.08,
         verbMs: 45,
         wet: 1,
         ceiling: 0.92,
         limiter: 0.35,
-        edge: 0.25,
+        edge: defaultCartridgeMacro.edge,
         noiseTrack: 0.6,
-        dcDrift: 0.15,
+        dcDrift: defaultCartridgeMacro.dcDrift,
         hpHz: 70,
         speaker: 0.45,
+        speakerModel: "handheld",
 
         dither: true,
         noiseShaping: false,
@@ -877,24 +1234,31 @@ function makeDefaultModules() {
       instanceId: nextInstanceId++,
       type: "cd",
       name: "CD",
-      desc: "Optical errors: repeats/holds + scratches + jitter + car comp",
+      desc: "Optical recovery: correction, recurring scratches, interpolation, and tracking loss",
       enabled: false,
       wet: 1,
       presetKey: "",
       params: {
         ...defaultCdPrimary,
         carComp: defaultCdMacro.carComp ?? 0,
-        softClip: true,
-        mode: defaultCdMacro.mode ?? "hold",
-        errorRate: defaultCdMacro.errorRate ?? 0.18,
-        burstMs: defaultCdMacro.burstMs ?? 24,
-        repeatMs: defaultCdMacro.repeatMs ?? 42,
-        scratchRate: defaultCdMacro.scratchRate ?? 0.25,
-        scratchAmt: defaultCdMacro.scratchAmt ?? 0.35,
-        jitterMs: defaultCdMacro.jitterMs ?? 0.18,
-        jitterRate: defaultCdMacro.jitterRate ?? 38,
-        hfLoss: defaultCdMacro.hfLoss ?? 0.1,
-        servoNoise: defaultCdMacro.servoNoise ?? 0.12,
+        softClip: false,
+        mode: defaultCdMacro.mode ?? "interp",
+        damageShape: defaultCdMacro.damageShape ?? "radial",
+        errorRate: defaultCdMacro.errorRate ?? 0.12,
+        burstMs: defaultCdMacro.burstMs ?? 18,
+        repeatMs: defaultCdMacro.repeatMs ?? 36,
+        scratchRate: defaultCdMacro.scratchRate ?? 0.14,
+        scratchAmt: defaultCdMacro.scratchAmt ?? 0.2,
+        correction: defaultCdMacro.correction ?? 0.88,
+        interpolationMs: defaultCdMacro.interpolationMs ?? 5,
+        rotationHz: defaultCdMacro.rotationHz ?? 5.2,
+        trackingRate: defaultCdMacro.trackingRate ?? 0.08,
+        trackingMs: defaultCdMacro.trackingMs ?? 140,
+        servoHunt: defaultCdMacro.servoHunt ?? 0.18,
+        jitterMs: defaultCdMacro.jitterMs ?? 0.025,
+        jitterRate: defaultCdMacro.jitterRate ?? 34,
+        hfLoss: defaultCdMacro.hfLoss ?? 0.025,
+        servoNoise: defaultCdMacro.servoNoise ?? 0.08,
         ceiling: defaultCdMacro.ceiling ?? 0.94,
         outGain: defaultCdMacro.outGain ?? 0.98,
       },
@@ -903,7 +1267,7 @@ function makeDefaultModules() {
       instanceId: nextInstanceId++,
       type: "camcorder",
       name: "Camcorder",
-      desc: "Muffled mic + AGC + movement + corruption + wind",
+      desc: "Camera capsule, AGC, recording format, handling, wind, and transport faults",
       enabled: false,
       wet: 1,
       presetKey: "",
@@ -921,16 +1285,20 @@ function makeDefaultModules() {
         camBedSource: "",
         windBedSource: "",
         windHitSource: "",
+        format: "minidv",
+        micModel: "electret",
         hpHz: 55,
         lpHz: 9200,
         boxDb: 3.2,
         boxHz: 1650,
         agcAmt: 0.55,
         agcSpeed: 0.45,
+        agcPump: 0.45,
         clip: 0.25,
         crush: 0.12,
         bits: 12,
         rate: 24000,
+        flutter: 0.12,
         drop: 0.18,
         dropMs: 28,
         dropMode: "hold",
@@ -939,6 +1307,7 @@ function makeDefaultModules() {
         handling: 0.22,
         rub: 0.18,
         hiss: 0.12,
+        motorBleed: 0.08,
         ceiling: 0.92,
         outGain: 0.98,
       },
@@ -966,19 +1335,26 @@ function makeDefaultModules() {
         midHumpDb: 2.2,
         midFreq: 1750,
         concealMode: "hold",
-        packetLoss: 0.18,
-        packetMs: 24,
-        repeatMs: 42,
-        jitterMs: 0.12,
-        jitterRate: 34,
+        packetLoss: 0.045,
+        packetMs: 20,
+        repeatMs: 38,
+        jitterMs: 0.35,
+        jitterRate: 18,
         gate: 0.12,
         bits: 12,
         rate: 24000,
+        burstiness: 0.56,
+        suppression: 0.42,
+        agc: 0.34,
+        bufferSlip: 0.08,
+        bandwidthSwitch: 0.12,
+        comfortNoise: 0.22,
         ceiling: 0.92,
         outGain: 0.98,
       },
     },
   ];
+  return defaults.map((module) => ({ ...module, inRack: false }));
 }
 
 let modules = makeDefaultModules();
@@ -1029,8 +1405,9 @@ function getCurrentModules() {
 
 function getVisibleModules() {
   const current = getCurrentModules();
-  if (viewMode === "suite" || viewMode === "automation") return current;
-  return current.filter((m) => m.type === viewMode);
+  if (viewMode === "automation") return current;
+  if (viewMode === "suite") return current.filter((m) => Boolean(m.inRack));
+  return current.filter((m) => m.type === viewMode && Boolean(m.inRack));
 }
 
 function syncModuleRowColumns() {
@@ -1236,39 +1613,66 @@ function computeOcclusionMacroTargets(primary) {
   const listenerRoom = clamp01(primary.listenerRoom ?? 0.45);
   const materialRaw = String(primary.material ?? "drywall");
   const material =
-    materialRaw === "brick" || materialRaw === "wood" || materialRaw === "curtain" || materialRaw === "door" || materialRaw === "glass"
+    materialRaw === "brick" || materialRaw === "wood" || materialRaw === "curtain" || materialRaw === "door" || materialRaw === "glass" || materialRaw === "metal" || materialRaw === "concrete"
       ? materialRaw
       : "drywall";
+  const constructionRaw = String(primary.construction ?? "stud");
+  const construction = ["solid", "stud", "hollow", "panel", "loose"].includes(constructionRaw) ? constructionRaw : "stud";
 
   const mat =
     material === "brick"
-      ? { lpMin: 1100, damp: 0.75, leakBias: -0.05 }
+      ? { lpMin: 850, dipHz: 1280, dipDb: -4.1, bumpHz: 185, bumpDb: 1.5, damp: 0.82, leakBias: -0.05, leakTone: 0.26, rattleScale: 0.25, smearScale: 0.62 }
       : material === "wood"
-        ? { lpMin: 1500, damp: 0.65, leakBias: 0.02 }
+        ? { lpMin: 1400, dipHz: 1370, dipDb: -2.2, bumpHz: 285, bumpDb: 2.2, damp: 0.55, leakBias: 0.03, leakTone: 0.62, rattleScale: 1, smearScale: 1.12 }
         : material === "curtain"
-          ? { lpMin: 2200, damp: 0.55, leakBias: 0.18 }
+          ? { lpMin: 2500, dipHz: 2400, dipDb: -1.2, bumpHz: 235, bumpDb: 0.5, damp: 0.72, leakBias: 0.16, leakTone: 0.68, rattleScale: 0.08, smearScale: 0.35 }
           : material === "door"
-            ? { lpMin: 1350, damp: 0.72, leakBias: 0.08 }
+            ? { lpMin: 1200, dipHz: 1220, dipDb: -2.8, bumpHz: 245, bumpDb: 2.5, damp: 0.61, leakBias: 0.09, leakTone: 0.58, rattleScale: 1.05, smearScale: 1.18 }
             : material === "glass"
-              ? { lpMin: 2600, damp: 0.45, leakBias: 0.25 }
-              : { lpMin: 1800, damp: 0.68, leakBias: 0.05 };
+              ? { lpMin: 2350, dipHz: 1420, dipDb: -1.4, bumpHz: 820, bumpDb: 2.4, damp: 0.35, leakBias: 0.12, leakTone: 0.82, rattleScale: 1.15, smearScale: 1.3 }
+              : material === "metal"
+                ? { lpMin: 2100, dipHz: 1720, dipDb: -1.7, bumpHz: 610, bumpDb: 3.2, damp: 0.27, leakBias: 0.04, leakTone: 0.76, rattleScale: 1.65, smearScale: 1.45 }
+                : material === "concrete"
+                  ? { lpMin: 720, dipHz: 1050, dipDb: -4.6, bumpHz: 118, bumpDb: 1.1, damp: 0.88, leakBias: -0.075, leakTone: 0.18, rattleScale: 0.12, smearScale: 0.48 }
+                  : { lpMin: 1750, dipHz: 1550, dipDb: -2.4, bumpHz: 350, bumpDb: 1.4, damp: 0.63, leakBias: 0.02, leakTone: 0.52, rattleScale: 0.85, smearScale: 1 };
+  const build =
+    construction === "solid"
+      ? { cavity: 0.025, rattle: 0.01, looseness: 0.06, resonanceBias: -0.08, smear: 0.78 }
+      : construction === "hollow"
+        ? { cavity: 0.76, rattle: 0.18, looseness: 0.52, resonanceBias: 0.12, smear: 1.18 }
+        : construction === "panel"
+          ? { cavity: 0.38, rattle: 0.4, looseness: 0.65, resonanceBias: 0.16, smear: 1.25 }
+          : construction === "loose"
+            ? { cavity: 0.62, rattle: 0.78, looseness: 0.9, resonanceBias: 0.22, smear: 1.4 }
+            : { cavity: 0.52, rattle: 0.09, looseness: 0.34, resonanceBias: 0.06, smear: 1 };
 
   const d = Math.pow(distance, 1.15);
-  const w = Math.pow(wall, 1.2);
-  const room = clamp01(0.45 * sourceRoom + 0.55 * listenerRoom);
+  const w = Math.pow(wall, 1.18);
+  const room = clamp01(0.42 * sourceRoom + 0.58 * listenerRoom);
 
-  const hpHz = Math.round(35 + d * 75 + w * 45);
-  const lpHz = Math.round(16000 - (d * 5500 + w * 9500));
-  const lp = Math.max(mat.lpMin + w * 250, lpHz);
+  const hpHz = Math.round(24 + d * 38 + w * 32);
+  const openLp = 17800 - d * 3800;
+  const transmissionOpen = Math.pow(1 - w, 2.2);
+  const lp = Math.round(mat.lpMin + (openLp - mat.lpMin) * transmissionOpen);
+  const dipDb = mat.dipDb - w * 1.5;
+  const bumpDb = mat.bumpDb + w * 1.8;
+  const dipHz = Math.round(mat.dipHz * (0.95 + room * 0.1));
+  const bumpHz = Math.round(mat.bumpHz * (0.94 + (1 - room) * 0.12));
 
-  const leak = clamp01(0.03 + (1 - w) * 0.18 + mat.leakBias);
-  const roomMix = clamp01(0.08 + room * 0.32 + d * 0.18);
-  const predelayMs = Math.round(6 + room * 26 + d * 10);
-  const damp = clamp01(mat.damp + room * 0.12);
+  const leak = clamp01(0.015 + (1 - w) * 0.13 + mat.leakBias);
+  const leakTone = clamp01(mat.leakTone + (1 - w) * 0.08);
+  const resonance = clamp01(0.2 + w * 0.4 + mat.smearScale * 0.07 + build.resonanceBias);
+  const cavity = clamp01(build.cavity * (0.72 + w * 0.28));
+  const rattle = clamp01(build.rattle * mat.rattleScale * (0.58 + w * 0.42));
+  const looseness = clamp01(build.looseness);
+  const smear = clamp01((0.1 + w * 0.4 * mat.smearScale + d * 0.08) * build.smear);
+  const roomMix = clamp01(0.08 + room * 0.3 + d * 0.08);
+  const predelayMs = Math.round(2 + listenerRoom * 10 + d * 5);
+  const damp = clamp01(mat.damp + room * 0.08);
   const roomSize = clamp01(room);
-  const outGain = Math.round((1.0 - d * 0.18) * 100) / 100;
+  const outGain = Math.round((1 - d * 0.12 - w * 0.08) * 100) / 100;
 
-  return { material, hpHz, lpHz: lp, leak, roomMix, predelayMs, damp, roomSize, outGain };
+  return { material, construction, hpHz, lpHz: lp, dipHz, dipDb, bumpHz, bumpDb, resonance, cavity, rattle, looseness, smear, leak, leakTone, roomMix, predelayMs, damp, roomSize, outGain };
 }
 
 function computeCartridgeMacroTargets(primary) {
@@ -1277,24 +1681,26 @@ function computeCartridgeMacroTargets(primary) {
   const grit = clamp01(primary.grit ?? 0.25);
   const noise = clamp01(primary.noise ?? 0.15);
 
-  const qCurve = Math.pow(1 - quality, 1.6);
-  const bits = Math.round(14 - qCurve * 10);
-  const rate = Math.round(42000 - qCurve * 34000);
-  const lpHz = Math.round(16000 - qCurve * 13500);
-  const jitter = clamp01(0.02 + qCurve * 0.45);
+  const qCurve = Math.pow(1 - quality, 1.35);
+  const bits = Math.round(16 - qCurve * 10);
+  const rate = Math.round(48000 - qCurve * 40000);
+  const lpHz = Math.round(18000 - qCurve * 15000);
+  const jitter = clamp01(0.01 + qCurve * 0.16);
 
   const cCurve = Math.pow(codec, 1.15);
-  const mulaw = clamp01(cCurve * 0.95);
-  const blockMs = Math.round(cCurve * cCurve * 42);
-  const preEmph = clamp01(0.08 + cCurve * 0.7);
+  const mulaw = clamp01(cCurve * 0.86);
+  const blockMs = Math.round(2 + cCurve * cCurve * 18);
+  const preEmph = clamp01(0.05 + cCurve * 0.38);
 
   const gCurve = Math.pow(grit, 1.25);
-  const sat = clamp01(0.12 + gCurve * 0.88);
-  const hum = clamp01(gCurve * 0.25);
-  const whine = clamp01(0.08 + gCurve * 0.7);
-  const outGain = 0.98 - gCurve * 0.18;
+  const sat = clamp01(0.04 + gCurve * 0.58);
+  const edge = clamp01(0.03 + gCurve * 0.5);
+  const dcDrift = clamp01(0.01 + gCurve * 0.16);
+  const hum = clamp01(gCurve * 0.12);
+  const whine = clamp01(0.025 + gCurve * 0.2);
+  const outGain = 0.98 - gCurve * 0.08;
 
-  return { bits, rate, lpHz, jitter, mulaw, blockMs, preEmph, sat, hum, whine, noise, outGain };
+  return { bits, rate, lpHz, jitter, mulaw, blockMs, preEmph, sat, edge, dcDrift, hum, whine, noise, outGain };
 }
 
 function computeCommsMacroTargets(primary) {
@@ -1303,22 +1709,25 @@ function computeCommsMacroTargets(primary) {
   const drive = clamp01(primary.drive ?? 0.35);
   const glitch = clamp01(primary.glitch ?? 0.2);
   const noise = clamp01(primary.noise ?? 0.18);
+  const character = clamp01(primary.character ?? 0.45);
+  const distance = clamp01(primary.distance ?? 0.15);
 
   const narrow = Math.pow(1 - bandwidth, 1.35);
   const drv = Math.pow(drive, 1.25);
   const g = Math.pow(glitch, 1.35);
   const n = Math.pow(noise, 1.2);
+  const ch = Math.pow(character, 0.9);
 
   const base =
     mode === "cell"
-      ? { hp: 220, hpR: 360, lp: 3700, lpR: 1600, hump: 2.0, humpR: 4.2, mid: 1700, midR: 450, comp: 0.58, out: 1.02, ceil: 0.92 }
+      ? { hp: 170, hpR: 390, lp: 7200, lpR: 4600, hump: 1.4, humpR: 3.8, mid: 2050, midR: 550, comp: 0.58, out: 0.98, ceil: 0.92, device: 0.2, line: 0.04, duplex: 0.08, rattle: 0.04, bits: 13, rate: 32000, rateR: 25000 }
       : mode === "intercom"
-        ? { hp: 340, hpR: 380, lp: 3300, lpR: 1100, hump: 4.2, humpR: 6.0, mid: 1950, midR: 450, comp: 0.66, out: 0.98, ceil: 0.9 }
+        ? { hp: 310, hpR: 420, lp: 4100, lpR: 1900, hump: 4.6, humpR: 5.8, mid: 1950, midR: 420, comp: 0.65, out: 0.94, ceil: 0.9, device: 0.68, line: 0.28, duplex: 0.48, rattle: 0.5, bits: 15, rate: 44000, rateR: 30000 }
         : mode === "pa"
-          ? { hp: 160, hpR: 280, lp: 6800, lpR: 2600, hump: 1.6, humpR: 3.2, mid: 1500, midR: 450, comp: 0.42, out: 1.15, ceil: 0.88 }
+          ? { hp: 120, hpR: 330, lp: 9800, lpR: 5200, hump: 1.2, humpR: 3.0, mid: 1420, midR: 400, comp: 0.46, out: 0.94, ceil: 0.9, device: 0.58, line: 0.1, duplex: 0.04, rattle: 0.46, bits: 16, rate: 48000, rateR: 28000 }
           : mode === "alarm"
-            ? { hp: 250, hpR: 360, lp: 7600, lpR: 3400, hump: 1.0, humpR: 3.0, mid: 1600, midR: 700, comp: 0.46, out: 1.05, ceil: 0.9 }
-            : { hp: 250, hpR: 320, lp: 4300, lpR: 1900, hump: 2.8, humpR: 5.4, mid: 1850, midR: 380, comp: 0.54, out: 0.95, ceil: 0.92 };
+            ? { hp: 230, hpR: 390, lp: 8200, lpR: 4300, hump: 1.4, humpR: 3.2, mid: 1740, midR: 620, comp: 0.48, out: 0.94, ceil: 0.9, device: 0.62, line: 0.16, duplex: 0.02, rattle: 0.28, bits: 15, rate: 46000, rateR: 30000 }
+            : { hp: 250, hpR: 330, lp: 3900, lpR: 1500, hump: 3.0, humpR: 5.0, mid: 1820, midR: 360, comp: 0.52, out: 0.94, ceil: 0.92, device: 0.52, line: 0.3, duplex: 0.02, rattle: 0.16, bits: 14, rate: 44000, rateR: 30000 };
 
   const hpHz = Math.round(base.hp + narrow * base.hpR);
   const lpHz = Math.round(base.lp - narrow * base.lpR);
@@ -1326,9 +1735,8 @@ function computeCommsMacroTargets(primary) {
   const midFreq = Math.round(base.mid + (0.55 - narrow) * base.midR);
 
   const comp = clamp01(base.comp + drv * 0.38);
-  const bitsBase = mode === "pa" ? 14 : 13;
-  const bits = Math.round(clamp01(1 - g) * (bitsBase - 4) + 4);
-  const rate = Math.round(46000 - g * 38000);
+  const bits = Math.round((1 - g) * (base.bits - 5) + 5);
+  const rate = Math.round(base.rate - g * base.rateR);
 
   const packetScale = mode === "cell" ? 0.72 : mode === "alarm" ? 0.35 : 0.25;
   const packet = clamp01(g * packetScale);
@@ -1337,6 +1745,11 @@ function computeCommsMacroTargets(primary) {
   const hum = clamp01(0.06 + n * (mode === "intercom" ? 0.55 : 0.4));
   const hiss = clamp01(0.08 + n * 0.55);
   const toneMix = clamp01((mode === "alarm" ? 0.45 : 0.22) + n * 0.15);
+
+  const transducer = clamp01(base.device * 0.5 + ch * 0.72);
+  const lineAge = clamp01(base.line + drv * 0.24 + n * 0.18);
+  const duplex = clamp01(base.duplex + g * (mode === "intercom" ? 0.35 : 0.18) + ch * (mode === "intercom" ? 0.12 : 0.03));
+  const speakerRattle = clamp01(base.rattle * (0.35 + ch * 0.9) + drv * (mode === "pa" || mode === "intercom" ? 0.28 : 0.12));
 
   const ceiling = clamp01(base.ceil);
   const outGain = Math.round((base.out + drv * 0.12) * 100) / 100;
@@ -1352,7 +1765,7 @@ function computeCommsMacroTargets(primary) {
   const echoFb = clamp01(0.12 + (mode === "pa" ? 0.35 : 0.22) * g);
   const echoTone = clamp01(mode === "intercom" ? 0.45 : 0.6 + n * 0.15);
 
-  return { hpHz, lpHz, midHumpDb, midFreq, comp, bits, rate, packet, packetMs, hum, hiss, toneMix, ceiling, outGain, echoMix, echoMs, echoFb, echoTone, verbMix, verbMs, verbDamp };
+  return { hpHz, lpHz, midHumpDb, midFreq, comp, bits, rate, packet, packetMs, hum, hiss, toneMix, transducer, lineAge, duplex, speakerRattle, distance, ceiling, outGain, echoMix, echoMs, echoFb, echoTone, verbMix, verbMs, verbDamp };
 }
 
 function computeConferenceMacroTargets(primary) {
@@ -1366,34 +1779,41 @@ function computeConferenceMacroTargets(primary) {
 
   const narrow = Math.pow(1 - bandwidth, 1.35);
   const c = Math.pow(codec, 1.25);
-  const d = Math.pow(dropouts, 1.3);
+  const d = Math.pow(dropouts, 1.5);
   const j = Math.pow(jitter, 1.2);
+  const n = Math.pow(noise, 1.15);
 
   const base =
     mode === "cell"
-      ? { hp: 260, hpR: 380, lp: 3600, lpR: 1700, mid: 1900, midR: 520, hump: 2.2, out: 1.02, ceil: 0.92 }
+      ? { hp: 230, hpR: 310, lp: 3600, lpR: 1500, mid: 1900, midR: 520, hump: 2.2, out: 1.02, ceil: 0.92, frame: 20, burst: 0.68, suppress: 0.5, agc: 0.46 }
       : mode === "skype"
-        ? { hp: 220, hpR: 340, lp: 4200, lpR: 1600, mid: 1700, midR: 440, hump: 2.0, out: 0.98, ceil: 0.92 }
+        ? { hp: 170, hpR: 300, lp: 4800, lpR: 1800, mid: 1700, midR: 440, hump: 2.0, out: 0.98, ceil: 0.92, frame: 30, burst: 0.58, suppress: 0.34, agc: 0.32 }
         : mode === "zoom"
-          ? { hp: 180, hpR: 260, lp: 6200, lpR: 1900, mid: 2100, midR: 600, hump: 1.5, out: 0.98, ceil: 0.94 }
-          : { hp: 210, hpR: 320, lp: 5200, lpR: 1700, mid: 2000, midR: 560, hump: 1.8, out: 0.98, ceil: 0.93 };
+          ? { hp: 120, hpR: 260, lp: 7600, lpR: 2500, mid: 2100, midR: 600, hump: 1.4, out: 0.98, ceil: 0.94, frame: 10, burst: 0.48, suppress: 0.62, agc: 0.58 }
+          : { hp: 100, hpR: 280, lp: 7200, lpR: 2300, mid: 2000, midR: 560, hump: 1.6, out: 0.98, ceil: 0.93, frame: 20, burst: 0.56, suppress: 0.43, agc: 0.36 };
 
   const hpHz = Math.round(base.hp + narrow * base.hpR);
   const lpHz = Math.round(base.lp - narrow * base.lpR);
   const midFreq = Math.round(base.mid + (0.45 - narrow) * base.midR);
   const midHumpDb = Math.round((base.hump + narrow * 2.8) * 20) / 20;
 
-  const concealMode = d > 0.62 ? "repeat" : d > 0.22 ? "hold" : "interp";
-  const packetLoss = clamp01(0.02 + d * (mode === "cell" ? 0.75 : 0.55));
-  const packetMs = Math.round(12 + d * (mode === "zoom" ? 70 : 95));
-  const repeatMs = Math.round(18 + d * 120);
+  const concealMode = d > 0.68 ? "repeat" : d > 0.28 ? "hold" : "interp";
+  const packetLoss = clamp01(0.002 + d * (mode === "cell" ? 0.36 : 0.28));
+  const packetMs = Math.round(base.frame + d * 12);
+  const repeatMs = Math.round(22 + d * 82);
 
-  const jitterMs = Math.round((0.02 + j * 0.55) * 100) / 100;
-  const jitterRate = Math.round(18 + j * 80);
+  const jitterMs = Math.round((0.04 + j * 6.4) * 100) / 100;
+  const jitterRate = Math.round(5 + j * 36);
 
-  const bits = Math.round(14 - c * 8);
-  const rate = Math.round(46000 - c * (mode === "cell" ? 38000 : 32000));
-  const gate = clamp01(0.05 + (mode === "zoom" ? 0.12 : 0.08) + c * 0.25 + d * 0.2);
+  const bits = Math.round(15 - c * 7);
+  const rate = Math.round(48000 - c * (mode === "cell" ? 39000 : mode === "skype" ? 36500 : 33500));
+  const gate = clamp01(0.035 + base.suppress * 0.08 + c * 0.13 + d * 0.1);
+  const burstiness = clamp01(base.burst + d * 0.28);
+  const suppression = clamp01(base.suppress + c * 0.22 + d * 0.08);
+  const agc = clamp01(base.agc + c * 0.12);
+  const bufferSlip = clamp01(0.008 + j * 0.42 + d * 0.08);
+  const bandwidthSwitch = clamp01(0.015 + c * 0.18 + j * 0.2);
+  const comfortNoise = clamp01(0.06 + n * 0.62);
 
   const ceiling = clamp01(base.ceil - c * 0.05);
   const outGain = Math.round((base.out + c * 0.12) * 100) / 100;
@@ -1412,6 +1832,12 @@ function computeConferenceMacroTargets(primary) {
     gate,
     bits,
     rate,
+    burstiness,
+    suppression,
+    agc,
+    bufferSlip,
+    bandwidthSwitch,
+    comfortNoise,
     ceiling,
     outGain,
   };
@@ -1428,26 +1854,29 @@ function computeCdMacroTargets(primary) {
   const t = Math.pow(tracking, 1.35);
   const j = Math.pow(jitter, 1.25);
 
-  const errorRate = clamp01(0.02 + c * 0.6 + t * 0.25);
-  const burstMs = Math.round(8 + (c * 60 + t * 120) * (0.35 + 0.65 * d));
-  const repeatMs = Math.round(18 + t * 120);
+  const errorRate = clamp01(0.006 + c * 0.18 + d * 0.62);
+  const burstMs = Math.round(4 + c * 38 + d * 112 + t * 68);
+  const repeatMs = Math.round(18 + t * 92 + d * 28);
+  const scratchRate = clamp01(0.008 + d * 0.96);
+  const scratchAmt = clamp01(0.04 + d * 0.9);
 
-  const scratchRate = clamp01(0.03 + d * 0.85);
-  const scratchAmt = clamp01(0.08 + d * 0.75);
+  const correction = clamp01(0.995 - c * 0.42 - d * 0.66 - t * 0.16);
+  const interpolationMs = Math.round((3 + c * 9) * 10) / 10;
+  const rotationHz = Math.round((5.2 + j * 0.8) * 10) / 10;
+  const trackingRate = clamp01(0.004 + t * 0.92);
+  const trackingMs = Math.round(45 + t * 820);
+  const servoHunt = clamp01(0.03 + t * 0.78 + d * 0.24);
 
-  const jitterMs = Math.round((0.02 + j * 0.75) * 100) / 100;
-  const jitterRate = Math.round(18 + j * 85);
+  const jitterMs = Math.round((0.001 + j * 0.32) * 1000) / 1000;
+  const jitterRate = Math.round(24 + j * 90);
+  const hfLoss = clamp01(0.002 + c * 0.045 + d * 0.12);
+  const servoNoise = clamp01(0.015 + t * 0.18 + d * 0.12);
 
-  const hfLoss = clamp01(0.02 + c * 0.12 + d * 0.22);
-  const servoNoise = clamp01(0.03 + t * 0.25 + d * 0.1);
+  const mode = t > 0.62 ? "repeat" : correction < 0.36 ? "hold" : "interp";
+  const ceiling = Math.round((0.97 - d * 0.11) * 1000) / 1000;
+  const outGain = Math.round((0.98 - d * 0.06) * 100) / 100;
 
-  const mode = errorRate > 0.52 ? "repeat" : errorRate > 0.25 ? "hold" : "interp";
-  const ceiling = 0.96 - d * 0.08;
-  const outGain = Math.round((0.98 + d * 0.12) * 100) / 100;
-
-  const carComp = clamp01(t * 0.65 + d * 0.2);
-
-  return { mode, errorRate, burstMs, repeatMs, scratchRate, scratchAmt, jitterMs, jitterRate, hfLoss, servoNoise, ceiling, outGain, carComp };
+  return { mode, errorRate, burstMs, repeatMs, scratchRate, scratchAmt, correction, interpolationMs, rotationHz, trackingRate, trackingMs, servoHunt, jitterMs, jitterRate, hfLoss, servoNoise, ceiling, outGain };
 }
 
 function computeCamcorderMacroTargets(primary) {
@@ -1468,11 +1897,13 @@ function computeCamcorderMacroTargets(primary) {
 
   const agcAmt = clamp01(0.45 + drv * 0.45 + cov * 0.15);
   const agcSpeed = clamp01(0.25 + drv * 0.5);
+  const agcPump = clamp01(0.12 + drv * 0.72 + cov * 0.12);
   const clip = clamp01(0.08 + drv * 0.75);
 
   const crush = clamp01(0.05 + cor * 0.45);
   const bits = Math.round(14 - cor * 6);
   const rate = Math.round(42000 - cor * 26000);
+  const flutter = clamp01(0.035 + cor * 0.62 + mov * 0.16);
 
   const drop = clamp01(0.05 + cor * 0.8);
   const dropMs = Math.round(16 + cor * 120);
@@ -1483,16 +1914,10 @@ function computeCamcorderMacroTargets(primary) {
   const handling = clamp01(0.06 + mov * 0.7);
   const rub = clamp01(0.04 + mov * 0.7);
   const hiss = clamp01(0.06 + cov * 0.18 + cor * 0.08);
+  const motorBleed = clamp01(0.025 + mov * 0.24 + cor * 0.12);
 
   const ceiling = 0.94 - drv * 0.1;
   const outGain = Math.round((0.98 + drv * 0.18) * 100) / 100;
-  const wind = mov > 0.55 && cov > 0.45;
-
-  const windLevel = wind ? 1.05 : 0.95;
-  const camLevel = 0.35 + cov * 0.12;
-  const windBedLevel = clamp01(0.65 + mov * 0.25);
-  const windHitLevel = clamp01(0.45 + mov * 0.35);
-  const windHitRate = clamp01(0.18 + mov * 0.62);
 
   return {
     hpHz,
@@ -1501,10 +1926,12 @@ function computeCamcorderMacroTargets(primary) {
     boxHz,
     agcAmt,
     agcSpeed,
+    agcPump,
     clip,
     crush,
     bits,
     rate,
+    flutter,
     drop,
     dropMs,
     dropMode,
@@ -1513,14 +1940,9 @@ function computeCamcorderMacroTargets(primary) {
     handling,
     rub,
     hiss,
+    motorBleed,
     ceiling,
     outGain,
-    wind,
-    windLevel,
-    camLevel,
-    windBedLevel,
-    windHitLevel,
-    windHitRate,
   };
 }
 
@@ -1538,13 +1960,16 @@ function settingsForModule(m) {
   if (m.type === "occlusion") {
     const materialRaw = str("material", "drywall");
     const material =
-      materialRaw === "brick" || materialRaw === "wood" || materialRaw === "curtain" || materialRaw === "door" || materialRaw === "glass"
+      materialRaw === "brick" || materialRaw === "wood" || materialRaw === "curtain" || materialRaw === "door" || materialRaw === "glass" || materialRaw === "metal" || materialRaw === "concrete"
         ? materialRaw
         : "drywall";
+    const constructionRaw = str("construction", "stud");
+    const construction = ["solid", "stud", "hollow", "panel", "loose"].includes(constructionRaw) ? constructionRaw : "stud";
     return {
       distance: clamp01(num("distance", 0.35)),
       wall: clamp01(num("wall", 0.45)),
       material,
+      construction,
       sourceRoom: clamp01(num("sourceRoom", 0.35)),
       listenerRoom: clamp01(num("listenerRoom", 0.45)),
 
@@ -1557,7 +1982,13 @@ function settingsForModule(m) {
       bumpDb: num("bumpDb", 1.2),
       bumpQ: num("bumpQ", 0.95),
 
+      resonance: clamp01(num("resonance", 0.48)),
+      cavity: clamp01(num("cavity", 0.52)),
+      rattle: clamp01(num("rattle", 0.08)),
+      looseness: clamp01(num("looseness", 0.34)),
+      smear: clamp01(num("smear", 0.38)),
       leak: clamp01(num("leak", 0.08)),
+      leakTone: clamp01(num("leakTone", 0.52)),
       roomMix: clamp01(num("roomMix", 0.22)),
       predelayMs: num("predelayMs", 12),
       roomSize: clamp01(num("roomSize", 0.5)),
@@ -1629,9 +2060,9 @@ function settingsForModule(m) {
     return {
       ...t,
       wow: clamp01(num("wow", 0.25)),
-      sfxEnable: bool("sfxEnable", false),
-      sfxSource: str("sfxSource", "") || "",
-      sfxLevel: clamp01(num("sfxLevel", 0.22)),
+      sfxEnable: bool("sfxEnable", true),
+      sfxSource: str("sfxSource", "cassette") || "cassette",
+      sfxLevel: clamp01(num("sfxLevel", 0.46)),
       sfxMode: str("sfxMode", "bed") || "bed",
 
       hpHz: num("hpHz", t.hpHz),
@@ -1677,9 +2108,9 @@ function settingsForModule(m) {
       noiseHiss: clamp01(num("noiseHiss", t.noiseHiss)),
       noiseCrackle: clamp01(num("noiseCrackle", t.noiseCrackle)),
 
-      bedEnable: bool("bedEnable", false),
-      bedLevel: clamp01(num("bedLevel", 0.22)),
-      bedSource: str("bedSource", "") || "",
+      bedEnable: bool("bedEnable", true),
+      bedLevel: clamp01(num("bedLevel", 0.5)),
+      bedSource: str("bedSource", "crt.mp3") || "crt.mp3",
 
       outGain: num("outGain", 1),
     };
@@ -1699,6 +2130,7 @@ function settingsForModule(m) {
 
       preEmph: clamp01(num("preEmph", t.preEmph)),
       mulaw: clamp01(num("mulaw", t.mulaw)),
+      codecMode: str("codecMode", "adpcm") || "adpcm",
       blockMs: num("blockMs", t.blockMs),
 
       sat: clamp01(num("sat", t.sat)),
@@ -1706,14 +2138,15 @@ function settingsForModule(m) {
       noiseTrack: clamp01(num("noiseTrack", 0.6)),
       dcDrift: clamp01(num("dcDrift", 0.15)),
       speaker: clamp01(num("speaker", 0.45)),
+      speakerModel: str("speakerModel", "handheld") || "handheld",
 
       hum: clamp01(num("hum", t.hum)),
       whine: clamp01(num("whine", t.whine)),
       outGain: num("outGain", t.outGain),
 
       microDelayMs: num("microDelayMs", 8),
-      microDelayMix: clamp01(num("microDelayMix", 0.18)),
-      verb: clamp01(num("verb", 0.22)),
+      microDelayMix: clamp01(num("microDelayMix", 0.06)),
+      verb: clamp01(num("verb", 0.08)),
       verbMs: num("verbMs", 45),
 
       wet: clamp01(num("wet", 1)),
@@ -1721,10 +2154,12 @@ function settingsForModule(m) {
       limiter: clamp01(num("limiter", 0.35)),
 
       bleepsEnable: bool("bleepsEnable", false),
-      bleepsMix: clamp01(num("bleepsMix", 0.18)),
+      bleepsMix: clamp01(num("bleepsMix", 0.12)),
       bleepsRate: num("bleepsRate", 3),
-      bleepsWave: str("bleepsWave", "random") || "random",
-      bleepsVibrato: clamp01(num("bleepsVibrato", 0.35)),
+      bleepsWave: str("bleepsWave", "pulse") || "pulse",
+      bleepsTrigger: str("bleepsTrigger", "transient") || "transient",
+      bleepsScale: str("bleepsScale", "minor") || "minor",
+      bleepsVibrato: clamp01(num("bleepsVibrato", 0.12)),
       bleepsPitch: clamp01(num("bleepsPitch", 0.55)),
     };
   }
@@ -1738,6 +2173,8 @@ function settingsForModule(m) {
       drive: clamp01(num("drive", 0.35)),
       glitch: clamp01(num("glitch", 0.2)),
       noise: clamp01(num("noise", 0.18)),
+      character: clamp01(num("character", 0.45)),
+      distance: clamp01(num("distance", 0.15)),
       alarmTone: bool("alarmTone", false),
       hpHz: num("hpHz", t.hpHz),
       lpHz: num("lpHz", t.lpHz),
@@ -1751,6 +2188,10 @@ function settingsForModule(m) {
       hum: clamp01(num("hum", t.hum)),
       hiss: clamp01(num("hiss", t.hiss)),
       toneMix: clamp01(num("toneMix", t.toneMix)),
+      transducer: clamp01(num("transducer", t.transducer)),
+      lineAge: clamp01(num("lineAge", t.lineAge)),
+      duplex: clamp01(num("duplex", t.duplex)),
+      speakerRattle: clamp01(num("speakerRattle", t.speakerRattle)),
       ceiling: num("ceiling", t.ceiling),
       outGain: num("outGain", t.outGain),
       echoMix: clamp01(num("echoMix", t.echoMix)),
@@ -1789,6 +2230,12 @@ function settingsForModule(m) {
       gate: clamp01(num("gate", t.gate)),
       bits: num("bits", t.bits),
       rate: num("rate", t.rate),
+      burstiness: clamp01(num("burstiness", t.burstiness)),
+      suppression: clamp01(num("suppression", t.suppression)),
+      agc: clamp01(num("agc", t.agc)),
+      bufferSlip: clamp01(num("bufferSlip", t.bufferSlip)),
+      bandwidthSwitch: clamp01(num("bandwidthSwitch", t.bandwidthSwitch)),
+      comfortNoise: clamp01(num("comfortNoise", t.comfortNoise)),
       ceiling: num("ceiling", t.ceiling),
       outGain: num("outGain", t.outGain),
     };
@@ -1798,14 +2245,21 @@ function settingsForModule(m) {
     const t = computeCdMacroTargets(p);
     return {
       ...t,
-      softClip: bool("softClip", true),
+      softClip: bool("softClip", false),
       carComp: clamp01(num("carComp", t.carComp ?? 0)),
       mode: str("mode", t.mode) || t.mode,
+      damageShape: str("damageShape", "radial") || "radial",
       errorRate: clamp01(num("errorRate", t.errorRate)),
       burstMs: num("burstMs", t.burstMs),
       repeatMs: num("repeatMs", t.repeatMs),
       scratchRate: clamp01(num("scratchRate", t.scratchRate)),
       scratchAmt: clamp01(num("scratchAmt", t.scratchAmt)),
+      correction: clamp01(num("correction", t.correction)),
+      interpolationMs: num("interpolationMs", t.interpolationMs),
+      rotationHz: num("rotationHz", t.rotationHz),
+      trackingRate: clamp01(num("trackingRate", t.trackingRate)),
+      trackingMs: num("trackingMs", t.trackingMs),
+      servoHunt: clamp01(num("servoHunt", t.servoHunt)),
       jitterMs: num("jitterMs", t.jitterMs),
       jitterRate: num("jitterRate", t.jitterRate),
       hfLoss: clamp01(num("hfLoss", t.hfLoss)),
@@ -1832,16 +2286,20 @@ function settingsForModule(m) {
       camBedSource: str("camBedSource", "") || "",
       windBedSource: str("windBedSource", "") || "",
       windHitSource: str("windHitSource", "") || "",
+      format: str("format", "minidv") || "minidv",
+      micModel: str("micModel", "electret") || "electret",
       hpHz: num("hpHz", t.hpHz),
       lpHz: num("lpHz", t.lpHz),
       boxDb: num("boxDb", t.boxDb),
       boxHz: num("boxHz", t.boxHz),
       agcAmt: clamp01(num("agcAmt", t.agcAmt)),
       agcSpeed: clamp01(num("agcSpeed", t.agcSpeed)),
+      agcPump: clamp01(num("agcPump", t.agcPump)),
       clip: clamp01(num("clip", t.clip)),
       crush: clamp01(num("crush", t.crush)),
       bits: num("bits", t.bits),
       rate: num("rate", t.rate),
+      flutter: clamp01(num("flutter", t.flutter)),
       drop: clamp01(num("drop", t.drop)),
       dropMs: num("dropMs", t.dropMs),
       dropMode: str("dropMode", t.dropMode) || t.dropMode,
@@ -1850,6 +2308,7 @@ function settingsForModule(m) {
       handling: clamp01(num("handling", t.handling)),
       rub: clamp01(num("rub", t.rub)),
       hiss: clamp01(num("hiss", t.hiss)),
+      motorBleed: clamp01(num("motorBleed", t.motorBleed)),
       ceiling: num("ceiling", t.ceiling),
       outGain: num("outGain", t.outGain),
     };
@@ -1858,7 +2317,116 @@ function settingsForModule(m) {
   return {};
 }
 
-function makeModuleEl(m, index) {
+const SURFACE_CONTROLS = {
+  occlusion: [{ key: "distance", label: "Distance" }, { key: "wall", label: "Wall" }],
+  transmission: [{ key: "bandwidth", label: "Bandwidth" }, { key: "drive", label: "Drive" }, { key: "badConnection", label: "Damage" }],
+  comms: [{ key: "character", label: "Device" }, { key: "distance", label: "Distance" }, { key: "bandwidth", label: "Fidelity" }],
+  conference: [{ key: "bandwidth", label: "Bandwidth" }, { key: "codec", label: "Codec" }, { key: "dropouts", label: "Dropouts" }],
+  tape: [{ key: "quality", label: "Quality" }, { key: "age", label: "Age" }, { key: "wow", label: "Wow" }],
+  television: [{ key: "vibe", label: "Vibe" }, { key: "speaker", label: "Speaker" }, { key: "static", label: "Static" }],
+  cartridge: [{ key: "quality", label: "Quality" }, { key: "codec", label: "Codec" }, { key: "grit", label: "Grit" }],
+  cd: [{ key: "clarity", label: "Clarity" }, { key: "damage", label: "Damage" }, { key: "tracking", label: "Tracking" }],
+  camcorder: [{ key: "coverage", label: "Coverage" }, { key: "movement", label: "Movement" }, { key: "corruption", label: "Corruption" }],
+};
+
+const MODULE_MACRO_KEYS = {
+  occlusion: ["distance", "wall", "material", "construction", "sourceRoom", "listenerRoom"],
+  transmission: ["bandwidth", "drive", "badConnection", "noiseProfile", "pinkNoise"],
+  comms: ["mode", "bandwidth", "drive", "glitch", "noise", "character", "distance"],
+  conference: ["mode", "bandwidth", "codec", "dropouts", "jitter", "robot", "noise"],
+  tape: ["quality", "age", "wow", "glitch"],
+  television: ["vibe", "speaker", "agc", "static", "hum", "whine"],
+  cartridge: ["quality", "codec", "grit", "noise"],
+  cd: ["clarity", "damage", "tracking", "jitter"],
+  camcorder: ["coverage", "movement", "corruption", "agc"],
+};
+
+function computeTransmissionMacroTargets(primary) {
+  const bandwidth = clamp01(primary.bandwidth ?? 0.45);
+  const drive = clamp01(primary.drive ?? 0.35);
+  const badConnection = clamp01(primary.badConnection ?? 0.25);
+  const noiseProfile = clamp01(primary.noiseProfile ?? 0.2);
+  const pinkNoise = Boolean(primary.pinkNoise ?? false);
+  const mapped = mapBandwidth(bandwidth);
+  return {
+    hpHz: Math.round(mapped.hp),
+    lpHz: Math.round(mapped.lp),
+    midGainDb: mapped.midGainDb,
+    midQ: mapped.midQ,
+    midFreq: mapped.midFreq,
+    boxDipDb: (1 - bandwidth) * 2.2,
+    asym: drive * 0.6,
+    comp: 0.18 + drive * 0.65,
+    preDrive: Math.pow(drive, 0.85) * 0.75,
+    postDrive: drive,
+    wowDepth: badConnection,
+    dropRate: badConnection,
+    dropDepth: badConnection,
+    crackle: badConnection,
+    lfoRate: 0.45 + badConnection * 1.6,
+    hiss: noiseProfile * 0.95,
+    noiseColor: pinkNoise ? 1 : Math.max(0, (noiseProfile - 0.55) * 2),
+  };
+}
+
+function computeModuleMacroTargets(type, params) {
+  if (type === "occlusion") return computeOcclusionMacroTargets(params);
+  if (type === "transmission") return computeTransmissionMacroTargets(params);
+  if (type === "comms") return computeCommsMacroTargets(params);
+  if (type === "conference") return computeConferenceMacroTargets(params);
+  if (type === "tape") return computeTapeMacroTargets(params);
+  if (type === "television") return computeTelevisionMacroTargets(params);
+  if (type === "cartridge") return computeCartridgeMacroTargets(params);
+  if (type === "cd") return computeCdMacroTargets(params);
+  if (type === "camcorder") return computeCamcorderMacroTargets(params);
+  return {};
+}
+
+function mergeModulePresetParams(type, currentParams, presetParams) {
+  const current = currentParams && typeof currentParams === "object" ? currentParams : {};
+  const incoming = presetParams && typeof presetParams === "object" ? presetParams : {};
+  const merged = { ...current, ...incoming };
+  const macroKeys = MODULE_MACRO_KEYS[type] || [];
+  if (!macroKeys.some((key) => Object.prototype.hasOwnProperty.call(incoming, key))) return merged;
+  // Rebuild stale dependent values whenever a preset supplies macros. Advanced
+  // values deliberately included by that preset remain authoritative.
+  return { ...merged, ...computeModuleMacroTargets(type, merged), ...incoming };
+}
+
+function applySurfaceParam(module, key, value) {
+  module.params[key] = clamp01(value);
+  const p = module.params;
+  if (module.type === "occlusion") Object.assign(p, computeOcclusionMacroTargets(p));
+  if (module.type === "comms") Object.assign(p, computeCommsMacroTargets(p));
+  if (module.type === "conference") {
+    const selectedConcealMode = p.concealMode;
+    Object.assign(p, computeConferenceMacroTargets(p));
+    // Concealment is a deliberate editing choice. Once selected in Advanced,
+    // surface macros tune severity without silently changing the PLC style.
+    if (selectedConcealMode != null) p.concealMode = selectedConcealMode;
+  }
+  if (module.type === "tape") Object.assign(p, computeTapeMacroTargets(p));
+  if (module.type === "television") Object.assign(p, computeTelevisionMacroTargets(p));
+  if (module.type === "cartridge") Object.assign(p, computeCartridgeMacroTargets(p));
+  if (module.type === "cd") {
+    const selectedMode = p.mode;
+    Object.assign(p, computeCdMacroTargets(p));
+    // Concealment mode is an explicit creative choice. Surface macros may tune
+    // damage severity, but must never silently switch Repeat/Hold/Mute/Interp.
+    if (selectedMode != null) p.mode = selectedMode;
+  }
+  if (module.type === "camcorder") Object.assign(p, computeCamcorderMacroTargets(p));
+  if (module.type === "transmission") {
+    if (key === "bandwidth") {
+      const mapped = mapBandwidth(p.bandwidth);
+      Object.assign(p, { hpHz: Math.round(mapped.hp), lpHz: Math.round(mapped.lp), midGainDb: mapped.midGainDb, midQ: mapped.midQ, midFreq: mapped.midFreq, boxDipDb: (1 - p.bandwidth) * 2.2 });
+    }
+    if (key === "drive") Object.assign(p, { asym: p.drive * 0.6, comp: 0.18 + p.drive * 0.65, preDrive: Math.pow(p.drive, 0.85) * 0.75, postDrive: p.drive });
+    if (key === "badConnection") Object.assign(p, { wowDepth: p.badConnection, dropRate: p.badConnection, dropDepth: p.badConnection, crackle: p.badConnection, lfoRate: 0.45 + p.badConnection * 1.6 });
+  }
+}
+
+function makeModuleEl(m, index, { showWet = true, omitSurfaceParams = false } = {}) {
   const root = document.createElement("div");
   root.className = "module";
   root.dataset.type = m.type || "";
@@ -1888,11 +2456,12 @@ function makeModuleEl(m, index) {
 
   const syncDerivedFromMacros = (changedKey) => {
     if (m.type === "occlusion") {
-      if (!["distance", "wall", "material", "sourceRoom", "listenerRoom"].includes(changedKey)) return false;
+      if (!["distance", "wall", "material", "construction", "sourceRoom", "listenerRoom"].includes(changedKey)) return false;
       const t = computeOcclusionMacroTargets({
         distance: m.params?.distance ?? computed.distance ?? 0.35,
         wall: m.params?.wall ?? computed.wall ?? 0.45,
         material: m.params?.material ?? computed.material ?? "drywall",
+        construction: m.params?.construction ?? computed.construction ?? "stud",
         sourceRoom: m.params?.sourceRoom ?? computed.sourceRoom ?? 0.35,
         listenerRoom: m.params?.listenerRoom ?? computed.listenerRoom ?? 0.45,
       });
@@ -1946,20 +2515,25 @@ function makeModuleEl(m, index) {
     }
 
     if (m.type === "comms") {
-      if (!["mode", "bandwidth", "drive", "glitch", "noise"].includes(changedKey)) return false;
+      if (!["mode", "bandwidth", "drive", "glitch", "noise", "character", "distance"].includes(changedKey)) return false;
       const t = computeCommsMacroTargets({
         mode: m.params?.mode ?? computed.mode ?? "landline",
         bandwidth: m.params?.bandwidth ?? computed.bandwidth ?? 0.4,
         drive: m.params?.drive ?? computed.drive ?? 0.35,
         glitch: m.params?.glitch ?? computed.glitch ?? 0.2,
         noise: m.params?.noise ?? computed.noise ?? 0.18,
+        character: m.params?.character ?? computed.character ?? 0.45,
+        distance: m.params?.distance ?? computed.distance ?? 0.15,
       });
-      for (const [k, v] of Object.entries(t)) setParamAndUI(k, v);
+      for (const [k, v] of Object.entries(t)) {
+        if (k !== "mode") setParamAndUI(k, v);
+      }
       return true;
     }
 
     if (m.type === "conference") {
       if (!["mode", "bandwidth", "codec", "dropouts", "jitter", "robot", "noise"].includes(changedKey)) return false;
+      const selectedConcealMode = m.params?.concealMode;
       const t = computeConferenceMacroTargets({
         mode: m.params?.mode ?? computed.mode ?? "discord",
         bandwidth: m.params?.bandwidth ?? computed.bandwidth ?? 0.45,
@@ -1969,7 +2543,10 @@ function makeModuleEl(m, index) {
         robot: m.params?.robot ?? computed.robot ?? 0.12,
         noise: m.params?.noise ?? computed.noise ?? 0.12,
       });
-      for (const [k, v] of Object.entries(t)) setParamAndUI(k, v);
+      for (const [k, v] of Object.entries(t)) {
+        if (k !== "concealMode") setParamAndUI(k, v);
+      }
+      if (selectedConcealMode != null) setParamAndUI("concealMode", selectedConcealMode);
       return true;
     }
 
@@ -2004,7 +2581,7 @@ function makeModuleEl(m, index) {
     }
 
     if (m.type === "cartridge") {
-      if (!["quality", "codec", "grit"].includes(changedKey)) return false;
+      if (!["quality", "codec", "grit", "noise"].includes(changedKey)) return false;
       const t = computeCartridgeMacroTargets({
         quality: m.params?.quality ?? computed.quality ?? 0.55,
         codec: m.params?.codec ?? computed.codec ?? 0.25,
@@ -2023,7 +2600,9 @@ function makeModuleEl(m, index) {
         tracking: m.params?.tracking ?? computed.tracking ?? 0.22,
         jitter: m.params?.jitter ?? computed.jitter ?? 0.18,
       });
-      for (const [k, v] of Object.entries(t)) setParamAndUI(k, v);
+      for (const [k, v] of Object.entries(t)) {
+        if (k !== "mode") setParamAndUI(k, v);
+      }
       return true;
     }
 
@@ -2061,24 +2640,20 @@ function makeModuleEl(m, index) {
   const left = document.createElement("button");
   left.className = "miniBtn";
   left.textContent = "←";
-  left.disabled = index === 0;
+  const rack = rackModules();
+  const rackIndex = rack.findIndex((module) => module.instanceId === m.instanceId);
+  left.disabled = rackIndex <= 0;
   left.addEventListener("click", () => {
-    if (index <= 0) return;
-    [modules[index - 1], modules[index]] = [modules[index], modules[index - 1]];
-    graphStale = true;
-    renderModules();
-    stopPlayback();
+    if (rackIndex <= 0) return;
+    moveRackModule(m.instanceId, rackIndex - 1);
   });
   const right = document.createElement("button");
   right.className = "miniBtn";
   right.textContent = "→";
-  right.disabled = index === modules.length - 1;
+  right.disabled = rackIndex < 0 || rackIndex >= rack.length - 1;
   right.addEventListener("click", () => {
-    if (index >= modules.length - 1) return;
-    [modules[index + 1], modules[index]] = [modules[index], modules[index + 1]];
-    graphStale = true;
-    renderModules();
-    stopPlayback();
+    if (rackIndex < 0 || rackIndex >= rack.length - 1) return;
+    moveRackModule(m.instanceId, rackIndex + 1);
   });
   btns.appendChild(left);
   btns.appendChild(right);
@@ -2096,10 +2671,10 @@ function makeModuleEl(m, index) {
   enInput.checked = Boolean(m.enabled);
   enInput.addEventListener("change", async () => {
     m.enabled = Boolean(enInput.checked);
-    graphStale = true;
-    await teardownRealtime();
+    applyRealtimeSettings();
+    if (m.type === "tape") await syncTapeSfxRuntime();
+    if (m.type === "television") await syncTelevisionBedRuntime();
     renderModules();
-    setState(audioBuffer ? "Ready" : "Idle");
   });
   const enSpan = document.createElement("span");
   enSpan.textContent = "Enable";
@@ -2136,7 +2711,7 @@ function makeModuleEl(m, index) {
   wetWrap.appendChild(wet);
 
   row.appendChild(en);
-  row.appendChild(wetWrap);
+  if (showWet) row.appendChild(wetWrap);
   root.appendChild(row);
 
   const grid = document.createElement("div");
@@ -2243,9 +2818,16 @@ function makeModuleEl(m, index) {
     container.appendChild(c);
   };
 
-  const addSlider = (key, label, opts) => addSliderTo(grid, key, label, opts);
-  const addToggle = (key, label, opts) => addToggleTo(grid, key, label, opts);
-  const addSelect = (key, label, options, opts) => addSelectTo(grid, key, label, options, opts);
+  const isSurfaceParam = (key) => (SURFACE_CONTROLS[m.type] || []).some((spec) => spec.key === key);
+  const addSlider = (key, label, opts) => {
+    if (!omitSurfaceParams || !isSurfaceParam(key)) addSliderTo(grid, key, label, opts);
+  };
+  const addToggle = (key, label, opts) => {
+    if (!omitSurfaceParams || !isSurfaceParam(key)) addToggleTo(grid, key, label, opts);
+  };
+  const addSelect = (key, label, options, opts) => {
+    if (!omitSurfaceParams || !isSurfaceParam(key)) addSelectTo(grid, key, label, options, opts);
+  };
 
   const enginePresets = ENGINE_PRESETS[m.type] || null;
   const presetKeys = enginePresets ? Object.keys(enginePresets) : [];
@@ -2380,15 +2962,30 @@ function makeModuleEl(m, index) {
       { value: "curtain", text: "Curtain" },
       { value: "door", text: "Door" },
       { value: "glass", text: "Glass" },
+      { value: "metal", text: "Sheet Metal" },
+      { value: "concrete", text: "Concrete" },
+    ]);
+    addSelect("construction", "Construction", [
+      { value: "solid", text: "Solid / Masonry" },
+      { value: "stud", text: "Stud Cavity" },
+      { value: "hollow", text: "Hollow Body" },
+      { value: "panel", text: "Mounted Panel" },
+      { value: "loose", text: "Loose / Rattling" },
     ]);
     addSlider("sourceRoom", "Source Space");
     addSlider("listenerRoom", "Listener Space");
 
+    addSliderTo(adv, "resonance", "Body Resonance");
+    addSliderTo(adv, "cavity", "Cavity Depth");
+    addSliderTo(adv, "rattle", "Physical Rattle");
+    addSliderTo(adv, "looseness", "Loose Contact");
+    addSliderTo(adv, "smear", "Transmission Smear");
     addSliderTo(adv, "hpHz", "High-pass", { min: 10, max: 600, step: 1, fmt: (x) => `${Math.round(x)} Hz` });
     addSliderTo(adv, "lpHz", "Low-pass", { min: 800, max: 18000, step: 10, fmt: (x) => `${Math.round(x)} Hz` });
-    addSliderTo(adv, "leak", "Leak");
-    addSliderTo(adv, "roomMix", "Room Mix");
-    addSliderTo(adv, "predelayMs", "Pre-delay", { min: 0, max: 80, step: 1, fmt: (x) => `${Math.round(x)} ms` });
+    addSliderTo(adv, "leak", "Edge / Gap Leak");
+    addSliderTo(adv, "leakTone", "Leak Tone");
+    addSliderTo(adv, "roomMix", "Early Reflections");
+    addSliderTo(adv, "predelayMs", "Listener Offset", { min: 0, max: 28, step: 1, fmt: (x) => `${Math.round(x)} ms` });
     addSliderTo(adv, "outGain", "Output", { min: 0, max: 1.5, step: 0.01, fmt: (x) => `${x.toFixed(2)}x` });
   } else if (m.type === "transmission") {
     addSlider("bandwidth", "AM Bandwidth");
@@ -2467,10 +3064,12 @@ function makeModuleEl(m, index) {
       { value: "pa", text: "PA" },
       { value: "alarm", text: "Alarm" },
     ]);
-    addSlider("bandwidth", "Bandwidth");
-    addSlider("drive", "AGC / Drive");
-    addSlider("glitch", "Digital Glitch");
-    addSlider("noise", "Noise / Hum");
+    addSlider("bandwidth", "Line Fidelity");
+    addSlider("drive", "Gain Riding / Drive");
+    addSlider("glitch", "Connection Faults");
+    addSlider("noise", "Line / System Noise");
+    addSlider("character", "Device Character");
+    addSlider("distance", "Listening Distance");
     addToggle("alarmTone", "Alarm Tone");
 
     addSliderTo(adv, "hpHz", "High-pass", { min: 80, max: 900, step: 1, fmt: (x) => `${Math.round(x)} Hz` });
@@ -2485,6 +3084,10 @@ function makeModuleEl(m, index) {
     addSliderTo(adv, "hum", "Hum Level");
     addSliderTo(adv, "hiss", "Hiss Level");
     addSliderTo(adv, "toneMix", "Tone Mix");
+    addSliderTo(adv, "transducer", "Transducer Color");
+    addSliderTo(adv, "lineAge", "Line / Electronics Age");
+    addSliderTo(adv, "duplex", "Duplex Clamp");
+    addSliderTo(adv, "speakerRattle", "Speaker / Housing Rattle");
     addSliderTo(adv, "ceiling", "Ceiling", { min: 0.2, max: 1, step: 0.001, fmt: pct01 });
     addSliderTo(adv, "outGain", "Output Gain", { min: 0, max: 1.5, step: 0.01, fmt: (x) => `${x.toFixed(2)}x` });
 
@@ -2515,19 +3118,25 @@ function makeModuleEl(m, index) {
     addSliderTo(adv, "midFreq", "Presence Freq", { min: 900, max: 4200, step: 10, fmt: (x) => `${Math.round(x)} Hz` });
 
     addSelectTo(adv, "concealMode", "Conceal Mode", [
-      { value: "hold", text: "Hold" },
+      { value: "hold", text: "Speech PLC" },
       { value: "mute", text: "Mute" },
-      { value: "interp", text: "Interpolate" },
-      { value: "repeat", text: "Repeat Frames" },
+      { value: "interp", text: "Decay / Interpolate" },
+      { value: "repeat", text: "Deep Frame Repeat" },
     ]);
     addSliderTo(adv, "packetLoss", "Packet Loss");
     addSliderTo(adv, "packetMs", "Packet Size", { min: 8, max: 180, step: 1, fmt: (x) => `${Math.round(x)} ms` });
     addSliderTo(adv, "repeatMs", "Repeat Depth", { min: 6, max: 240, step: 1, fmt: (x) => `${Math.round(x)} ms` });
-    addSliderTo(adv, "jitterMs", "Jitter Depth", { min: 0, max: 2, step: 0.01, fmt: (x) => `${Number(x).toFixed(2)} ms` });
-    addSliderTo(adv, "jitterRate", "Jitter Rate", { min: 6, max: 140, step: 1, fmt: (x) => `${Math.round(x)} Hz` });
-    addSliderTo(adv, "gate", "Noise Gate");
-    addSliderTo(adv, "bits", "Bit Depth", { min: 4, max: 16, step: 1, fmt: (x) => `${Math.round(x)}-bit` });
-    addSliderTo(adv, "rate", "Sample Rate", { min: 6000, max: 48000, step: 100, fmt: (x) => `${Math.round(x)} Hz` });
+    addSliderTo(adv, "jitterMs", "Buffer Wander", { min: 0, max: 20, step: 0.01, fmt: (x) => `${Number(x).toFixed(2)} ms` });
+    addSliderTo(adv, "jitterRate", "Jitter Activity", { min: 1, max: 80, step: 1, fmt: (x) => `${Math.round(x)} intensity` });
+    addSliderTo(adv, "burstiness", "Loss Burstiness");
+    addSliderTo(adv, "bufferSlip", "Buffer Slips");
+    addSliderTo(adv, "bandwidthSwitch", "Bandwidth Collapse");
+    addSliderTo(adv, "suppression", "Noise Suppression");
+    addSliderTo(adv, "gate", "Speech Gate");
+    addSliderTo(adv, "agc", "Call AGC");
+    addSliderTo(adv, "comfortNoise", "Comfort Noise");
+    addSliderTo(adv, "bits", "Codec Resolution", { min: 4, max: 16, step: 1, fmt: (x) => `${Math.round(x)}-bit equiv.` });
+    addSliderTo(adv, "rate", "Codec Bandwidth", { min: 6000, max: 48000, step: 100, fmt: (x) => `${Math.round(x)} Hz` });
     addSliderTo(adv, "ceiling", "Ceiling", { min: 0.2, max: 1, step: 0.001, fmt: pct01 });
     addSliderTo(adv, "outGain", "Output Gain", { min: 0, max: 1.5, step: 0.01, fmt: (x) => `${x.toFixed(2)}x` });
   } else if (m.type === "tape") {
@@ -2535,11 +3144,12 @@ function makeModuleEl(m, index) {
     addSlider("age", "Age / Drive");
     addSlider("wow", "Wow/Flutter");
     addSlider("glitch", "Dropouts");
-    addToggle("sfxEnable", "Tape Noise SFX");
+    addToggle("sfxEnable", "Tape Noise SFX", { onChange: async () => syncTapeSfxRuntime() });
     addSelect(
       "sfxSource",
       "SFX Source",
       [{ value: "", text: "(none)" }].concat((tapeSfxManifest.banks || []).map((b) => ({ value: b.id, text: b.name || b.id }))),
+      { onChange: async () => syncTapeSfxRuntime() },
     );
 
     addSliderTo(adv, "hpHz", "High-pass", { min: 10, max: 240, step: 1, fmt: (x) => `${Math.round(x)} Hz` });
@@ -2562,7 +3172,7 @@ function makeModuleEl(m, index) {
       { value: "bed", text: "Loop Bed" },
       { value: "edges", text: "Start/End Only" },
       { value: "sequence", text: "Sequence (Start+Bed+End)" },
-    ]);
+    ], { onChange: async () => syncTapeSfxRuntime() });
   } else if (m.type === "television") {
     addSlider("vibe", "Vibe");
     addSlider("speaker", "Speaker");
@@ -2594,10 +3204,10 @@ function makeModuleEl(m, index) {
     addSliderTo(adv, "noiseCrackle", "Noise Crackle");
     addSliderTo(adv, "outGain", "Output", { min: 0, max: 1.5, step: 0.01, fmt: (x) => `${x.toFixed(2)}x` });
   } else if (m.type === "cartridge") {
-    addSlider("quality", "Quality");
-    addSlider("codec", "Compression");
-    addSlider("grit", "Grit");
-    addSlider("noise", "Noise");
+    addSlider("quality", "Sample Memory Quality");
+    addSlider("codec", "Codec Amount");
+    addSlider("grit", "DAC / Hardware Grit");
+    addSlider("noise", "System Noise");
     addToggle("dither", "Dither");
     addToggle("noiseShaping", "Noise Shaping");
 
@@ -2605,20 +3215,39 @@ function makeModuleEl(m, index) {
     addSliderTo(adv, "bleepsMix", "Bleeps Mix");
     addSliderTo(adv, "bleepsRate", "Bleeps Rate", { min: 0, max: 18, step: 0.1, fmt: (x) => `${x.toFixed(1)} Hz` });
     addSelectTo(adv, "bleepsWave", "Bleeps Wave", [
-      { value: "random", text: "Random" },
+      { value: "alternate", text: "Pulse / Triangle Alternating" },
       { value: "pulse", text: "Pulse" },
       { value: "saw", text: "Saw" },
       { value: "tri", text: "Triangle" },
+      { value: "noise", text: "LFSR Noise" },
     ]);
-    addSliderTo(adv, "bleepsVibrato", "Bleeps Vibrato");
-    addSliderTo(adv, "bleepsPitch", "Bleeps Pitch");
+    addSelectTo(adv, "bleepsTrigger", "Bleeps Trigger", [
+      { value: "transient", text: "Follow Source Transients" },
+      { value: "clock", text: "Chip Clock" },
+      { value: "hybrid", text: "Transient + Clock" },
+    ]);
+    addSelectTo(adv, "bleepsScale", "Bleeps Scale", [
+      { value: "pentatonic", text: "Minor Pentatonic" },
+      { value: "minor", text: "Natural Minor" },
+      { value: "major", text: "Major" },
+      { value: "chromatic", text: "Arcade Chromatic" },
+    ]);
+    addSliderTo(adv, "bleepsVibrato", "Pitch Modulation");
+    addSliderTo(adv, "bleepsPitch", "Scale Root / Register");
 
     addSliderTo(adv, "microDelayMs", "Micro Delay", { min: 0, max: 30, step: 0.1, fmt: (x) => `${x.toFixed(1)} ms` });
     addSliderTo(adv, "microDelayMix", "Micro Delay Mix");
     addSliderTo(adv, "verb", "Conduction Verb");
     addSliderTo(adv, "verbMs", "Verb Size", { min: 10, max: 120, step: 1, fmt: (x) => `${Math.round(x)} ms` });
 
-    addSliderTo(adv, "speaker", "Speaker Sim");
+    addSelectTo(adv, "speakerModel", "Speaker Model", [
+      { value: "direct", text: "Direct Line Out" },
+      { value: "handheld", text: "Tiny Handheld" },
+      { value: "television", text: "Television Speaker" },
+      { value: "cabinet", text: "Arcade Cabinet" },
+      { value: "pc", text: "PC Beeper" },
+    ]);
+    addSliderTo(adv, "speaker", "Speaker Amount");
     addSliderTo(adv, "hpHz", "High-pass", { min: 20, max: 240, step: 1, fmt: (x) => `${Math.round(x)} Hz` });
 
     addSliderTo(adv, "bits", "Bit Depth", { min: 2, max: 16, step: 1, fmt: (x) => `${Math.round(x)}-bit` });
@@ -2626,8 +3255,15 @@ function makeModuleEl(m, index) {
     addSliderTo(adv, "jitter", "Clock Jitter");
     addSliderTo(adv, "lpHz", "Low-pass", { min: 2500, max: 18000, step: 50, fmt: (x) => `${Math.round(x)} Hz` });
     addSliderTo(adv, "preEmph", "Pre-Emphasis");
-    addSliderTo(adv, "mulaw", "Mu-law Mix");
-    addSliderTo(adv, "blockMs", "Block Hold", { min: 0, max: 60, step: 1, fmt: (x) => `${Math.round(x)} ms` });
+    addSelectTo(adv, "codecMode", "Sample Codec", [
+      { value: "pcm", text: "Linear PCM" },
+      { value: "dpcm", text: "Delta PCM" },
+      { value: "adpcm", text: "Adaptive DPCM" },
+      { value: "brr", text: "Block Predictive" },
+      { value: "mulaw", text: "Mu-law Companded" },
+    ]);
+    addSliderTo(adv, "mulaw", "Codec Amount");
+    addSliderTo(adv, "blockMs", "Predictor Block", { min: 0, max: 60, step: 1, fmt: (x) => `${Math.round(x)} ms` });
 
     addSliderTo(adv, "sat", "DAC Saturation");
     addSliderTo(adv, "edge", "Edge");
@@ -2653,18 +3289,61 @@ function makeModuleEl(m, index) {
       { value: "mute", text: "Mute" },
       { value: "interp", text: "Interp" },
       { value: "repeat", text: "Repeat" },
+      { value: "random", text: "Random per Damage" },
     ]);
+    addSelectTo(adv, "damageShape", "Damage Pattern", [
+      { value: "radial", text: "Radial Scar" },
+      { value: "sine", text: "Sine Sweep" },
+      { value: "triangle", text: "Triangle Sweep" },
+      { value: "square", text: "Square Cluster" },
+      { value: "saw", text: "Saw Ramp" },
+      { value: "random", text: "Random Pits" },
+    ]);
+
+    const triggerPad = document.createElement("div");
+    triggerPad.className = "cdTriggerPad";
+    const triggerCopy = document.createElement("div");
+    triggerCopy.innerHTML = "<strong>LIVE DAMAGE</strong><span>Force an optical failure or tracking jump during playback.</span>";
+    const triggerButtons = document.createElement("div");
+    triggerButtons.className = "cdTriggerButtons";
+    const runCdTrigger = (kind) => {
+      const wrapper = realtime.graph?.modules?.get(m.instanceId);
+      if (!realtime.playing || !wrapper) {
+        setState("Play audio before triggering CD damage.");
+        return;
+      }
+      applyRealtimeSettings({ ramp: 0.01 });
+      if (kind === "damage") wrapper.triggerDamage(1);
+      else wrapper.triggerSkip(1);
+      setState(kind === "damage" ? "CD damage triggered." : "CD tracking skip triggered.");
+    };
+    for (const [label, kind] of [["TRIGGER DAMAGE", "damage"], ["TRIGGER SKIP", "skip"]]) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "miniBtn";
+      button.textContent = label;
+      button.addEventListener("click", () => runCdTrigger(kind));
+      triggerButtons.appendChild(button);
+    }
+    triggerPad.append(triggerCopy, triggerButtons);
+    grid.appendChild(triggerPad);
     addSliderTo(adv, "errorRate", "Error Rate");
     addSliderTo(adv, "burstMs", "Burst", { min: 4, max: 260, step: 1, fmt: (x) => `${Math.round(x)} ms` });
     addSliderTo(adv, "repeatMs", "Repeat", { min: 6, max: 220, step: 1, fmt: (x) => `${Math.round(x)} ms` });
     addSliderTo(adv, "scratchRate", "Scratch Rate");
     addSliderTo(adv, "scratchAmt", "Scratch Amt");
-    addSliderTo(adv, "jitterMs", "Jitter Depth", { min: 0, max: 1.4, step: 0.01, fmt: (x) => `${Number(x).toFixed(2)} ms` });
+    addSliderTo(adv, "correction", "Error Correction");
+    addSliderTo(adv, "interpolationMs", "Interpolation Window", { min: 0.25, max: 30, step: 0.25, fmt: (x) => `${Number(x).toFixed(2)} ms` });
+    addSliderTo(adv, "rotationHz", "Disc Rotation", { min: 2, max: 10, step: 0.1, fmt: (x) => `${Number(x).toFixed(1)} Hz` });
+    addSliderTo(adv, "trackingRate", "Tracking Failures");
+    addSliderTo(adv, "trackingMs", "Head Jump", { min: 10, max: 1800, step: 5, fmt: (x) => `${Math.round(x)} ms` });
+    addSliderTo(adv, "servoHunt", "Servo Hunt");
+    addSliderTo(adv, "jitterMs", "Timing Jitter", { min: 0, max: 1.25, step: 0.001, fmt: (x) => `${Number(x).toFixed(3)} ms` });
     addSliderTo(adv, "jitterRate", "Jitter Rate", { min: 8, max: 140, step: 1, fmt: (x) => `${Math.round(x)} Hz` });
     addSliderTo(adv, "hfLoss", "HF Loss");
     addSliderTo(adv, "servoNoise", "Servo Noise");
     addSliderTo(adv, "ceiling", "Ceiling", { min: 0.2, max: 1, step: 0.001, fmt: pct01 });
-    addSliderTo(adv, "outGain", "Output", { min: 0, max: 1.5, step: 0.01, fmt: (x) => `${x.toFixed(2)}x` });
+    addSliderTo(adv, "outGain", "Output", { min: 0, max: 1.2, step: 0.01, fmt: (x) => `${x.toFixed(2)}x` });
   } else if (m.type === "camcorder") {
     addSlider("coverage", "Coverage / Muffle");
     addSlider("movement", "Movement Noise");
@@ -2672,6 +3351,21 @@ function makeModuleEl(m, index) {
     addSlider("agc", "AGC Drive");
     addToggle("wind", "Wind");
     addSlider("windLevel", "Wind Level", { min: 0, max: 1.5, step: 0.001, fmt: (x) => `${Math.round(x * 100)}%` });
+
+    addSelectTo(adv, "format", "Recording Format", [
+      { value: "vhsc", text: "VHS-C Linear Track" },
+      { value: "video8", text: "Video8 / Hi8" },
+      { value: "minidv", text: "MiniDV PCM" },
+      { value: "digicam", text: "Cheap Digicam" },
+      { value: "action", text: "Action Camera" },
+    ]);
+    addSelectTo(adv, "micModel", "Microphone", [
+      { value: "electret", text: "Built-in Electret" },
+      { value: "cheapMono", text: "Cheap Mono Capsule" },
+      { value: "stereo", text: "Stereo Camera Mic" },
+      { value: "waterproof", text: "Waterproof Action Mic" },
+      { value: "shotgun", text: "External Shotgun" },
+    ]);
 
     addSliderTo(adv, "camLevel", "Cam Motor");
     addSliderTo(adv, "windBedLevel", "Wind Bed");
@@ -2708,20 +3402,18 @@ function makeModuleEl(m, index) {
       }),
     );
 
-    if (!String(m.params?.camBedSource || "") && (camcorderSfxManifest.camBed || []).length) setParamAndUI("camBedSource", camcorderSfxManifest.camBed[0]);
-    if (!String(m.params?.windBedSource || "") && (camcorderSfxManifest.windBed || []).length)
-      setParamAndUI("windBedSource", camcorderSfxManifest.windBed[0]);
-
     addSliderTo(adv, "hpHz", "High-pass", { min: 10, max: 280, step: 1, fmt: (x) => `${Math.round(x)} Hz` });
     addSliderTo(adv, "lpHz", "Low-pass", { min: 1400, max: 18000, step: 10, fmt: (x) => `${Math.round(x)} Hz` });
     addSliderTo(adv, "boxDb", "Boxiness", { min: 0, max: 12, step: 0.05, fmt: (x) => `${Number(x).toFixed(1)} dB` });
     addSliderTo(adv, "boxHz", "Box Freq", { min: 650, max: 3200, step: 10, fmt: (x) => `${Math.round(x)} Hz` });
     addSliderTo(adv, "agcAmt", "AGC Amount");
     addSliderTo(adv, "agcSpeed", "AGC Speed");
+    addSliderTo(adv, "agcPump", "AGC Noise Pump");
     addSliderTo(adv, "clip", "Clip");
     addSliderTo(adv, "crush", "ADC Crush");
     addSliderTo(adv, "bits", "Bit Depth", { min: 6, max: 16, step: 1, fmt: (x) => `${Math.round(x)}-bit` });
     addSliderTo(adv, "rate", "Sample Rate", { min: 8000, max: 48000, step: 100, fmt: (x) => `${Math.round(x)} Hz` });
+    addSliderTo(adv, "flutter", "Transport Flutter");
     addSliderTo(adv, "drop", "Dropouts");
     addSliderTo(adv, "dropMs", "Drop Length", { min: 6, max: 260, step: 1, fmt: (x) => `${Math.round(x)} ms` });
     addSelectTo(adv, "dropMode", "Drop Mode", [
@@ -2735,6 +3427,7 @@ function makeModuleEl(m, index) {
     addSliderTo(adv, "handling", "Handling Thumps");
     addSliderTo(adv, "rub", "Rub Noise");
     addSliderTo(adv, "hiss", "Hiss");
+    addSliderTo(adv, "motorBleed", "Camera Motor Bleed");
     addSliderTo(adv, "ceiling", "Ceiling", { min: 0.2, max: 1, step: 0.001, fmt: pct01 });
     addSliderTo(adv, "outGain", "Output Gain", { min: 0, max: 1.5, step: 0.01, fmt: (x) => `${x.toFixed(2)}x` });
   }
@@ -2744,14 +3437,403 @@ function makeModuleEl(m, index) {
   return root;
 }
 
-function renderModules() {
-  els.moduleRow.replaceChildren();
-  const visible = getVisibleModules();
-  visible.forEach((m) => {
-    const index = modules.indexOf(m);
-    els.moduleRow.appendChild(makeModuleEl(m, index));
+const DEVICE_META = {
+  occlusion: { icon: "◫", category: "space", model: "MATERIAL / STRUCTURE BODY" },
+  transmission: { icon: "⌁", category: "analog", model: "RADIO SIGNAL PATH" },
+  comms: { icon: "☎", category: "analog", model: "TELEPHONE / PA" },
+  tape: { icon: "●", category: "analog", model: "CASSETTE / VHS" },
+  television: { icon: "▣", category: "analog", model: "CRT RECEIVER" },
+  cartridge: { icon: "◆", category: "digital", model: "GAME HARDWARE" },
+  cd: { icon: "◉", category: "digital", model: "OPTICAL MEDIA" },
+  camcorder: { icon: "▰", category: "analog", model: "HANDHELD CAPTURE" },
+  conference: { icon: "≋", category: "digital", model: "NETWORK CODEC" },
+};
+
+function rackModules() {
+  return modules.filter((module) => Boolean(module.inRack));
+}
+
+function selectedModule() {
+  return rackModules().find((module) => module.instanceId === selectedModuleId) || null;
+}
+
+function renderDeviceLibrary() {
+  if (!els.deviceLibrary) return;
+  els.deviceLibrary.replaceChildren();
+  const libraryModules = Object.keys(DEVICE_META).map((type) => modules.find((module) => module.type === type)).filter(Boolean);
+  for (const module of libraryModules) {
+    const meta = DEVICE_META[module.type] || { icon: "?", category: "digital", model: module.desc };
+    if (libraryFilter !== "all" && meta.category !== libraryFilter) continue;
+    const installed = Boolean(module.inRack);
+    const item = document.createElement("article");
+    item.className = `library-device${installed ? " is-installed" : ""}`;
+    item.dataset.type = module.type;
+    item.draggable = false;
+    item.setAttribute("aria-label", `${module.name}, ${installed ? "already in rack" : "drag into rack"}`);
+
+    const icon = document.createElement("span");
+    icon.className = "library-device__icon";
+    icon.textContent = meta.icon;
+    const copy = document.createElement("div");
+    const name = document.createElement("strong");
+    name.textContent = module.name;
+    const type = document.createElement("span");
+    type.className = "library-device__type";
+    type.textContent = installed ? "INSTALLED" : meta.model;
+    copy.append(name, type);
+    const add = document.createElement("button");
+    add.className = "library-device__add";
+    add.type = "button";
+    add.textContent = installed ? "✓" : "+";
+    add.disabled = installed;
+    add.setAttribute("aria-label", `Add ${module.name} to rack`);
+    add.addEventListener("click", () => addModuleToRack(module.type));
+    item.addEventListener("dblclick", () => {
+      if (!installed) addModuleToRack(module.type);
+    });
+    item.addEventListener("dragstart", (event) => {
+      if (installed) return;
+      event.dataTransfer.effectAllowed = "copy";
+      event.dataTransfer.setData("text/plain", `library:${module.type}`);
+    });
+    if (!installed) bindPointerRackDrag(icon, () => `library:${module.type}`, module.name);
+    item.append(icon, copy, add);
+    els.deviceLibrary.appendChild(item);
+  }
+}
+
+function rackDropIndex(event) {
+  const cards = [...els.moduleRow.querySelectorAll(".rack-module")];
+  for (let index = 0; index < cards.length; index++) {
+    const rect = cards[index].getBoundingClientRect();
+    if (event.clientX < rect.left + rect.width / 2) return index;
+  }
+  return cards.length;
+}
+
+function clearRackDropMarker() {
+  els.moduleRow?.querySelector(".rack-drop-marker")?.remove();
+}
+
+function showRackDropMarker(index) {
+  if (!els.moduleRow) return;
+  clearRackDropMarker();
+  const marker = document.createElement("div");
+  marker.className = "rack-drop-marker";
+  marker.setAttribute("aria-hidden", "true");
+  const cards = [...els.moduleRow.querySelectorAll(".rack-module")];
+  if (!cards.length) {
+    els.moduleRow.appendChild(marker);
+    return;
+  }
+  els.moduleRow.insertBefore(marker, cards[index] || null);
+}
+
+function bindPointerRackDrag(handle, payloadFactory, label) {
+  handle.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    const start = { x: event.clientX, y: event.clientY };
+    let dragging = false;
+    let ghost = null;
+    handle.setPointerCapture?.(event.pointerId);
+    const move = (moveEvent) => {
+      if (!dragging && Math.hypot(moveEvent.clientX - start.x, moveEvent.clientY - start.y) < 7) return;
+      if (!dragging) {
+        dragging = true;
+        ghost = document.createElement("div");
+        ghost.className = "rack-drag-ghost";
+        ghost.textContent = label;
+        document.body.appendChild(ghost);
+        els.moduleRow?.classList.add("is-dragging");
+      }
+      moveEvent.preventDefault();
+      ghost.style.left = `${moveEvent.clientX + 14}px`;
+      ghost.style.top = `${moveEvent.clientY + 14}px`;
+      const rackRect = els.moduleRow?.getBoundingClientRect();
+      if (rackRect && moveEvent.clientX >= rackRect.left && moveEvent.clientX <= rackRect.right && moveEvent.clientY >= rackRect.top && moveEvent.clientY <= rackRect.bottom) showRackDropMarker(rackDropIndex(moveEvent));
+      else clearRackDropMarker();
+    };
+    const end = async (endEvent) => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+      ghost?.remove();
+      const rackRect = els.moduleRow?.getBoundingClientRect();
+      const inside = dragging && rackRect && endEvent.clientX >= rackRect.left && endEvent.clientX <= rackRect.right && endEvent.clientY >= rackRect.top && endEvent.clientY <= rackRect.bottom;
+      let targetIndex = inside ? rackDropIndex(endEvent) : -1;
+      clearRackDropMarker();
+      els.moduleRow?.classList.remove("is-dragging");
+      if (!inside) return;
+      const payload = String(payloadFactory() || "");
+      if (payload.startsWith("library:")) await addModuleToRack(payload.slice("library:".length), targetIndex);
+      if (payload.startsWith("rack:")) {
+        const instanceId = Number(payload.slice("rack:".length));
+        const from = rackModules().findIndex((module) => module.instanceId === instanceId);
+        if (from >= 0 && from < targetIndex) targetIndex -= 1;
+        await moveRackModule(instanceId, targetIndex);
+      }
+    };
+    window.addEventListener("pointermove", move, { passive: false });
+    window.addEventListener("pointerup", end, { once: true });
+    window.addEventListener("pointercancel", end, { once: true });
   });
-  syncModuleRowColumns();
+}
+
+async function commitRackStructure(nextRack, { selectId = selectedModuleId } = {}) {
+  const rest = modules.filter((module) => !nextRack.includes(module));
+  modules = [...nextRack, ...rest];
+  selectedModuleId = selectId;
+  graphStale = true;
+  await teardownRealtime();
+  renderModules();
+  setState(audioBuffer ? "Ready" : "Idle");
+}
+
+async function addModuleToRack(type, targetIndex = rackModules().length) {
+  const module = modules.find((candidate) => candidate.type === type);
+  if (!module) return;
+  if (module.inRack) {
+    selectedModuleId = module.instanceId;
+    renderModules();
+    return;
+  }
+  module.inRack = true;
+  module.enabled = true;
+  module.wet = Math.min(0.6, clamp01(module.wet ?? 0.6));
+  const rack = rackModules().filter((candidate) => candidate !== module);
+  rack.splice(Math.max(0, Math.min(rack.length, targetIndex)), 0, module);
+  await commitRackStructure(rack, { selectId: module.instanceId });
+}
+
+async function removeModuleFromRack(instanceId) {
+  const module = modules.find((candidate) => candidate.instanceId === instanceId);
+  if (!module) return;
+  module.inRack = false;
+  module.enabled = false;
+  const rack = rackModules();
+  const nextSelected = rack[0]?.instanceId ?? null;
+  await commitRackStructure(rack, { selectId: nextSelected });
+}
+
+async function moveRackModule(instanceId, targetIndex) {
+  const rack = rackModules();
+  const from = rack.findIndex((module) => module.instanceId === instanceId);
+  if (from < 0) return;
+  const [module] = rack.splice(from, 1);
+  const destination = Math.max(0, Math.min(rack.length, targetIndex));
+  rack.splice(destination, 0, module);
+  await commitRackStructure(rack, { selectId: instanceId });
+}
+
+function makeRackModuleEl(module, rackIndex) {
+  const meta = DEVICE_META[module.type] || { model: module.desc };
+  const root = document.createElement("article");
+  root.className = `rack-module${module.enabled ? "" : " is-bypassed"}${module.instanceId === selectedModuleId ? " is-selected" : ""}`;
+  root.dataset.type = module.type;
+  root.dataset.instanceId = String(module.instanceId);
+  root.draggable = false;
+  root.setAttribute("role", "listitem");
+  root.setAttribute("aria-label", `${module.name} rack device, position ${rackIndex + 1}`);
+  root.style.setProperty("--wet", String(module.wet));
+
+  const face = document.createElement("div");
+  face.className = "rack-module__face";
+  const top = document.createElement("div");
+  top.className = "rack-module__top";
+  const drag = document.createElement("button");
+  drag.type = "button";
+  drag.className = "rack-module__drag";
+  drag.draggable = false;
+  drag.innerHTML = `<span aria-hidden="true">⠿</span><span class="rack-module__serial">LAE / ${String(rackIndex + 1).padStart(2, "0")}</span>`;
+  drag.setAttribute("aria-label", `Drag ${module.name} to reorder`);
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.className = "rack-module__remove";
+  remove.textContent = "×";
+  remove.setAttribute("aria-label", `Remove ${module.name} from rack`);
+  remove.addEventListener("click", (event) => {
+    event.stopPropagation();
+    removeModuleFromRack(module.instanceId);
+  });
+  top.append(drag, remove);
+
+  const name = document.createElement("h3");
+  name.textContent = module.name;
+  const model = document.createElement("p");
+  model.className = "rack-module__model";
+  model.textContent = meta.model;
+  const meter = document.createElement("div");
+  meter.className = "rack-module__meter";
+  meter.setAttribute("aria-hidden", "true");
+  for (let i = 0; i < 8; i++) {
+    const bar = document.createElement("i");
+    bar.style.setProperty("--meter", `${18 + i * 5}%`);
+    meter.appendChild(bar);
+  }
+
+  const surface = document.createElement("div");
+  surface.className = "rack-module__surface";
+  for (const spec of SURFACE_CONTROLS[module.type] || []) {
+    const wrap = document.createElement("div");
+    wrap.className = "surface-control";
+    const label = document.createElement("label");
+    label.textContent = spec.label;
+    const output = document.createElement("output");
+    const input = document.createElement("input");
+    input.type = "range";
+    input.min = "0";
+    input.max = "1";
+    input.step = "0.001";
+    input.value = String(clamp01(Number(module.params?.[spec.key] ?? 0.5)));
+    input.dataset.surfaceKey = spec.key;
+    input.setAttribute("aria-label", `${module.name} ${spec.label}`);
+    output.textContent = pct01(Number(input.value));
+    const protectControl = (event) => event.stopPropagation();
+    input.addEventListener("pointerdown", protectControl);
+    input.addEventListener("click", protectControl);
+    input.addEventListener("input", (event) => {
+      event.stopPropagation();
+      applySurfaceParam(module, spec.key, Number(input.value));
+      output.textContent = pct01(Number(input.value));
+      applyRealtimeSettings();
+    });
+    input.addEventListener("change", () => {
+      // Surface macros update several advanced values at once. Refresh the
+      // inspector after the drag ends so its duplicated readout cannot appear
+      // frozen while the processor is actually changing underneath it.
+      if (module.instanceId === selectedModuleId) renderInspector();
+    });
+    wrap.append(label, output, input);
+    surface.appendChild(wrap);
+  }
+
+  const control = document.createElement("div");
+  control.className = "rack-module__control";
+  const knob = document.createElement("div");
+  knob.className = "rack-module__knob";
+  knob.style.setProperty("--turn", `${-128 + clamp01(module.wet) * 256}deg`);
+  const wetLabel = document.createElement("label");
+  wetLabel.textContent = `MIX ${pct01(module.wet)}`;
+  const wet = document.createElement("input");
+  wet.type = "range";
+  wet.min = "0";
+  wet.max = "1";
+  wet.step = "0.001";
+  wet.value = String(module.wet);
+  wet.setAttribute("aria-label", `${module.name} wet mix`);
+  wet.addEventListener("pointerdown", (event) => event.stopPropagation());
+  wet.addEventListener("click", (event) => event.stopPropagation());
+  wet.addEventListener("input", (event) => {
+    event.stopPropagation();
+    module.wet = clamp01(Number(wet.value));
+    knob.style.setProperty("--turn", `${-128 + module.wet * 256}deg`);
+    wetLabel.textContent = `MIX ${pct01(module.wet)}`;
+    applyRealtimeSettings();
+  });
+  const mix = document.createElement("div");
+  mix.className = "rack-module__mix";
+  mix.append(wetLabel, wet);
+  control.append(knob, mix);
+
+  const foot = document.createElement("div");
+  foot.className = "rack-module__foot";
+  const preset = document.createElement("span");
+  preset.className = "rack-module__preset";
+  preset.textContent = module.presetKey ? presetLabelFromKey(module.presetKey) : "MANUAL STATE";
+  const stomp = document.createElement("button");
+  stomp.type = "button";
+  stomp.className = "stomp-switch";
+  stomp.setAttribute("aria-label", `${module.enabled ? "Bypass" : "Enable"} ${module.name}`);
+  stomp.setAttribute("aria-pressed", module.enabled ? "true" : "false");
+  stomp.addEventListener("click", (event) => {
+    event.stopPropagation();
+    module.enabled = !module.enabled;
+    applyRealtimeSettings();
+    renderModules();
+  });
+  foot.append(preset, stomp);
+  face.append(top, name, model, meter, surface, control, foot);
+  root.appendChild(face);
+  root.addEventListener("click", (event) => {
+    if (event.target.closest("button, input, select, label")) return;
+    selectedModuleId = module.instanceId;
+    for (const card of els.moduleRow.querySelectorAll(".rack-module")) card.classList.toggle("is-selected", card.dataset.instanceId === String(module.instanceId));
+    renderInspector();
+  });
+  drag.addEventListener("dragstart", (event) => {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", `rack:${module.instanceId}`);
+    root.classList.add("is-dragging");
+  });
+  drag.addEventListener("dragend", () => root.classList.remove("is-dragging"));
+  bindPointerRackDrag(drag, () => `rack:${module.instanceId}`, module.name);
+  return root;
+}
+
+function openDrawer(tab = "mastering", forceOpen = true) {
+  if (!els.toolDrawer) return;
+  const nextTab = ["mastering", "automation"].includes(tab) ? tab : "mastering";
+  els.toolDrawer.dataset.drawerTab = nextTab;
+  if (forceOpen !== null) els.toolDrawer.dataset.drawerOpen = forceOpen ? "true" : "false";
+  const isOpen = els.toolDrawer.dataset.drawerOpen === "true";
+  document.body.classList.toggle("drawer-console-open", isOpen);
+  if (els.drawerToggle) {
+    els.drawerToggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    const label = els.drawerToggle.querySelector("span");
+    if (label) label.textContent = isOpen ? "CLOSE" : "OPEN";
+  }
+  for (const button of document.querySelectorAll("[data-drawer-target]")) {
+    button.setAttribute("aria-pressed", button.dataset.drawerTarget === nextTab ? "true" : "false");
+  }
+  for (const panel of document.querySelectorAll("[data-drawer-panel]")) panel.hidden = panel.dataset.drawerPanel !== nextTab;
+  if (nextTab === "automation") renderLiveAutomationUi();
+  if (nextTab === "mastering") drawMasterEqResponse();
+}
+
+function renderInspector() {
+  if (!els.inspectorContent) return;
+  els.inspectorContent.replaceChildren();
+  const module = selectedModule();
+  if (!module) {
+    const empty = document.createElement("div");
+    empty.className = "inspector-empty";
+    empty.innerHTML = "<span>NO DEVICE SELECTED</span><strong>Choose a module from the rack.</strong><p>The signal path stays visible while the selected device opens here.</p>";
+    els.inspectorContent.appendChild(empty);
+    return;
+  }
+  const panel = makeModuleEl(module, modules.indexOf(module), { showWet: false, omitSurfaceParams: true });
+  panel.classList.add("inspector-module");
+  els.inspectorContent.appendChild(panel);
+}
+
+function renderMixer() {
+  drawMasterEqResponse();
+}
+
+function renderModules() {
+  if (!els.moduleRow) return;
+  els.moduleRow.replaceChildren();
+  if (viewMode === "automation") {
+    renderDeviceLibrary();
+    renderInspector();
+    renderMixer();
+    return;
+  }
+  const rack = rackModules();
+  if (!rack.length) {
+    const empty = document.createElement("div");
+    empty.id = "rackEmpty";
+    empty.className = "rack-empty";
+    empty.innerHTML = '<span class="rack-empty__jack" aria-hidden="true">IN</span><strong>DRAG HARDWARE HERE</strong><p>The dry signal is already passing through. Add a device whenever you want to disturb it.</p><span class="rack-empty__jack rack-empty__jack--out" aria-hidden="true">OUT</span>';
+    els.moduleRow.appendChild(empty);
+  } else {
+    rack.forEach((module, index) => els.moduleRow.appendChild(makeRackModuleEl(module, index)));
+  }
+  if (els.rackCount) els.rackCount.textContent = String(rack.length).padStart(2, "0");
+  renderDeviceLibrary();
+  renderInspector();
+  renderMixer();
+  refreshLiveAutomationTargets();
 }
 
 async function applyEnginePresetToModule(m, presetKey) {
@@ -2764,7 +3846,7 @@ async function applyEnginePresetToModule(m, presetKey) {
   if (!preset || typeof preset !== "object") return;
 
   const prevPasses = Number(m.params?.passes ?? 1);
-  m.params = { ...(m.params || {}), ...preset };
+  m.params = mergeModulePresetParams(m.type, m.params, preset);
   m.presetKey = key;
 
   const nextPasses = Number(m.params?.passes ?? 1);
@@ -2788,6 +3870,8 @@ async function applyEnginePresetToModule(m, presetKey) {
 
   renderModules();
   applyRealtimeSettings();
+  if (m.type === "tape") await syncTapeSfxRuntime();
+  if (m.type === "television") await syncTelevisionBedRuntime();
 }
 
 async function applyMasterPresetById(presetId) {
@@ -2803,9 +3887,34 @@ async function applyMasterPresetById(presetId) {
 
   // Master
   const mp = preset.master && typeof preset.master === "object" ? preset.master : {};
+  if (els.inputTrim) els.inputTrim.value = String(typeof mp.inputTrim === "number" ? mp.inputTrim : 0.5);
   els.masterGain.value = String(typeof mp.masterGain === "number" ? mp.masterGain : 0.25);
   if (els.masterHpHz) els.masterHpHz.value = String(typeof mp.masterHpHz === "number" ? mp.masterHpHz : 20);
   if (els.masterLpHz) els.masterLpHz.value = String(typeof mp.masterLpHz === "number" ? mp.masterLpHz : 20000);
+  for (const input of masterEqInputs()) {
+    const frequency = String(input.dataset.eqFrequency);
+    let value = mp.masterEqBands?.[frequency];
+    if (typeof value !== "number") {
+      const hz = Number(frequency);
+      value = hz <= 250 ? mp.masterEqLow : hz <= 4000 ? mp.masterEqMid : mp.masterEqHigh;
+    }
+    input.value = String(typeof value === "number" ? value : 0);
+  }
+  if (els.masterNoiseLearn) els.masterNoiseLearn.checked = Boolean(mp.masterNoiseLearn);
+  if (els.masterNoiseThreshold) els.masterNoiseThreshold.value = String(typeof mp.masterNoiseThreshold === "number" ? mp.masterNoiseThreshold : -55);
+  if (els.masterNoiseReductionDb) els.masterNoiseReductionDb.value = String(typeof mp.masterNoiseReductionDb === "number" ? mp.masterNoiseReductionDb : 12);
+  if (els.masterNoiseAttack) els.masterNoiseAttack.value = String(typeof mp.masterNoiseAttack === "number" ? mp.masterNoiseAttack : 12);
+  if (els.masterNoiseRelease) els.masterNoiseRelease.value = String(typeof mp.masterNoiseRelease === "number" ? mp.masterNoiseRelease : 220);
+  if (els.masterNoiseMix) els.masterNoiseMix.value = String(typeof mp.masterNoiseMix === "number" ? mp.masterNoiseMix : typeof mp.masterNoiseReduction === "number" ? mp.masterNoiseReduction : 0);
+  if (els.masterSaturation) els.masterSaturation.value = String(typeof mp.masterSaturation === "number" ? mp.masterSaturation : 0);
+  if (els.masterDelayTime) els.masterDelayTime.value = String(typeof mp.masterDelayTime === "number" ? mp.masterDelayTime : 180);
+  if (els.masterDelayFeedback) els.masterDelayFeedback.value = String(typeof mp.masterDelayFeedback === "number" ? mp.masterDelayFeedback : 0.18);
+  if (els.masterDelayDamping) els.masterDelayDamping.value = String(typeof mp.masterDelayDamping === "number" ? mp.masterDelayDamping : 8000);
+  if (els.masterDelayMix) els.masterDelayMix.value = String(typeof mp.masterDelayMix === "number" ? mp.masterDelayMix : typeof mp.masterDelay === "number" ? mp.masterDelay : 0);
+  if (els.masterReverbPreDelay) els.masterReverbPreDelay.value = String(typeof mp.masterReverbPreDelay === "number" ? mp.masterReverbPreDelay : 18);
+  if (els.masterReverbDecay) els.masterReverbDecay.value = String(typeof mp.masterReverbDecay === "number" ? mp.masterReverbDecay : 1.35);
+  if (els.masterReverbDamping) els.masterReverbDamping.value = String(typeof mp.masterReverbDamping === "number" ? mp.masterReverbDamping : 6500);
+  if (els.masterReverbMix) els.masterReverbMix.value = String(typeof mp.masterReverbMix === "number" ? mp.masterReverbMix : typeof mp.masterReverb === "number" ? mp.masterReverb : 0);
   if (els.masterComp) els.masterComp.value = String(typeof mp.masterComp === "number" ? mp.masterComp : 0.12);
   els.ceiling.value = String(typeof mp.ceiling === "number" ? mp.ceiling : 0.92);
   els.limiter.value = String(typeof mp.limiter === "number" ? mp.limiter : 0.45);
@@ -2820,8 +3929,11 @@ async function applyMasterPresetById(presetId) {
     const mod = byType.get(type);
     if (!mod || !conf) continue;
     if (typeof conf.enabled === "boolean") mod.enabled = conf.enabled;
+    mod.inRack = typeof conf.inRack === "boolean" ? conf.inRack : Boolean(conf.enabled);
     if (typeof conf.wet === "number") mod.wet = clamp01(conf.wet);
-    if (conf.params && typeof conf.params === "object") mod.params = { ...(mod.params || {}), ...conf.params };
+    if (conf.params && typeof conf.params === "object") {
+      mod.params = mergeModulePresetParams(mod.type, mod.params, conf.params);
+    }
     mod.presetKey = "";
   }
 
@@ -2841,6 +3953,7 @@ async function applyMasterPresetById(presetId) {
     seen.add(mod.type);
   }
   modules = nextModules;
+  selectedModuleId = rackModules()[0]?.instanceId ?? null;
 
   // Output mode update
   if (sourceBuffer) {
@@ -2853,7 +3966,204 @@ async function applyMasterPresetById(presetId) {
   setState(audioBuffer ? "Ready" : "Idle");
 }
 
-function stopPlayback() {
+function getLoopRegion() {
+  const duration = audioBuffer?.duration || 0;
+  const start = Math.max(0, Math.min(duration, Number(els.loopStart?.value) || 0));
+  const requestedEnd = Number(els.loopEnd?.value);
+  const end = Math.max(start + 0.01, Math.min(duration || start + 0.01, Number.isFinite(requestedEnd) && requestedEnd > 0 ? requestedEnd : duration));
+  return { start, end };
+}
+
+function currentTransportPosition() {
+  const duration = audioBuffer?.duration || 0;
+  if (!realtime.playing || !realtime.ctx) return Math.max(0, Math.min(duration, transport.position));
+  const elapsed = Math.max(0, realtime.ctx.currentTime - realtime.sourceStartedAt);
+  let position = realtime.sourceOffsetSec + elapsed;
+  if (els.loopToggle?.checked) {
+    const { start, end } = getLoopRegion();
+    const length = Math.max(0.01, end - start);
+    if (position >= end) position = start + ((position - start) % length);
+  }
+  return Math.max(0, Math.min(duration, position));
+}
+
+function syncTransportUi() {
+  const duration = audioBuffer?.duration || 0;
+  const position = currentTransportPosition();
+  if (els.transportSeek) {
+    els.transportSeek.max = String(Math.max(0.001, duration));
+    els.transportSeek.value = String(position);
+  }
+  if (els.transportTime) els.transportTime.textContent = `${fmtTime(position)} / ${fmtTime(duration)}`;
+  if (els.playBtn) {
+    els.playBtn.classList.toggle("is-playing", realtime.playing);
+    const label = els.playBtn.querySelector("b");
+    if (label) label.textContent = realtime.playing ? "PAUSE" : "PLAY";
+  }
+  if (els.scopeState) {
+    els.scopeState.textContent = realtime.playing ? (monitorDry ? "SOURCE MONITOR" : "LIVE / PROCESSED") : "WAITING FOR SIGNAL";
+  }
+}
+
+function drawSourceWaveform() {
+  const canvas = els.sourceWaveformCanvas;
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const { width, height } = canvas;
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = "#060708";
+  ctx.fillRect(0, 0, width, height);
+  ctx.strokeStyle = "rgba(78,246,255,.12)";
+  ctx.beginPath();
+  ctx.moveTo(0, height / 2);
+  ctx.lineTo(width, height / 2);
+  ctx.stroke();
+  if (audioBuffer) {
+    const peaks = cachedPeaks(audioBuffer, Math.max(64, Math.floor(width / 2)));
+    ctx.fillStyle = "rgba(78,246,255,.78)";
+    const barWidth = width / peaks.length;
+    for (let index = 0; index < peaks.length; index++) {
+      const magnitude = Math.max(1, peaks[index] * (height - 8));
+      ctx.fillRect(index * barWidth, (height - magnitude) / 2, Math.max(1, barWidth), magnitude);
+    }
+    const position = currentTransportPosition();
+    const x = audioBuffer.duration ? (position / audioBuffer.duration) * width : 0;
+    ctx.fillStyle = "#fff8ed";
+    ctx.fillRect(Math.max(0, x - 1), 0, 2, height);
+  }
+}
+
+function drawMasterEqResponse() {
+  const canvas = els.masterEqCanvas;
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const { width, height } = canvas;
+  const settings = readMasterSettings();
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = "#060708";
+  ctx.fillRect(0, 0, width, height);
+  ctx.font = "11px Cascadia Mono, monospace";
+  ctx.lineWidth = 1;
+  for (let db = -12; db <= 12; db += 6) {
+    const y = height / 2 - (db / 30) * height;
+    ctx.strokeStyle = db === 0 ? "rgba(255,248,237,.25)" : "rgba(255,248,237,.08)";
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(width, y);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(255,248,237,.5)";
+    ctx.fillText(`${db > 0 ? "+" : ""}${db}`, 5, y - 4);
+  }
+  const labels = [[31,"31"],[125,"125"],[500,"500"],[2000,"2K"],[8000,"8K"],[16000,"16K"]];
+  const xForHz = (hz) => (Math.log10(hz / 20) / Math.log10(20000 / 20)) * width;
+  for (const [hz, label] of labels) {
+    const x = xForHz(hz);
+    ctx.strokeStyle = "rgba(255,248,237,.07)";
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, height);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(255,248,237,.45)";
+    ctx.fillText(label, x + 4, height - 7);
+  }
+  ctx.strokeStyle = "#4ef6ff";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  for (let x = 0; x < width; x++) {
+    const hz = 20 * Math.pow(1000, x / width);
+    const logGaussian = (center, spread) => Math.exp(-Math.pow(Math.log2(hz / center) / spread, 2));
+    let gain = MASTER_EQ_BANDS.reduce((sum, [, frequency]) => sum + Number(settings.masterEqBands?.[String(frequency)] || 0) * logGaussian(frequency, 0.72), 0);
+    if (hz < settings.masterHpHz) gain -= Math.min(24, Math.log2(settings.masterHpHz / Math.max(20, hz)) * 12);
+    if (hz > settings.masterLpHz) gain -= Math.min(24, Math.log2(hz / Math.max(40, settings.masterLpHz)) * 12);
+    const y = Math.max(2, Math.min(height - 2, height / 2 - (gain / 30) * height));
+    if (x === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+}
+
+function updateMasterMeter(rms, peak) {
+  const toDb = (value) => (value > 1e-7 ? 20 * Math.log10(value) : -Infinity);
+  const rmsDb = toDb(rms);
+  const peakDb = toDb(peak);
+  const lufsEstimate = Number.isFinite(rmsDb) ? rmsDb - 0.7 : -Infinity;
+  const format = (value) => (Number.isFinite(value) ? value.toFixed(1) : "−∞");
+  if (els.masterPeakDb) els.masterPeakDb.textContent = format(peakDb);
+  if (els.masterRmsDb) els.masterRmsDb.textContent = format(rmsDb);
+  if (els.masterLufs) els.masterLufs.textContent = format(lufsEstimate);
+  if (els.masterHeadroom) els.masterHeadroom.textContent = Number.isFinite(peakDb) ? Math.max(0, -peakDb).toFixed(1) : "—";
+  const meterPercent = Math.max(0, Math.min(100, ((peakDb + 60) / 60) * 100));
+  if (els.masterLevelFill) els.masterLevelFill.style.width = `${meterPercent}%`;
+  const now = performance.now();
+  if (peak >= masterMeter.peakHold || now >= masterMeter.holdUntil) {
+    masterMeter.peakHold = peak;
+    masterMeter.holdUntil = now + 1000;
+  } else {
+    masterMeter.peakHold *= 0.992;
+  }
+  const holdDb = toDb(masterMeter.peakHold);
+  const holdPercent = Math.max(0, Math.min(100, ((holdDb + 60) / 60) * 100));
+  if (els.masterPeakHold) els.masterPeakHold.style.left = `${holdPercent}%`;
+}
+
+function drawProcessedScope() {
+  const canvas = els.processedWaveformCanvas;
+  if (!canvas) return 0;
+  const ctx = canvas.getContext("2d");
+  const { width, height } = canvas;
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = "#060708";
+  ctx.fillRect(0, 0, width, height);
+  ctx.strokeStyle = "rgba(255,55,207,.14)";
+  ctx.beginPath();
+  ctx.moveTo(0, height / 2);
+  ctx.lineTo(width, height / 2);
+  ctx.stroke();
+  if (!realtime.analyser || !realtime.scopeData || !realtime.playing) {
+    updateMasterMeter(0, 0);
+    return 0;
+  }
+  realtime.analyser.getFloatTimeDomainData(realtime.scopeData);
+  let sum = 0;
+  let peak = 0;
+  ctx.strokeStyle = monitorDry ? "#4ef6ff" : "#ff37cf";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let index = 0; index < realtime.scopeData.length; index++) {
+    const sample = realtime.scopeData[index];
+    sum += sample * sample;
+    peak = Math.max(peak, Math.abs(sample));
+    const x = (index / Math.max(1, realtime.scopeData.length - 1)) * width;
+    const y = height / 2 + sample * height * 0.44;
+    if (index === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  const rms = Math.sqrt(sum / Math.max(1, realtime.scopeData.length));
+  updateMasterMeter(rms, peak);
+  return rms;
+}
+
+function animateSignal() {
+  syncTransportUi();
+  if (realtime.playing) applyLiveAutomationAt(currentTransportPosition());
+  drawSourceWaveform();
+  const level = drawProcessedScope();
+  for (const card of els.moduleRow?.querySelectorAll(".rack-module") || []) {
+    const module = modules.find((candidate) => String(candidate.instanceId) === card.dataset.instanceId);
+    const energy = module?.enabled ? Math.min(1, level * 7 * (0.35 + clamp01(module.wet))) : 0.03;
+    [...card.querySelectorAll(".rack-module__meter i")].forEach((bar, index) => {
+      const threshold = (index + 1) / 9;
+      bar.style.height = `${Math.max(10, energy >= threshold ? 32 + index * 7 : 10)}%`;
+      bar.style.opacity = energy >= threshold ? "1" : ".18";
+    });
+  }
+  transport.frame = window.requestAnimationFrame(animateSignal);
+}
+
+function stopPlayback({ resetTransport = true } = {}) {
+  if (!resetTransport && realtime.playing) transport.position = currentTransportPosition();
+  if (resetTransport) transport.position = 0;
   stopAutomationPlayback();
   for (const t of realtime.endTimers) {
     try {
@@ -2863,6 +4173,21 @@ function stopPlayback() {
     }
   }
   realtime.endTimers = [];
+
+  for (const s of realtime.tapeBedSources) {
+    if (!s) continue;
+    try {
+      s.stop();
+    } catch {
+      // ignore
+    }
+    try {
+      s.disconnect();
+    } catch {
+      // ignore
+    }
+  }
+  realtime.tapeBedSources = [];
 
   for (const s of realtime.tvBedSources) {
     if (!s) continue;
@@ -2896,21 +4221,65 @@ function stopPlayback() {
   realtime.playWindow = null;
 
   if (realtime.src) {
-    try {
-      realtime.src.stop();
-    } catch {
-      // ignore
-    }
-    try {
-      realtime.src.disconnect();
-    } catch {
-      // ignore
-    }
+    const activeSource = realtime.src;
     realtime.src = null;
+    try {
+      activeSource.stop();
+    } catch {
+      // ignore
+    }
+    try {
+      activeSource.disconnect();
+    } catch {
+      // ignore
+    }
   }
   realtime.playing = false;
   els.stopBtn.disabled = true;
+  syncTransportUi();
   setState(audioBuffer ? "Ready" : "Idle");
+}
+
+async function syncTapeSfxRuntime() {
+  if (!realtime.ctx || !realtime.graph) return;
+  for (const source of realtime.tapeBedSources) {
+    try { source.stop(); } catch { /* ignore */ }
+    try { source.disconnect(); } catch { /* ignore */ }
+  }
+  realtime.tapeBedSources = [];
+
+  const tape = modules.find((m) => m.type === "tape");
+  if (!tape?.enabled || !realtime.src) return;
+  const settings = settingsForModule(tape);
+  const wantsBed = settings.sfxMode === "bed" || settings.sfxMode === "sequence";
+  if (!settings.sfxEnable || !settings.sfxSource || !wantsBed) return;
+
+  try {
+    await ensureTapeBankDecoded(settings.sfxSource, { mode: settings.sfxMode });
+    const assets = getTapeAssets(settings.sfxSource);
+    const wrapper = realtime.graph.modules.get(tape.instanceId);
+    if (!assets?.bed || !wrapper) return;
+    const nowT = realtime.ctx.currentTime;
+    const looping = Boolean(els.loopToggle.checked);
+    const playWindow = realtime.playWindow;
+    const stopAt = !looping && playWindow && Number.isFinite(playWindow.tapeEndStopAt) && playWindow.tapeEndStopAt > nowT
+      ? playWindow.tapeEndStopAt
+      : !looping && playWindow && audioBuffer
+        ? playWindow.baseTime + playWindow.audioStartAt + audioBuffer.duration
+        : null;
+    for (const lane of wrapper.laneGraphs || []) {
+      const sfxNode = lane?.graph?.sfx || lane?.graph?.nodes?.sfxGain || null;
+      if (!sfxNode) continue;
+      const bed = new AudioBufferSourceNode(realtime.ctx, { buffer: assets.bed });
+      bed.loop = true;
+      bed.connect(sfxNode);
+      bed.start(nowT, tapePickBedOffset(audioDataSeed, assets.bed));
+      if (stopAt && stopAt > nowT) bed.stop(stopAt);
+      realtime.tapeBedSources.push(bed);
+    }
+  } catch (error) {
+    console.warn(error);
+  }
 }
 
 async function syncTelevisionBedRuntime() {
@@ -3000,6 +4369,7 @@ async function teardownAutomationRealtime() {
   automationRt.layers = [];
   automationRt.sum = null;
   automationRt.master = null;
+  automationRt.monitorGain = null;
   automationRt.sampleRate = 0;
 }
 
@@ -3014,6 +4384,9 @@ async function teardownRealtime() {
   }
   realtime.ctx = null;
   realtime.graph = null;
+  realtime.analyser = null;
+  realtime.monitorGain = null;
+  realtime.scopeData = null;
   graphStale = true;
 }
 
@@ -3051,6 +4424,12 @@ function refreshFileStatus(name = "None") {
   els.fileName.textContent = name || "None";
   els.duration.textContent = audioBuffer ? fmtTime(audioBuffer.duration) : "-";
   els.sampleRate.textContent = audioBuffer ? `${audioBuffer.sampleRate} Hz` : "-";
+  if (els.transportSeek) {
+    els.transportSeek.disabled = !audioBuffer;
+    els.transportSeek.max = String(Math.max(0.001, audioBuffer?.duration || 0.001));
+  }
+  syncTransportUi();
+  drawSourceWaveform();
 }
 
 async function ensureRealtimeGraph() {
@@ -3078,13 +4457,21 @@ async function ensureRealtimeGraph() {
 
   realtime.graph = await buildLameGraph(realtime.ctx, {
     seed: audioDataSeed,
-    modules: modules.filter((m) => Boolean(m.enabled)),
+    modules: modules.filter((m) => Boolean(m.inRack)),
     stereo: wantStereo,
     tuningEdges,
     tuningSample: sample,
   });
+  realtime.graph.masters?.[0]?.setNoiseFloorListener((value) => {
+    if (els.noiseReducerState && els.masterNoiseLearn?.checked) els.noiseReducerState.textContent = `FLOOR ${Number(value).toFixed(1)} dB`;
+  });
 
-  realtime.graph.output.connect(realtime.ctx.destination);
+  realtime.analyser = new AnalyserNode(realtime.ctx, { fftSize: 2048, smoothingTimeConstant: 0.16 });
+  realtime.monitorGain = new GainNode(realtime.ctx, { gain: monitorVolumeValue() });
+  realtime.scopeData = new Float32Array(realtime.analyser.fftSize);
+  realtime.graph.output.connect(realtime.analyser);
+  realtime.analyser.connect(realtime.monitorGain);
+  realtime.monitorGain.connect(realtime.ctx.destination);
   graphStale = false;
   applyRealtimeSettings({ ramp: 0 });
 }
@@ -3093,6 +4480,15 @@ function eqPowGains(wet01) {
   const w = clamp01(wet01);
   const a = w * Math.PI * 0.5;
   return { dry: Math.cos(a), wet: Math.sin(a) };
+}
+
+function rampGainValue(param, value, time, ramp = 0.02) {
+  if (!param) return;
+  const target = Number.isFinite(value) ? value : 1;
+  param.cancelScheduledValues(time);
+  param.setValueAtTime(param.value, time);
+  if (ramp > 0) param.linearRampToValueAtTime(target, time + ramp);
+  else param.setValueAtTime(target, time);
 }
 
 function scheduleScalarAutomation(param, lane, fallbackValue, { startTime, duration, kind = "float" } = {}) {
@@ -3168,10 +4564,16 @@ async function ensureAutomationRealtimeGraph() {
   automationRt.ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: "interactive", sampleRate: sr });
 
   const ctx = automationRt.ctx;
+  await ensureMasterWorklets(ctx);
   automationRt.sum = new GainNode(ctx, { gain: 1, channelCount: wantStereo ? 2 : 1 });
   automationRt.master = buildMasterLane(ctx);
+  automationRt.monitorGain = new GainNode(ctx, { gain: monitorVolumeValue() });
+  automationRt.master.setNoiseFloorListener((value) => {
+    if (els.noiseReducerState && els.masterNoiseLearn?.checked) els.noiseReducerState.textContent = `FLOOR ${Number(value).toFixed(1)} dB`;
+  });
   automationRt.sum.connect(automationRt.master.input);
-  automationRt.master.output.connect(ctx.destination);
+  automationRt.master.output.connect(automationRt.monitorGain);
+  automationRt.monitorGain.connect(ctx.destination);
 
   automationRt.layers = [];
   for (const layer of automation.layers) {
@@ -3197,6 +4599,8 @@ function applyAutomationGraphSettings({ time, ramp = 0.02, allLayers = false } =
   if (!ctx || !automationRt.master) return;
   const t = Number.isFinite(time) ? time : ctx.currentTime;
   automationRt.master.applySettings(readMasterSettings(), { time: t, ramp });
+  rampGainValue(automationRt.monitorGain?.gain, monitorVolumeValue(), t, ramp);
+  for (const runtimeLayer of automationRt.layers) rampGainValue(runtimeLayer.graph.input?.gain, inputTrimValue(), t, ramp);
   const indices = allLayers ? automation.layers.map((_, i) => i) : [automation.activeLayer | 0];
   for (const i of indices) {
     const layer = automation.layers[i];
@@ -3298,6 +4702,7 @@ async function exportAutomationWav() {
     const frames = Math.max(1, Math.ceil(dur * sr));
     const offline = new OfflineAudioContext(ch, frames, sr);
 
+    await ensureMasterWorklets(offline);
     const sum = new GainNode(offline, { gain: 1, channelCount: wantStereo ? 2 : 1 });
     const master = buildMasterLane(offline);
     sum.connect(master.input);
@@ -3315,6 +4720,7 @@ async function exportAutomationWav() {
         tuningSample: null,
         withMaster: false,
       });
+      graph.input.gain.setValueAtTime(inputTrimValue(), 0);
       const enabledNode = new GainNode(offline, { gain: layer.enabled ? 1 : 0 });
       const gainNode = new GainNode(offline, { gain: layer.gain ?? 1 });
       graph.output.connect(enabledNode);
@@ -3389,11 +4795,13 @@ function applyRealtimeSettings({ ramp = 0.02 } = {}) {
   }
   if (!realtime.ctx || !realtime.graph) return;
   const time = realtime.ctx.currentTime;
+  rampGainValue(realtime.graph.input?.gain, inputTrimValue(), time, ramp);
+  rampGainValue(realtime.monitorGain?.gain, monitorVolumeValue(), time, ramp);
   realtime.graph.applyMaster(readMasterSettings(), { time, ramp });
   for (const m of modules) {
     const w = realtime.graph.modules.get(m.instanceId);
     if (!w) continue;
-    w.setWetEnabled({ wet: m.wet ?? 1, enabled: Boolean(m.enabled) }, { time, ramp });
+    w.setWetEnabled({ wet: m.wet ?? 1, enabled: Boolean(m.enabled) && !monitorDry }, { time, ramp });
     w.applySettings(settingsForModule(m), { time, ramp });
   }
 }
@@ -3404,9 +4812,19 @@ async function startPlayback() {
     return;
   }
   if (!audioBuffer) return;
+  const requestedOffset = Math.max(0, Math.min(audioBuffer.duration, transport.position));
   await ensureRealtimeGraph();
   if (!realtime.ctx || !realtime.graph) return;
-  stopPlayback();
+  stopPlayback({ resetTransport: false });
+  const loopRegion = getLoopRegion();
+  const looping = Boolean(els.loopToggle.checked);
+  const playOffset = looping
+    ? requestedOffset >= loopRegion.start && requestedOffset < loopRegion.end
+      ? requestedOffset
+      : loopRegion.start
+    : Math.min(requestedOffset, Math.max(0, audioBuffer.duration - 0.001));
+  const playDuration = looping ? audioBuffer.duration : Math.max(0.001, audioBuffer.duration - playOffset);
+  transport.position = playOffset;
 
   await realtime.ctx.resume();
   applyRealtimeSettings({ ramp: 0.03 });
@@ -3422,20 +4840,19 @@ async function startPlayback() {
     const sfxEnable = Boolean(p.sfxEnable);
     const bankId = String(p.sfxSource || "");
     const mode = String(p.sfxMode || "bed");
-    const sfxLevel = Math.min(1, Math.max(0, Number(p.sfxLevel ?? 0.22)));
+    const sfxLevel = Math.min(1, Math.max(0, Number(p.sfxLevel ?? 0.46)));
     const wantEdges = mode === "edges" || mode === "sequence";
     const wantBed = mode === "bed" || mode === "sequence";
     if (sfxEnable && bankId) {
       try {
-        await ensureTapeBankDecoded(bankId);
+        await ensureTapeBankDecoded(bankId, { mode });
         const assets = getTapeAssets(bankId);
         const w = realtime.graph.modules.get(tape.instanceId);
         if (assets && w) {
-          const looping = Boolean(els.loopToggle.checked);
           const startDur = wantEdges ? tapeDurationOf(assets.start) : 0;
           const endDur = !looping && wantEdges ? tapeDurationOf(assets.end) : 0;
           audioStartAt = startDur;
-          const audioStopAt = audioStartAt + audioBuffer.duration;
+          const audioStopAt = audioStartAt + playDuration;
           tapeEndStopAt = !looping && wantEdges && endDur > 0 ? baseTime + audioStopAt + endDur : 0;
 
           for (const lg of w.laneGraphs || []) {
@@ -3454,7 +4871,7 @@ async function startPlayback() {
               const off = tapePickBedOffset(audioDataSeed, assets.bed);
               bed.start(baseTime + audioStartAt, off);
               if (!looping) bed.stop(baseTime + audioStopAt);
-              realtime.extraSources.push(bed);
+              realtime.tapeBedSources.push(bed);
             }
             if (!looping && wantEdges && assets.end.length) {
               const r = tapeScheduleSequence(realtime.ctx, sfxNode, assets.end, baseTime + audioStopAt);
@@ -3480,8 +4897,7 @@ async function startPlayback() {
         const buf = await ensureTvBedDecoded(bedSource);
         const w = realtime.graph.modules.get(tv.instanceId);
         if (buf && w) {
-          const looping = Boolean(els.loopToggle.checked);
-          const endAt = tapeEndStopAt > 0 ? tapeEndStopAt : baseTime + audioStartAt + audioBuffer.duration;
+          const endAt = tapeEndStopAt > 0 ? tapeEndStopAt : baseTime + audioStartAt + playDuration;
           for (const lg of w.laneGraphs || []) {
             const sfxNode = lg?.graph?.nodes?.sfx || lg?.graph?.sfx || null;
             if (!sfxNode) continue;
@@ -3503,11 +4919,8 @@ async function startPlayback() {
   // Camcorder SFX (wind/cam beds + gust hits) are injected via the module's wind bus.
   const camcorder = modules.find((m) => m.type === "camcorder");
   if (camcorder?.enabled) {
-    const looping = Boolean(els.loopToggle.checked);
-    const totalDur = looping ? audioBuffer.duration : tapeEndStopAt > 0 ? Math.max(0.05, tapeEndStopAt - baseTime) : audioStartAt + audioBuffer.duration;
+    const totalDur = looping ? audioBuffer.duration : tapeEndStopAt > 0 ? Math.max(0.05, tapeEndStopAt - baseTime) : audioStartAt + playDuration;
     const camSettings = { ...settingsForModule(camcorder) };
-    if (!camSettings.camBedSource && (camcorderSfxManifest.camBed || []).length) camSettings.camBedSource = camcorderSfxManifest.camBed[0];
-    if (!camSettings.windBedSource && (camcorderSfxManifest.windBed || []).length) camSettings.windBedSource = camcorderSfxManifest.windBed[0];
 
     try {
       await ensureCamcorderSfxDecoded(camSettings);
@@ -3533,12 +4946,15 @@ async function startPlayback() {
   }
 
   const src = new AudioBufferSourceNode(realtime.ctx, { buffer: audioBuffer });
-  src.loop = Boolean(els.loopToggle.checked);
+  src.loop = looping;
+  src.loopStart = loopRegion.start;
+  src.loopEnd = loopRegion.end;
   src.connect(realtime.graph.input);
   src.onended = () => {
     if (realtime.src === src) {
       realtime.src = null;
       realtime.playing = false;
+      transport.position = 0;
       if (tapeEndStopAt > 0 && Number.isFinite(tapeEndStopAt) && realtime.ctx) {
         setState("Ejecting...");
         const ms = Math.max(0, Math.round((tapeEndStopAt - realtime.ctx.currentTime) * 1000));
@@ -3551,13 +4967,17 @@ async function startPlayback() {
         setState("Stopped");
       }
       els.stopBtn.disabled = true;
+      syncTransportUi();
     }
   };
   realtime.src = src;
   realtime.playing = true;
-  src.start(baseTime + audioStartAt);
+  realtime.sourceOffsetSec = playOffset;
+  realtime.sourceStartedAt = baseTime + audioStartAt;
+  src.start(realtime.sourceStartedAt, playOffset);
   setState("Playing");
   els.stopBtn.disabled = false;
+  syncTransportUi();
 }
 
 function downloadBytes(bytes, fileName) {
@@ -3591,18 +5011,18 @@ async function exportWav() {
     let tapeAssets = null;
     let tapeInst = null;
     let tapeMode = "bed";
-    let tapeSfxLevel = 0.22;
+    let tapeSfxLevel = 0.46;
     const tape = modules.find((m) => m.type === "tape");
     if (tape?.enabled) {
       const p = tape.params || {};
       const sfxEnable = Boolean(p.sfxEnable);
       const bankId = String(p.sfxSource || "");
       tapeMode = String(p.sfxMode || "bed");
-      tapeSfxLevel = Math.min(1, Math.max(0, Number(p.sfxLevel ?? 0.22)));
+      tapeSfxLevel = Math.min(1, Math.max(0, Number(p.sfxLevel ?? 0.46)));
       const wantEdges = tapeMode === "edges" || tapeMode === "sequence";
       if (sfxEnable && bankId && wantEdges) {
         try {
-          await ensureTapeBankDecoded(bankId);
+          await ensureTapeBankDecoded(bankId, { mode: tapeMode });
           tapeAssets = getTapeAssets(bankId);
           if (tapeAssets) {
             tapeStartDur = tapeDurationOf(tapeAssets.start);
@@ -3614,7 +5034,7 @@ async function exportWav() {
         }
       } else if (sfxEnable && bankId) {
         try {
-          await ensureTapeBankDecoded(bankId);
+          await ensureTapeBankDecoded(bankId, { mode: tapeMode });
           tapeAssets = getTapeAssets(bankId);
           tapeInst = tape.instanceId;
         } catch (e) {
@@ -3639,11 +5059,12 @@ async function exportWav() {
 
     const graph = await buildLameGraph(offline, {
       seed: audioDataSeed,
-      modules: modules.filter((m) => Boolean(m.enabled)),
+      modules: modules.filter((m) => Boolean(m.inRack)),
       stereo: wantStereo,
       tuningEdges,
       tuningSample: sample,
     });
+    graph.input.gain.setValueAtTime(inputTrimValue(), 0);
     graph.output.connect(offline.destination);
 
     graph.applyMaster(readMasterSettings(), { time: 0, ramp: 0 });
@@ -3716,8 +5137,6 @@ async function exportWav() {
       const w = graph.modules.get(camcorder.instanceId);
       if (w) {
         const camSettings = { ...settingsForModule(camcorder) };
-        if (!camSettings.camBedSource && (camcorderSfxManifest.camBed || []).length) camSettings.camBedSource = camcorderSfxManifest.camBed[0];
-        if (!camSettings.windBedSource && (camcorderSfxManifest.windBed || []).length) camSettings.windBedSource = camcorderSfxManifest.windBed[0];
         try {
           await ensureCamcorderSfxDecoded(camSettings);
           for (const lg of w.laneGraphs || []) {
@@ -3793,6 +5212,22 @@ function computePeaks(buffer, points = 2500) {
     out[i] = m;
   }
   return out;
+}
+
+// Peak extraction walks the whole audio file. The transport redraws at display
+// rate, so doing that work inside drawSourceWaveform turns a normal song into
+// hundreds of millions of main-thread sample reads per second.
+const waveformPeakCache = new WeakMap();
+function cachedPeaks(buffer, points = 2500) {
+  if (!buffer) return new Float32Array(0);
+  const count = Math.max(8, points | 0);
+  let bySize = waveformPeakCache.get(buffer);
+  if (!bySize) {
+    bySize = new Map();
+    waveformPeakCache.set(buffer, bySize);
+  }
+  if (!bySize.has(count)) bySize.set(count, computePeaks(buffer, count));
+  return bySize.get(count);
 }
 
 function getAutomationLengthSec() {
@@ -4097,7 +5532,7 @@ function initAutomationUi() {
         const { decoded, seed } = await decodeAudioFile(file);
         layer.buffer = decoded;
         layer.seed = seed >>> 0;
-        layer.tuningEdges = computeLeadingTrailingSilenceEdges(makeMonoBuffer(decoded), { thresholdDb: -50 });
+        layer.tuningEdges = computeLeadingTrailingSilenceEdges(decoded, { thresholdDb: -50 });
         layer.peaks = computePeaks(decoded);
         layer.fileName = file.name;
         renderAutomationUi();
@@ -4237,6 +5672,259 @@ function initAutomationUi() {
   }
 }
 
+function getLiveAutomationTargets() {
+  const targets = [];
+  for (const module of rackModules()) {
+    targets.push({
+      id: `module:${module.instanceId}:wet`,
+      label: `${module.name} / Mix`,
+      group: "RACK",
+      apply: (value) => {
+        module.wet = clamp01(value);
+        const card = els.moduleRow?.querySelector(`[data-instance-id="${module.instanceId}"]`);
+        const input = card?.querySelector(`input[aria-label="${module.name} wet mix"]`);
+        if (input) input.value = String(module.wet);
+        const mixLabel = card?.querySelector(".rack-module__mix label");
+        if (mixLabel) mixLabel.textContent = `MIX ${pct01(module.wet)}`;
+        card?.querySelector(".rack-module__knob")?.style.setProperty("--turn", `${-128 + module.wet * 256}deg`);
+      },
+    });
+    for (const spec of SURFACE_CONTROLS[module.type] || []) {
+      targets.push({
+        id: `module:${module.instanceId}:${spec.key}`,
+        label: `${module.name} / ${spec.label}`,
+        group: "RACK",
+        apply: (value) => {
+          applySurfaceParam(module, spec.key, value);
+          const input = els.moduleRow?.querySelector(`[data-instance-id="${module.instanceId}"] [data-surface-key="${spec.key}"]`);
+          if (input) {
+            input.value = String(value);
+            const output = input.closest(".surface-control")?.querySelector("output");
+            if (output) output.textContent = pct01(value);
+          }
+        },
+      });
+    }
+  }
+  const masterSpecs = [
+    ["gain", "Input Gain", els.masterGain, 0, 1.5],
+    ...masterEqInputs().map((input) => [`eq-${input.dataset.eqFrequency}`, `EQ ${input.previousElementSibling?.querySelector("label")?.textContent || input.dataset.eqFrequency}`, input, -12, 12]),
+    ["noise-threshold", "Noise Threshold", els.masterNoiseThreshold, -80, -20],
+    ["noise-reduction", "Noise Reduction", els.masterNoiseReductionDb, 0, 36],
+    ["noise-blend", "Noise Blend", els.masterNoiseMix, 0, 1],
+    ["saturation", "Saturation", els.masterSaturation, 0, 1],
+    ["delay-time", "Delay Time", els.masterDelayTime, 10, 1000],
+    ["delay-feedback", "Delay Feedback", els.masterDelayFeedback, 0, 0.85],
+    ["delay-mix", "Delay Mix", els.masterDelayMix, 0, 1],
+    ["reverb-predelay", "Reverb Pre-delay", els.masterReverbPreDelay, 0, 200],
+    ["reverb-decay", "Reverb Decay", els.masterReverbDecay, 0.3, 8],
+    ["reverb-mix", "Reverb Mix", els.masterReverbMix, 0, 1],
+    ["compression", "Bus Compression", els.masterComp, 0, 1],
+    ["limiter", "Limiter", els.limiter, 0, 1],
+    ["ceiling", "Ceiling", els.ceiling, 0.2, 1],
+  ];
+  for (const [key, label, element, min, max] of masterSpecs) {
+    if (!element) continue;
+    targets.push({ id: `master:${key}`, label: `Master / ${label}`, group: "MASTER", apply: (value) => { element.value = String(min + clamp01(value) * (max - min)); } });
+  }
+  return targets;
+}
+
+function liveLane(targetId, create = true) {
+  const id = String(targetId || "");
+  if (!id) return null;
+  if (!liveAutomation.lanes.has(id) && create) liveAutomation.lanes.set(id, new Lane("float"));
+  return liveAutomation.lanes.get(id) || null;
+}
+
+function refreshLiveAutomationTargets() {
+  if (!els.autoTarget || !els.automationTracks) return;
+  const targets = getLiveAutomationTargets();
+  const previous = targets.some((target) => target.id === liveAutomation.target) ? liveAutomation.target : targets[0]?.id || "";
+  liveAutomation.target = previous;
+  els.autoTarget.replaceChildren();
+  els.automationTracks.replaceChildren();
+  for (const target of targets) {
+    const option = document.createElement("option");
+    option.value = target.id;
+    option.textContent = target.label;
+    els.autoTarget.appendChild(option);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `automation-target${target.id === previous ? " is-active" : ""}`;
+    button.innerHTML = `<span>${target.label}</span><b>${liveLane(target.id, false)?.points.length || 0} PTS</b>`;
+    button.addEventListener("click", () => {
+      liveAutomation.target = target.id;
+      els.autoTarget.value = target.id;
+      refreshLiveAutomationTargets();
+      drawLiveAutomationLane();
+    });
+    els.automationTracks.appendChild(button);
+  }
+  els.autoTarget.value = previous;
+}
+
+function drawLiveAutomationLane() {
+  const canvas = els.autoLaneCanvas;
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  const duration = Math.max(6, audioBuffer?.duration || 0);
+  const pxPerSec = Math.max(20, Math.min(400, Number(els.autoZoom?.value || automation.pxPerSec) || 100));
+  automation.pxPerSec = pxPerSec;
+  const width = Math.max(720, Math.ceil(duration * pxPerSec));
+  const height = 220;
+  canvas.width = Math.floor(width * dpr);
+  canvas.height = Math.floor(height * dpr);
+  canvas.style.width = `${width}px`;
+  canvas.style.height = `${height}px`;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = "#060708";
+  ctx.fillRect(0, 0, width, height);
+  if (audioBuffer) {
+    const peaks = cachedPeaks(audioBuffer, Math.min(2600, Math.max(100, Math.floor(width / 3))));
+    ctx.fillStyle = "rgba(78,246,255,.09)";
+    const step = width / peaks.length;
+    for (let index = 0; index < peaks.length; index++) {
+      const magnitude = peaks[index] * height * .42;
+      ctx.fillRect(index * step, height / 2 - magnitude, Math.max(1, step), magnitude * 2);
+    }
+  }
+  const bpm = Math.max(30, Math.min(240, Number(els.autoBpm?.value || automation.bpm) || 120));
+  automation.bpm = bpm;
+  const beat = 60 / bpm;
+  for (let time = 0; time <= duration; time += beat) {
+    const x = time * pxPerSec;
+    ctx.strokeStyle = Math.round(time / beat) % 4 === 0 ? "rgba(255,248,237,.15)" : "rgba(255,248,237,.07)";
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, height);
+    ctx.stroke();
+  }
+  const lane = liveLane(liveAutomation.target, false);
+  const toY = (value) => 18 + (1 - clamp01(value)) * (height - 36);
+  ctx.strokeStyle = "#ff37cf";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  if (lane?.points.length) {
+    lane.points.forEach((point, index) => {
+      const x = point.t * pxPerSec;
+      const y = toY(point.v);
+      if (index === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+  } else {
+    ctx.moveTo(0, toY(.5));
+    ctx.lineTo(width, toY(.5));
+  }
+  ctx.stroke();
+  for (const point of lane?.points || []) {
+    ctx.fillStyle = "#fff8ed";
+    ctx.beginPath();
+    ctx.arc(point.t * pxPerSec, toY(point.v), 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#ff37cf";
+    ctx.stroke();
+  }
+}
+
+function renderLiveAutomationUi() {
+  if (!els.autoTarget || !els.autoLaneCanvas) return;
+  if (els.autoBpmVal) els.autoBpmVal.textContent = Number(els.autoBpm?.value || 120).toFixed(1);
+  if (els.autoZoomVal) els.autoZoomVal.textContent = `${Math.round(Number(els.autoZoom?.value || 100))} px/s`;
+  if (els.autoLenText) els.autoLenText.textContent = fmtTime(audioBuffer?.duration || 0);
+  refreshLiveAutomationTargets();
+  drawLiveAutomationLane();
+}
+
+function applyLiveAutomationAt(position) {
+  if (!realtime.playing || liveAutomation.applying) return;
+  const targets = new Map(getLiveAutomationTargets().map((target) => [target.id, target]));
+  let changed = false;
+  let masterChanged = false;
+  liveAutomation.applying = true;
+  for (const [id, lane] of liveAutomation.lanes.entries()) {
+    if (!lane.points.length) continue;
+    const target = targets.get(id);
+    if (!target) continue;
+    target.apply(lane.valueAt(position, lane.points[0].v));
+    changed = true;
+    if (id.startsWith("master:")) masterChanged = true;
+  }
+  if (changed) applyRealtimeSettings({ ramp: 0.035 });
+  if (masterChanged && performance.now() - liveAutomation.lastMasterUi > 90) {
+    liveAutomation.lastMasterUi = performance.now();
+    refreshMasterLabels();
+  }
+  liveAutomation.applying = false;
+}
+
+function initLiveAutomationUi() {
+  if (!els.autoTarget || !els.autoLaneCanvas) return;
+  els.autoTarget.addEventListener("change", () => {
+    liveAutomation.target = String(els.autoTarget.value || "");
+    refreshLiveAutomationTargets();
+    drawLiveAutomationLane();
+  });
+  for (const element of [els.autoBpm, els.autoZoom]) element?.addEventListener("input", renderLiveAutomationUi);
+  els.autoSnap?.addEventListener("change", renderLiveAutomationUi);
+  els.autoLaneCanvas.addEventListener("contextmenu", (event) => event.preventDefault());
+  els.autoLaneCanvas.addEventListener("pointerdown", (event) => {
+    const lane = liveLane(liveAutomation.target, true);
+    if (!lane) return;
+    const rect = els.autoLaneCanvas.getBoundingClientRect();
+    const logicalWidth = parseFloat(els.autoLaneCanvas.style.width) || rect.width;
+    const x = (event.clientX - rect.left) * (logicalWidth / Math.max(1, rect.width));
+    const y = (event.clientY - rect.top) * (220 / Math.max(1, rect.height));
+    let time = Math.max(0, x / automation.pxPerSec);
+    if (automation.snap) {
+      const beat = 60 / automation.bpm;
+      time = Math.round(time / beat) * beat;
+    }
+    const value = clamp01(1 - (y - 18) / (220 - 36));
+    if (event.button === 2) {
+      lane.removeNearest(time, 12 / automation.pxPerSec);
+      renderLiveAutomationUi();
+      return;
+    }
+    let point = lane.points.find((candidate) => Math.abs(candidate.t - time) <= 12 / automation.pxPerSec);
+    if (!point) {
+      lane.addPoint(time, value);
+      point = lane.points.find((candidate) => candidate.t === time) || lane.points[lane.points.length - 1];
+    }
+    liveAutomation.dragging = { lane, point };
+    els.autoLaneCanvas.setPointerCapture?.(event.pointerId);
+    drawLiveAutomationLane();
+  });
+  els.autoLaneCanvas.addEventListener("pointermove", (event) => {
+    const drag = liveAutomation.dragging;
+    if (!drag) return;
+    const rect = els.autoLaneCanvas.getBoundingClientRect();
+    const logicalWidth = parseFloat(els.autoLaneCanvas.style.width) || rect.width;
+    const x = (event.clientX - rect.left) * (logicalWidth / Math.max(1, rect.width));
+    const y = (event.clientY - rect.top) * (220 / Math.max(1, rect.height));
+    let time = Math.max(0, x / automation.pxPerSec);
+    if (automation.snap) {
+      const beat = 60 / automation.bpm;
+      time = Math.round(time / beat) * beat;
+    }
+    drag.point.t = time;
+    drag.point.v = clamp01(1 - (y - 18) / (220 - 36));
+    drag.lane.points.sort((a, b) => a.t - b.t);
+    drawLiveAutomationLane();
+  });
+  const endDrag = () => {
+    if (!liveAutomation.dragging) return;
+    liveAutomation.dragging = null;
+    refreshLiveAutomationTargets();
+    drawLiveAutomationLane();
+  };
+  els.autoLaneCanvas.addEventListener("pointerup", endDrag);
+  els.autoLaneCanvas.addEventListener("pointercancel", endDrag);
+  renderLiveAutomationUi();
+}
+
 async function loadFile(file) {
   if (!file) return;
   setState("Decoding...");
@@ -4260,17 +5948,334 @@ async function loadFile(file) {
   }
 
   audioBuffer = els.monoOut.checked ? makeMonoBuffer(sourceBuffer) : makeStereoBuffer(sourceBuffer);
-  tuningEdges = computeLeadingTrailingSilenceEdges(makeMonoBuffer(sourceBuffer), { thresholdDb: -50 });
+  tuningEdges = computeLeadingTrailingSilenceEdges(sourceBuffer, { thresholdDb: -50 });
+  transport.position = 0;
+  if (els.loopStart) els.loopStart.value = "0";
+  if (els.loopEnd) els.loopEnd.value = audioBuffer.duration.toFixed(2);
 
   refreshFileStatus(file.name);
+  renderLiveAutomationUi();
   els.playBtn.disabled = false;
   els.exportBtn.disabled = false;
   setState("Ready");
 }
 
+const TOUR_STEPS = [
+  {
+    selector: ".file-button",
+    eyebrow: "BEGIN HERE",
+    title: "Load something worth damaging.",
+    body: "Choose a WAV or MP3. The file stays in this browser, and loading it does not upload your audio anywhere.",
+  },
+  {
+    selector: ".transport-deck",
+    eyebrow: "AUDITION",
+    title: "Find the moment that matters.",
+    body: "Play, scrub, set a loop, adjust monitor volume, and compare the dry source against the complete processed rack.",
+  },
+  {
+    selector: ".device-library",
+    eyebrow: "CHOOSE HARDWARE",
+    title: "Pull a device off the shelf.",
+    body: "Filter by family, drag a device into the rack, or use its plus switch. Installed devices remain visible but subdued.",
+  },
+  {
+    selector: ".rack-bay",
+    eyebrow: "BUILD THE PATH",
+    title: "The signal moves left to right.",
+    body: "Reorder hardware with its grip. Play the exposed controls and Mix directly on each device; bypass or remove it from the faceplate.",
+  },
+  {
+    selector: ".device-inspector",
+    eyebrow: "GO DEEPER",
+    title: "Click hardware to inspect it.",
+    body: "The right panel holds device presets, physical models, failure mechanics, and exact values while the rack remains visible.",
+    panelSide: "left",
+  },
+  {
+    selector: ".drawer-tabs",
+    eyebrow: "FINISH OR MOVE",
+    title: "Mastering and Automation are separate stages.",
+    body: "Mastering cleans and protects the final chain. Automation draws exposed controls against the source timeline. Each opens as a focused console.",
+    panelSide: "left",
+  },
+  {
+    selector: "#exportBtn",
+    eyebrow: "COMMIT THE SIGNAL",
+    title: "Export what you actually heard.",
+    body: "The WAV export uses the same rack order, device state, automation, and mastering path as playback. You can reopen this walkthrough from GUIDE ? anytime.",
+    panelSide: "left",
+  },
+];
+
+let tourStepIndex = -1;
+let tourFocusedElement = null;
+let guideReturnFocus = null;
+
+function guideSeen() {
+  try {
+    return localStorage.getItem(LS_GUIDE_SEEN) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function markGuideSeen() {
+  try {
+    localStorage.setItem(LS_GUIDE_SEEN, "true");
+  } catch {
+    // The guide still works when storage is unavailable.
+  }
+}
+
+function dismissWelcomeCoach({ remember = true } = {}) {
+  if (els.welcomeCoach) els.welcomeCoach.hidden = true;
+  if (remember) markGuideSeen();
+}
+
+function clearTourFocus() {
+  tourFocusedElement?.classList.remove("tour-focus");
+  tourFocusedElement = null;
+}
+
+function closeTour({ remember = true, returnFocus = true } = {}) {
+  clearTourFocus();
+  tourStepIndex = -1;
+  if (els.tourPanel) {
+    els.tourPanel.hidden = true;
+    els.tourPanel.classList.remove("is-left");
+  }
+  if (remember) markGuideSeen();
+  if (returnFocus) els.guideBtn?.focus({ preventScroll: true });
+}
+
+function renderTourStep({ scroll = true } = {}) {
+  if (!els.tourPanel || tourStepIndex < 0 || tourStepIndex >= TOUR_STEPS.length) return;
+  clearTourFocus();
+  const step = TOUR_STEPS[tourStepIndex];
+  const target = document.querySelector(step.selector);
+  if (target) {
+    target.classList.add("tour-focus");
+    tourFocusedElement = target;
+    if (scroll) {
+      const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+      target.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "center", inline: "center" });
+    }
+  }
+
+  els.tourProgress.textContent = String(tourStepIndex + 1).padStart(2, "0") + " / " + String(TOUR_STEPS.length).padStart(2, "0");
+  els.tourEyebrow.textContent = step.eyebrow;
+  els.tourTitle.textContent = step.title;
+  els.tourBody.textContent = step.body;
+  els.tourPrevBtn.disabled = tourStepIndex === 0;
+  els.tourNextBtn.textContent = tourStepIndex === TOUR_STEPS.length - 1 ? "FINISH" : "NEXT";
+  els.tourPanel.classList.toggle("is-left", step.panelSide === "left");
+}
+
+function startTour() {
+  if (!els.tourPanel) return;
+  closeGuide({ returnFocus: false });
+  dismissWelcomeCoach({ remember: false });
+  markGuideSeen();
+  tourStepIndex = 0;
+  els.tourPanel.hidden = false;
+  renderTourStep();
+  els.tourNextBtn?.focus({ preventScroll: true });
+}
+
+function moveTour(direction) {
+  if (tourStepIndex < 0) return;
+  const next = tourStepIndex + direction;
+  if (next >= TOUR_STEPS.length) {
+    closeTour();
+    return;
+  }
+  tourStepIndex = Math.max(0, next);
+  renderTourStep();
+}
+
+function openGuide(trigger = document.activeElement) {
+  if (!els.guideDialog) return;
+  closeTour({ remember: false, returnFocus: false });
+  dismissWelcomeCoach({ remember: false });
+  guideReturnFocus = trigger instanceof HTMLElement ? trigger : els.guideBtn;
+  els.guideDialog.hidden = false;
+  document.body.classList.add("guide-open");
+  els.guideCloseBtn?.focus({ preventScroll: true });
+}
+
+function closeGuide({ remember = true, returnFocus = true } = {}) {
+  if (!els.guideDialog || els.guideDialog.hidden) return;
+  els.guideDialog.hidden = true;
+  document.body.classList.remove("guide-open");
+  if (remember) markGuideSeen();
+  if (returnFocus) guideReturnFocus?.focus?.({ preventScroll: true });
+}
+
+function initGuideUi() {
+  els.guideBtn?.addEventListener("click", (event) => openGuide(event.currentTarget));
+  els.welcomeGuideBtn?.addEventListener("click", (event) => openGuide(event.currentTarget));
+  els.welcomeTourBtn?.addEventListener("click", () => startTour());
+  els.welcomeCoachClose?.addEventListener("click", () => dismissWelcomeCoach());
+  els.guideCloseBtn?.addEventListener("click", () => closeGuide());
+  els.guideDialog?.querySelector("[data-guide-close]")?.addEventListener("click", () => closeGuide());
+  els.guideStartTourBtn?.addEventListener("click", () => startTour());
+  els.tourCloseBtn?.addEventListener("click", () => closeTour());
+  els.tourPrevBtn?.addEventListener("click", () => moveTour(-1));
+  els.tourNextBtn?.addEventListener("click", () => moveTour(1));
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && tourStepIndex >= 0) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      closeTour();
+      return;
+    }
+    if (event.key === "Escape" && els.guideDialog && !els.guideDialog.hidden) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      closeGuide();
+      return;
+    }
+    if (tourStepIndex >= 0 && event.key === "ArrowRight") {
+      event.preventDefault();
+      moveTour(1);
+      return;
+    }
+    if (tourStepIndex >= 0 && event.key === "ArrowLeft") {
+      event.preventDefault();
+      moveTour(-1);
+      return;
+    }
+    if (event.key === "Tab" && els.guideDialog && !els.guideDialog.hidden) {
+      const focusable = [...els.guideDialog.querySelectorAll("button:not(:disabled),a[href],input:not(:disabled),select:not(:disabled),[tabindex]:not([tabindex='-1'])")];
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+  });
+
+  if (els.welcomeCoach) els.welcomeCoach.hidden = guideSeen();
+}
+
+function initWorkstationUi() {
+  initGuideUi();
+  for (const button of document.querySelectorAll("[data-drawer-target]")) {
+    button.addEventListener("click", () => {
+      const target = String(button.dataset.drawerTarget || "mastering");
+      const isSameOpen = els.toolDrawer?.dataset.drawerOpen === "true" && els.toolDrawer?.dataset.drawerTab === target;
+      openDrawer(target, !isSameOpen);
+    });
+  }
+  els.drawerToggle?.addEventListener("click", () => {
+    const isOpen = els.toolDrawer?.dataset.drawerOpen === "true";
+    openDrawer(String(els.toolDrawer?.dataset.drawerTab || "mastering"), !isOpen);
+  });
+  openDrawer("mastering", false);
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && els.toolDrawer?.dataset.drawerOpen === "true") openDrawer(String(els.toolDrawer.dataset.drawerTab || "mastering"), false);
+  });
+
+  for (const button of document.querySelectorAll("[data-library-filter]")) {
+    button.addEventListener("click", () => {
+      libraryFilter = String(button.dataset.libraryFilter || "all");
+      for (const candidate of document.querySelectorAll("[data-library-filter]")) {
+        candidate.setAttribute("aria-pressed", candidate === button ? "true" : "false");
+      }
+      renderDeviceLibrary();
+    });
+  }
+
+  els.moduleRow?.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+    els.moduleRow.classList.add("is-dragging");
+    showRackDropMarker(rackDropIndex(event));
+  });
+  els.moduleRow?.addEventListener("dragleave", (event) => {
+    if (!els.moduleRow.contains(event.relatedTarget)) {
+      els.moduleRow.classList.remove("is-dragging");
+      clearRackDropMarker();
+    }
+  });
+  els.moduleRow?.addEventListener("drop", async (event) => {
+    event.preventDefault();
+    const payload = String(event.dataTransfer?.getData("text/plain") || "");
+    let targetIndex = rackDropIndex(event);
+    els.moduleRow.classList.remove("is-dragging");
+    clearRackDropMarker();
+    if (payload.startsWith("library:")) {
+      await addModuleToRack(payload.slice("library:".length), targetIndex);
+      return;
+    }
+    if (payload.startsWith("rack:")) {
+      const instanceId = Number(payload.slice("rack:".length));
+      const from = rackModules().findIndex((module) => module.instanceId === instanceId);
+      if (from >= 0 && from < targetIndex) targetIndex -= 1;
+      await moveRackModule(instanceId, targetIndex);
+    }
+  });
+
+  els.transportSeek?.addEventListener("input", () => {
+    transport.position = Number(els.transportSeek.value) || 0;
+    syncTransportUi();
+    drawSourceWaveform();
+  });
+  els.transportSeek?.addEventListener("change", async () => {
+    if (!realtime.playing) return;
+    stopPlayback({ resetTransport: false });
+    await startPlayback();
+  });
+
+  const syncLoopBounds = () => {
+    if (!audioBuffer) return;
+    const { start, end } = getLoopRegion();
+    els.loopStart.value = start.toFixed(2);
+    els.loopEnd.value = end.toFixed(2);
+    if (realtime.src) {
+      realtime.src.loop = Boolean(els.loopToggle.checked);
+      realtime.src.loopStart = start;
+      realtime.src.loopEnd = end;
+    }
+  };
+  els.loopStart?.addEventListener("change", syncLoopBounds);
+  els.loopEnd?.addEventListener("change", syncLoopBounds);
+
+  els.monitorBtn?.addEventListener("click", () => {
+    monitorDry = !monitorDry;
+    els.monitorBtn.setAttribute("aria-pressed", monitorDry ? "true" : "false");
+    const label = els.monitorBtn.querySelector("b");
+    if (label) label.textContent = monitorDry ? "SOURCE" : "PROCESSED";
+    els.monitorBtn.classList.toggle("is-source", monitorDry);
+    applyRealtimeSettings({ ramp: 0.015 });
+    syncTransportUi();
+  });
+
+  els.panicBtn?.addEventListener("click", () => {
+    stopPlayback({ resetTransport: false });
+    if (Number(els.masterGain?.value) > 0.25) els.masterGain.value = "0.25";
+    refreshMasterLabels();
+    applyRealtimeSettings({ ramp: 0 });
+    setState("Safe stop");
+  });
+
+  if (!transport.frame) transport.frame = window.requestAnimationFrame(animateSignal);
+}
+
 els.fileInput.addEventListener("change", async () => {
   const file = els.fileInput.files?.[0];
   if (!file) return;
+  if (!hasToolAccess()) {
+    els.fileInput.value = "";
+    return;
+  }
   try {
     if (viewMode === "automation") {
       ensureAutomationLayers();
@@ -4280,7 +6285,7 @@ els.fileInput.addEventListener("change", async () => {
       const { decoded, seed } = await decodeAudioFile(file);
       layer.buffer = decoded;
       layer.seed = seed >>> 0;
-      layer.tuningEdges = computeLeadingTrailingSilenceEdges(makeMonoBuffer(decoded), { thresholdDb: -50 });
+      layer.tuningEdges = computeLeadingTrailingSilenceEdges(decoded, { thresholdDb: -50 });
       layer.peaks = computePeaks(decoded);
       layer.fileName = file.name;
       renderAutomationUi();
@@ -4296,6 +6301,12 @@ els.fileInput.addEventListener("change", async () => {
 
 els.playBtn.addEventListener("click", async () => {
   try {
+    if (realtime.playing) {
+      stopPlayback({ resetTransport: false });
+      setState("Paused");
+      return;
+    }
+    if (!hasToolAccess()) return;
     await startPlayback();
   } catch (e) {
     console.error(e);
@@ -4307,6 +6318,7 @@ els.stopBtn.addEventListener("click", () => {
 });
 els.exportBtn.addEventListener("click", async () => {
   try {
+    if (!hasToolAccess()) return;
     await exportWav();
   } catch (e) {
     console.error(e);
@@ -4315,7 +6327,12 @@ els.exportBtn.addEventListener("click", async () => {
 });
 
 els.loopToggle.addEventListener("change", () => {
-  if (realtime.src) realtime.src.loop = Boolean(els.loopToggle.checked);
+  if (realtime.src) {
+    const { start, end } = getLoopRegion();
+    realtime.src.loop = Boolean(els.loopToggle.checked);
+    realtime.src.loopStart = start;
+    realtime.src.loopEnd = end;
+  }
 });
 
 els.masterPreset?.addEventListener("change", async () => {
@@ -4329,12 +6346,35 @@ els.masterPreset?.addEventListener("change", async () => {
   }
 });
 
-for (const el of [els.masterGain, els.masterHpHz, els.masterLpHz, els.masterComp, els.ceiling, els.limiter].filter(Boolean)) {
+for (const el of [
+  els.masterGain, els.masterHpHz, els.masterLpHz, ...masterEqInputs(),
+  els.masterNoiseThreshold, els.masterNoiseReductionDb, els.masterNoiseAttack, els.masterNoiseRelease, els.masterNoiseMix,
+  els.masterSaturation, els.masterDelayTime, els.masterDelayFeedback, els.masterDelayDamping, els.masterDelayMix,
+  els.masterReverbPreDelay, els.masterReverbDecay, els.masterReverbDamping, els.masterReverbMix,
+  els.masterComp, els.ceiling, els.limiter,
+].filter(Boolean)) {
   el.addEventListener("input", () => {
     refreshMasterLabels();
     applyRealtimeSettings();
   });
 }
+els.inputTrim?.addEventListener("input", () => {
+  refreshTransportLevelLabels();
+  applyRealtimeSettings();
+});
+els.monitorVolume?.addEventListener("input", () => {
+  refreshTransportLevelLabels();
+  try {
+    localStorage.setItem(LS_MONITOR_VOLUME, String(monitorVolumeValue()));
+  } catch {
+    // Storage is optional; the live control still works.
+  }
+  applyRealtimeSettings();
+});
+els.masterNoiseLearn?.addEventListener("change", () => {
+  refreshMasterLabels();
+  applyRealtimeSettings();
+});
 els.softClip.addEventListener("change", () => {
   refreshMasterLabels();
   applyRealtimeSettings();
@@ -4368,7 +6408,7 @@ els.saveMasterPresetBtn?.addEventListener("click", () => {
     modules: Object.fromEntries(
       modules.map((m) => [
         m.type,
-        { enabled: Boolean(m.enabled), wet: clamp01(m.wet ?? 1), params: { ...(m.params || {}) } },
+        { inRack: Boolean(m.inRack), enabled: Boolean(m.enabled), wet: clamp01(m.wet ?? 1), params: { ...(m.params || {}) } },
       ]),
     ),
   };
@@ -4390,6 +6430,14 @@ els.deleteMasterPresetBtn?.addEventListener("click", () => {
 });
 
 async function init() {
+  await initAccessGate();
+  try {
+    const savedMonitorRaw = localStorage.getItem(LS_MONITOR_VOLUME);
+    const savedMonitor = savedMonitorRaw == null ? NaN : Number(savedMonitorRaw);
+    if (els.monitorVolume && Number.isFinite(savedMonitor)) els.monitorVolume.value = String(Math.max(0, Math.min(1, savedMonitor)));
+  } catch {
+    // Storage may be unavailable in strict/privacy contexts.
+  }
   refreshMasterLabels();
   tuningManifest = await loadTuningManifest();
   tapeSfxManifest = await loadTapeSfxManifest();
@@ -4397,17 +6445,7 @@ async function init() {
   tvSfxManifest = await loadTvSfxManifest();
   if (els.viewSelect) {
     const views = [
-      { value: "suite", label: "Suite" },
-      { value: "automation", label: "Automation" },
-      { value: "occlusion", label: "Obfuscation Only" },
-      { value: "transmission", label: "Transmission Only" },
-      { value: "comms", label: "Comms Only" },
-      { value: "conference", label: "Conference Only" },
-      { value: "tape", label: "Tape Only" },
-      { value: "television", label: "Television Only" },
-      { value: "cartridge", label: "Cartridge Only" },
-      { value: "cd", label: "CD Only" },
-      { value: "camcorder", label: "Camcorder Only" },
+      { value: "suite", label: "Live Rack" },
     ];
     els.viewSelect.replaceChildren();
     for (const v of views) {
@@ -4442,8 +6480,13 @@ async function init() {
     els.masterPreset.value = "";
   }
   refreshMasterPresetSelect({ keepValue: false });
-  renderModules();
-  initAutomationUi();
+  initWorkstationUi();
+  // Start silent and predictable. Character processing is opt-in through an
+  // engine enable or an audition preset, never an implicit 100% wet effect.
+  await applyMasterPresetById("safety-clean");
+  if (els.masterPreset) els.masterPreset.value = "safety-clean";
+  updateMasterPresetButtons();
+  initLiveAutomationUi();
   refreshFileStatus("None");
   setState("Idle");
 }

@@ -93,6 +93,28 @@
               </div>
 
               <div class="control">
+                <div class="labelRow"><label for="format">Recording Format</label><span id="formatVal" class="val"></span></div>
+                <select id="format">
+                  <option value="vhsc">VHS-C Linear Track</option>
+                  <option value="video8">Video8 / Hi8</option>
+                  <option value="minidv" selected>MiniDV PCM</option>
+                  <option value="digicam">Cheap Digicam</option>
+                  <option value="action">Action Camera</option>
+                </select>
+              </div>
+
+              <div class="control">
+                <div class="labelRow"><label for="micModel">Microphone</label><span id="micModelVal" class="val"></span></div>
+                <select id="micModel">
+                  <option value="electret" selected>Built-in Electret</option>
+                  <option value="cheapMono">Cheap Mono Capsule</option>
+                  <option value="stereo">Stereo Camera Mic</option>
+                  <option value="waterproof">Waterproof Action Mic</option>
+                  <option value="shotgun">External Shotgun</option>
+                </select>
+              </div>
+
+              <div class="control">
                 <div class="labelRow">
                   <label for="windLevel">SFX Master</label>
                   <span id="windLevelVal" class="val"></span>
@@ -211,6 +233,11 @@
               </div>
 
               <div class="control">
+                <div class="labelRow"><label for="agcPump">AGC Noise Pump</label><span id="agcPumpVal" class="val"></span></div>
+                <input id="agcPump" type="range" min="0" max="1" step="0.001" value="0.45" />
+              </div>
+
+              <div class="control">
                 <div class="labelRow">
                   <label for="clip">Clip</label>
                   <span id="clipVal" class="val"></span>
@@ -240,6 +267,11 @@
                   <span id="rateVal" class="val"></span>
                 </div>
                 <input id="rate" type="range" min="8000" max="48000" step="100" value="24000" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow"><label for="flutter">Transport Flutter</label><span id="flutterVal" class="val"></span></div>
+                <input id="flutter" type="range" min="0" max="1" step="0.001" value="0.12" />
               </div>
 
               <div class="control">
@@ -312,6 +344,11 @@
               </div>
 
               <div class="control">
+                <div class="labelRow"><label for="motorBleed">Camera Motor Bleed</label><span id="motorBleedVal" class="val"></span></div>
+                <input id="motorBleed" type="range" min="0" max="1" step="0.001" value="0.08" />
+              </div>
+
+              <div class="control">
                 <div class="labelRow">
                   <label for="ceiling">Ceiling</label>
                   <span id="ceilingVal" class="val"></span>
@@ -350,6 +387,6 @@
       </footer>
     </main>
 
-    <script type="module" src="./src/main.js"></script>
+    <script type="module" src="./src/main.js?v=20260827.28"></script>
   </body>
 </html>

@@ -28,6 +28,12 @@ const els = {
   repeatMs: document.querySelector("#repeatMs"),
   jitterMs: document.querySelector("#jitterMs"),
   jitterRate: document.querySelector("#jitterRate"),
+  burstiness: document.querySelector("#burstiness"),
+  suppression: document.querySelector("#suppression"),
+  agc: document.querySelector("#agc"),
+  bufferSlip: document.querySelector("#bufferSlip"),
+  bandwidthSwitch: document.querySelector("#bandwidthSwitch"),
+  comfortNoise: document.querySelector("#comfortNoise"),
   gate: document.querySelector("#gate"),
   bits: document.querySelector("#bits"),
   rate: document.querySelector("#rate"),
@@ -52,6 +58,12 @@ const els = {
   repeatMsVal: document.querySelector("#repeatMsVal"),
   jitterMsVal: document.querySelector("#jitterMsVal"),
   jitterRateVal: document.querySelector("#jitterRateVal"),
+  burstinessVal: document.querySelector("#burstinessVal"),
+  suppressionVal: document.querySelector("#suppressionVal"),
+  agcVal: document.querySelector("#agcVal"),
+  bufferSlipVal: document.querySelector("#bufferSlipVal"),
+  bandwidthSwitchVal: document.querySelector("#bandwidthSwitchVal"),
+  comfortNoiseVal: document.querySelector("#comfortNoiseVal"),
   gateVal: document.querySelector("#gateVal"),
   bitsVal: document.querySelector("#bitsVal"),
   rateVal: document.querySelector("#rateVal"),
@@ -126,37 +138,40 @@ function computeMacroTargets(primary) {
 
   const narrow = Math.pow(1 - bandwidth, 1.35);
   const c = Math.pow(codec, 1.25);
-  const d = Math.pow(dropouts, 1.3);
+  const d = Math.pow(dropouts, 1.5);
   const j = Math.pow(jitter, 1.2);
   const r = Math.pow(robot, 1.25);
-  const n = Math.pow(noise, 1.2);
+  const n = Math.pow(noise, 1.15);
 
   const base =
     mode === "cell"
-      ? { hp: 260, hpR: 380, lp: 3600, lpR: 1700, mid: 1900, midR: 520, hump: 2.2, out: 1.02, ceil: 0.92 }
+      ? { hp: 230, hpR: 310, lp: 3600, lpR: 1500, mid: 1900, midR: 520, hump: 2.2, out: 1.02, ceil: 0.92, frame: 20, burst: 0.68, suppress: 0.5, agc: 0.46 }
       : mode === "skype"
-        ? { hp: 220, hpR: 340, lp: 4200, lpR: 1600, mid: 1700, midR: 440, hump: 2.0, out: 0.98, ceil: 0.92 }
+        ? { hp: 170, hpR: 300, lp: 4800, lpR: 1800, mid: 1700, midR: 440, hump: 2.0, out: 0.98, ceil: 0.92, frame: 30, burst: 0.58, suppress: 0.34, agc: 0.32 }
         : mode === "zoom"
-          ? { hp: 180, hpR: 260, lp: 6200, lpR: 1900, mid: 2100, midR: 600, hump: 1.5, out: 0.98, ceil: 0.94 }
-          : { hp: 210, hpR: 320, lp: 5200, lpR: 1700, mid: 2000, midR: 560, hump: 1.8, out: 0.98, ceil: 0.93 };
+          ? { hp: 120, hpR: 260, lp: 7600, lpR: 2500, mid: 2100, midR: 600, hump: 1.4, out: 0.98, ceil: 0.94, frame: 10, burst: 0.48, suppress: 0.62, agc: 0.58 }
+          : { hp: 100, hpR: 280, lp: 7200, lpR: 2300, mid: 2000, midR: 560, hump: 1.6, out: 0.98, ceil: 0.93, frame: 20, burst: 0.56, suppress: 0.43, agc: 0.36 };
 
   const hpHz = Math.round(base.hp + narrow * base.hpR);
   const lpHz = Math.round(base.lp - narrow * base.lpR);
   const midFreq = Math.round(base.mid + (0.45 - narrow) * base.midR);
   const midHumpDb = Math.round((base.hump + narrow * 2.8) * 20) / 20;
 
-  const concealMode = d > 0.62 ? "repeat" : d > 0.22 ? "hold" : "interp";
-  const packetLoss = clamp01(0.02 + d * (mode === "cell" ? 0.75 : 0.55));
-  const packetMs = Math.round(12 + d * (mode === "zoom" ? 70 : 95));
-  const repeatMs = Math.round(18 + d * 120);
-
-  const jitterMs = Math.round((0.02 + j * 0.55) * 100) / 100;
-  const jitterRate = Math.round(18 + j * 80);
-
-  const bits = Math.round(14 - c * 8);
-  const rate = Math.round(46000 - c * (mode === "cell" ? 38000 : 32000));
-
-  const gate = clamp01(0.05 + (mode === "zoom" ? 0.12 : 0.08) + c * 0.25 + d * 0.2);
+  const concealMode = d > 0.68 ? "repeat" : d > 0.28 ? "hold" : "interp";
+  const packetLoss = clamp01(0.002 + d * (mode === "cell" ? 0.36 : 0.28));
+  const packetMs = Math.round(base.frame + d * 12);
+  const repeatMs = Math.round(22 + d * 82);
+  const jitterMs = Math.round((0.04 + j * 6.4) * 100) / 100;
+  const jitterRate = Math.round(5 + j * 36);
+  const bits = Math.round(15 - c * 7);
+  const rate = Math.round(48000 - c * (mode === "cell" ? 39000 : mode === "skype" ? 36500 : 33500));
+  const gate = clamp01(0.035 + base.suppress * 0.08 + c * 0.13 + d * 0.1);
+  const burstiness = clamp01(base.burst + d * 0.28);
+  const suppression = clamp01(base.suppress + c * 0.22 + d * 0.08);
+  const agc = clamp01(base.agc + c * 0.12);
+  const bufferSlip = clamp01(0.008 + j * 0.42 + d * 0.08);
+  const bandwidthSwitch = clamp01(0.015 + c * 0.18 + j * 0.2);
+  const comfortNoise = clamp01(0.06 + n * 0.62);
 
   const ceiling = clamp01(base.ceil - c * 0.05);
   const outGain = Math.round((base.out + c * 0.12) * 100) / 100;
@@ -175,6 +190,12 @@ function computeMacroTargets(primary) {
     bits,
     rate,
     gate,
+    burstiness,
+    suppression,
+    agc,
+    bufferSlip,
+    bandwidthSwitch,
+    comfortNoise,
     ceiling,
     outGain,
     robot: r,
@@ -195,6 +216,12 @@ function readSettingsFromUI() {
     repeatMs: parseFloat(els.repeatMs.value),
     jitterMs: parseFloat(els.jitterMs.value),
     jitterRate: parseFloat(els.jitterRate.value),
+    burstiness: parseFloat(els.burstiness.value),
+    suppression: parseFloat(els.suppression.value),
+    agc: parseFloat(els.agc.value),
+    bufferSlip: parseFloat(els.bufferSlip.value),
+    bandwidthSwitch: parseFloat(els.bandwidthSwitch.value),
+    comfortNoise: parseFloat(els.comfortNoise.value),
     gate: parseFloat(els.gate.value),
     bits: parseFloat(els.bits.value),
     rate: parseFloat(els.rate.value),
@@ -217,11 +244,17 @@ function writeSettingsToUI(s) {
   els.midHumpDb.value = s.midHumpDb ?? 2.2;
   els.midFreq.value = s.midFreq ?? 1750;
   els.concealMode.value = s.concealMode ?? "hold";
-  els.packetLoss.value = s.packetLoss ?? 0.18;
-  els.packetMs.value = s.packetMs ?? 24;
-  els.repeatMs.value = s.repeatMs ?? 42;
-  els.jitterMs.value = s.jitterMs ?? 0.12;
-  els.jitterRate.value = s.jitterRate ?? 34;
+  els.packetLoss.value = s.packetLoss ?? 0.045;
+  els.packetMs.value = s.packetMs ?? 20;
+  els.repeatMs.value = s.repeatMs ?? 38;
+  els.jitterMs.value = s.jitterMs ?? 0.35;
+  els.jitterRate.value = s.jitterRate ?? 18;
+  els.burstiness.value = s.burstiness ?? 0.56;
+  els.suppression.value = s.suppression ?? 0.42;
+  els.agc.value = s.agc ?? 0.34;
+  els.bufferSlip.value = s.bufferSlip ?? 0.08;
+  els.bandwidthSwitch.value = s.bandwidthSwitch ?? 0.12;
+  els.comfortNoise.value = s.comfortNoise ?? 0.22;
   els.gate.value = s.gate ?? 0.12;
   els.bits.value = s.bits ?? 12;
   els.rate.value = s.rate ?? 24000;
@@ -249,7 +282,13 @@ function refreshValueLabels() {
   els.packetMsVal.textContent = `${Math.round(s.packetMs)} ms`;
   els.repeatMsVal.textContent = `${Math.round(s.repeatMs)} ms`;
   els.jitterMsVal.textContent = `${Number(s.jitterMs).toFixed(2)} ms`;
-  els.jitterRateVal.textContent = `${Math.round(s.jitterRate)} Hz`;
+  els.jitterRateVal.textContent = `${Math.round(s.jitterRate)} activity`;
+  els.burstinessVal.textContent = pct01(s.burstiness);
+  els.suppressionVal.textContent = pct01(s.suppression);
+  els.agcVal.textContent = pct01(s.agc);
+  els.bufferSlipVal.textContent = pct01(s.bufferSlip);
+  els.bandwidthSwitchVal.textContent = pct01(s.bandwidthSwitch);
+  els.comfortNoiseVal.textContent = pct01(s.comfortNoise);
   els.gateVal.textContent = pct01(s.gate);
   els.bitsVal.textContent = `${Math.round(s.bits)}-bit`;
   els.rateVal.textContent = fmtHz(s.rate);
@@ -269,6 +308,12 @@ function applyMacrosFromPrimaryToAdvanced() {
   els.repeatMs.value = t.repeatMs;
   els.jitterMs.value = t.jitterMs;
   els.jitterRate.value = t.jitterRate;
+  els.burstiness.value = t.burstiness;
+  els.suppression.value = t.suppression;
+  els.agc.value = t.agc;
+  els.bufferSlip.value = t.bufferSlip;
+  els.bandwidthSwitch.value = t.bandwidthSwitch;
+  els.comfortNoise.value = t.comfortNoise;
   els.gate.value = t.gate;
   els.bits.value = t.bits;
   els.rate.value = t.rate;
@@ -470,6 +515,12 @@ for (const el of [
   els.repeatMs,
   els.jitterMs,
   els.jitterRate,
+  els.burstiness,
+  els.suppression,
+  els.agc,
+  els.bufferSlip,
+  els.bandwidthSwitch,
+  els.comfortNoise,
   els.gate,
   els.bits,
   els.rate,

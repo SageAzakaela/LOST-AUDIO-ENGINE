@@ -1,4 +1,4 @@
-const WORKLET_URL = new URL("./cd-processor.js", import.meta.url);
+const WORKLET_URL = new URL("./cd-processor.js?v=20260827.3", import.meta.url);
 
 function now(ctx) {
   return ctx.currentTime;
@@ -17,29 +17,42 @@ export function defaultSettings() {
     tracking: 0.22,
     jitter: 0.18,
     carComp: 0,
-    softClip: true,
+    softClip: false,
 
-    mode: "hold",
-    errorRate: 0.18,
-    burstMs: 24,
-    repeatMs: 42,
-    scratchRate: 0.25,
-    scratchAmt: 0.35,
-    jitterMs: 0.18,
-    jitterRate: 38,
-    hfLoss: 0.1,
-    servoNoise: 0.12,
+    mode: "interp",
+    damageShape: "radial",
+    errorRate: 0.12,
+    burstMs: 18,
+    repeatMs: 36,
+    scratchRate: 0.14,
+    scratchAmt: 0.2,
+    correction: 0.88,
+    interpolationMs: 5,
+    rotationHz: 5.2,
+    trackingRate: 0.08,
+    trackingMs: 140,
+    servoHunt: 0.18,
+    jitterMs: 0.025,
+    jitterRate: 34,
+    hfLoss: 0.025,
+    servoNoise: 0.08,
     ceiling: 0.94,
     outGain: 0.98,
   };
 }
 
 function modeToIndex(mode) {
-  if (typeof mode === "number") return Math.round(Math.max(0, Math.min(3, mode)));
+  if (typeof mode === "number") return Math.round(Math.max(0, Math.min(4, mode)));
   if (mode === "mute") return 1;
   if (mode === "interp") return 2;
   if (mode === "repeat") return 3;
+  if (mode === "random") return 4;
   return 0;
+}
+
+function damageShapeToIndex(shape) {
+  if (typeof shape === "number") return Math.round(Math.max(0, Math.min(5, shape)));
+  return { radial: 0, sine: 1, triangle: 2, square: 3, saw: 4, random: 5 }[shape] ?? 0;
 }
 
 export async function buildCdGraph(ctx, { seed }) {
@@ -84,6 +97,20 @@ export async function buildCdGraph(ctx, { seed }) {
     release: 0.08,
   });
 
+  // The multiband playback stage follows the optical decoder, so it also needs
+  // a final, deterministic ceiling. The gain pair keeps sub-ceiling samples
+  // unchanged while the shaper only catches overshoot.
+  const safetyCurve = new Float32Array(4097);
+  for (let i = 0; i < safetyCurve.length; i++) {
+    const x = (i / (safetyCurve.length - 1)) * 2 - 1;
+    safetyCurve[i] = Math.max(-0.98, Math.min(0.98, x));
+  }
+  const safetyPre = new GainNode(ctx, { gain: 0.98 / 0.94 });
+  // No oversampling here: its reconstruction filter can ring above a hard
+  // safety boundary. This stage is intentionally a last-sample guard.
+  const safetyClip = new WaveShaperNode(ctx, { curve: safetyCurve, oversample: "none" });
+  const safetyPost = new GainNode(ctx, { gain: 0.94 / 0.98 });
+
   const out = new GainNode(ctx, { gain: 1 });
   input.connect(processor);
   processor.connect(dryGain);
@@ -117,7 +144,10 @@ export async function buildCdGraph(ctx, { seed }) {
   dryGain.connect(sum);
   wetGain.connect(sum);
   sum.connect(limiter);
-  limiter.connect(out);
+  limiter.connect(safetyPre);
+  safetyPre.connect(safetyClip);
+  safetyClip.connect(safetyPost);
+  safetyPost.connect(out);
 
   function reset(seedNext) {
     processor.port.postMessage({ type: "reset", seed: seedNext >>> 0 });
@@ -127,15 +157,22 @@ export async function buildCdGraph(ctx, { seed }) {
     const s = { ...settings };
     const mode = modeToIndex(s.mode);
     processor.parameters.get("mode")?.setValueAtTime(mode, time);
-    processor.parameters.get("errorRate")?.setValueAtTime(s.errorRate ?? 0.18, time);
-    processor.parameters.get("burstMs")?.setValueAtTime(s.burstMs ?? 24, time);
-    processor.parameters.get("repeatMs")?.setValueAtTime(s.repeatMs ?? 42, time);
-    processor.parameters.get("scratchRate")?.setValueAtTime(s.scratchRate ?? 0.25, time);
-    processor.parameters.get("scratchAmt")?.setValueAtTime(s.scratchAmt ?? 0.35, time);
-    processor.parameters.get("jitterMs")?.setValueAtTime(s.jitterMs ?? 0.18, time);
-    processor.parameters.get("jitterRate")?.setValueAtTime(s.jitterRate ?? 38, time);
-    processor.parameters.get("hfLoss")?.setValueAtTime(s.hfLoss ?? 0.1, time);
-    processor.parameters.get("servoNoise")?.setValueAtTime(s.servoNoise ?? 0.12, time);
+    processor.parameters.get("damageShape")?.setValueAtTime(damageShapeToIndex(s.damageShape), time);
+    processor.parameters.get("errorRate")?.setValueAtTime(s.errorRate ?? 0.12, time);
+    processor.parameters.get("burstMs")?.setValueAtTime(s.burstMs ?? 18, time);
+    processor.parameters.get("repeatMs")?.setValueAtTime(s.repeatMs ?? 36, time);
+    processor.parameters.get("scratchRate")?.setValueAtTime(s.scratchRate ?? 0.14, time);
+    processor.parameters.get("scratchAmt")?.setValueAtTime(s.scratchAmt ?? 0.2, time);
+    processor.parameters.get("correction")?.setValueAtTime(s.correction ?? 0.88, time);
+    processor.parameters.get("interpolationMs")?.setValueAtTime(s.interpolationMs ?? 5, time);
+    processor.parameters.get("rotationHz")?.setValueAtTime(s.rotationHz ?? 5.2, time);
+    processor.parameters.get("trackingRate")?.setValueAtTime(s.trackingRate ?? 0.08, time);
+    processor.parameters.get("trackingMs")?.setValueAtTime(s.trackingMs ?? 140, time);
+    processor.parameters.get("servoHunt")?.setValueAtTime(s.servoHunt ?? 0.18, time);
+    processor.parameters.get("jitterMs")?.setValueAtTime(s.jitterMs ?? 0.025, time);
+    processor.parameters.get("jitterRate")?.setValueAtTime(s.jitterRate ?? 34, time);
+    processor.parameters.get("hfLoss")?.setValueAtTime(s.hfLoss ?? 0.025, time);
+    processor.parameters.get("servoNoise")?.setValueAtTime(s.servoNoise ?? 0.08, time);
     processor.parameters.get("softClip")?.setValueAtTime(s.softClip ? 1 : 0, time);
     processor.parameters.get("ceiling")?.setValueAtTime(s.ceiling ?? 0.94, time);
     processor.parameters.get("outGain")?.setValueAtTime(s.outGain ?? 0.98, time);
@@ -144,6 +181,14 @@ export async function buildCdGraph(ctx, { seed }) {
     const t1 = time + ramp;
     processor.parameters.get("outGain")?.linearRampToValueAtTime(s.outGain ?? 0.98, t1);
     processor.parameters.get("ceiling")?.linearRampToValueAtTime(s.ceiling ?? 0.94, t1);
+
+    const finalCeiling = Math.max(0.2, Math.min(1, s.ceiling ?? 0.94));
+    safetyPre.gain.cancelScheduledValues(time);
+    safetyPre.gain.setValueAtTime(safetyPre.gain.value, time);
+    safetyPre.gain.linearRampToValueAtTime(0.98 / finalCeiling, t1);
+    safetyPost.gain.cancelScheduledValues(time);
+    safetyPost.gain.setValueAtTime(safetyPost.gain.value, time);
+    safetyPost.gain.linearRampToValueAtTime(finalCeiling / 0.98, t1);
 
     // Multiband comp: wet/dry mix + threshold/ratio scaling.
     const amt = Math.max(0, Math.min(1, s.carComp ?? 0));
@@ -176,6 +221,14 @@ export async function buildCdGraph(ctx, { seed }) {
     makeupHigh.gain.setValueAtTime(makeup * (0.92 + amt * 0.08), time);
   }
 
+  function triggerDamage(strength = 1) {
+    processor.port.postMessage({ type: "triggerDamage", strength: Math.max(0.05, Math.min(1, Number(strength) || 1)) });
+  }
+
+  function triggerSkip(strength = 1) {
+    processor.port.postMessage({ type: "triggerSkip", strength: Math.max(0.05, Math.min(1, Number(strength) || 1)) });
+  }
+
   return {
     input,
     output: out,
@@ -192,9 +245,14 @@ export async function buildCdGraph(ctx, { seed }) {
       makeupMid,
       makeupHigh,
       limiter,
+      safetyPre,
+      safetyClip,
+      safetyPost,
       out,
     },
     reset,
     applySettings,
+    triggerDamage,
+    triggerSkip,
   };
 }

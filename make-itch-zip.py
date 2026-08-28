@@ -4,7 +4,8 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-OUT_ZIP = ROOT / "LostAudioEngine-itchio.zip"
+DIST = ROOT / "dist"
+OUT_ZIP = DIST / "LostAudioEngine-web-itchio.zip"
 
 INCLUDE = [
     "index.html",
@@ -37,6 +38,7 @@ def iter_files(rel: str):
 
 
 def main() -> int:
+    DIST.mkdir(exist_ok=True)
     files: list[Path] = []
     for rel in INCLUDE:
         files.extend(iter_files(rel))

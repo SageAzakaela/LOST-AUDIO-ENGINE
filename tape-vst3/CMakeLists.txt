@@ -8,7 +8,9 @@ if(NOT DEFINED JUCE_DIR)
   message(FATAL_ERROR "JUCE_DIR is not set. Configure with -DJUCE_DIR=<path-to-JUCE>")
 endif()
 
-add_subdirectory(${JUCE_DIR} JUCE)
+if(NOT TARGET juce::juce_audio_utils)
+  add_subdirectory(${JUCE_DIR} JUCE)
+endif()
 
 juce_add_plugin(TapeEngine
   COMPANY_NAME "LostAudio"

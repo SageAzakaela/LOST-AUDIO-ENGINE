@@ -46,7 +46,7 @@
 
           <div class="control">
             <div class="labelRow">
-              <label for="bandwidth">Bandwidth</label>
+              <label for="bandwidth">Line Fidelity</label>
               <span id="bandwidthVal" class="val"></span>
             </div>
             <input id="bandwidth" type="range" min="0" max="1" step="0.001" value="0.4" />
@@ -54,7 +54,7 @@
 
           <div class="control">
             <div class="labelRow">
-              <label for="drive">AGC / Drive</label>
+              <label for="drive">Gain Riding / Drive</label>
               <span id="driveVal" class="val"></span>
             </div>
             <input id="drive" type="range" min="0" max="1" step="0.001" value="0.35" />
@@ -62,7 +62,7 @@
 
           <div class="control">
             <div class="labelRow">
-              <label for="glitch">Digital Glitch</label>
+              <label for="glitch">Connection Faults</label>
               <span id="glitchVal" class="val"></span>
             </div>
             <input id="glitch" type="range" min="0" max="1" step="0.001" value="0.2" />
@@ -70,10 +70,26 @@
 
           <div class="control">
             <div class="labelRow">
-              <label for="noise">Noise / Hum</label>
+              <label for="noise">Line / System Noise</label>
               <span id="noiseVal" class="val"></span>
             </div>
             <input id="noise" type="range" min="0" max="1" step="0.001" value="0.18" />
+          </div>
+
+          <div class="control">
+            <div class="labelRow">
+              <label for="character">Device Character</label>
+              <span id="characterVal" class="val"></span>
+            </div>
+            <input id="character" type="range" min="0" max="1" step="0.001" value="0.45" />
+          </div>
+
+          <div class="control">
+            <div class="labelRow">
+              <label for="distance">Listening Distance</label>
+              <span id="distanceVal" class="val"></span>
+            </div>
+            <input id="distance" type="range" min="0" max="1" step="0.001" value="0.15" />
           </div>
 
           <div class="controlRow">
@@ -87,6 +103,14 @@
                 <option value="paHot">Hot PA Horn</option>
                 <option value="alarmPanel">Alarm Panel</option>
                 <option value="voip">VoIP Crunch</option>
+                <option value="landlineWarm">Warm Landline</option>
+                <option value="cellClear">Clear Cell Call</option>
+                <option value="officeIntercom">Office Intercom</option>
+                <option value="paDistantOutside">Distant Outdoor PA</option>
+                <option value="alarmPanelMild">Mild Alarm Panel</option>
+                <option value="motelPhoneReceiver">Motel Phone Receiver</option>
+                <option value="speakerphoneKitchen">Kitchen Speakerphone</option>
+                <option value="hospitalCorridorPa">Hospital Corridor PA</option>
               </select>
             </div>
 
@@ -193,6 +217,38 @@
                   <span id="toneMixVal" class="val"></span>
                 </div>
                 <input id="toneMix" type="range" min="0" max="1" step="0.001" value="0.35" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="transducer">Transducer Color</label>
+                  <span id="transducerVal" class="val"></span>
+                </div>
+                <input id="transducer" type="range" min="0" max="1" step="0.001" value="0.45" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="lineAge">Line / Electronics Age</label>
+                  <span id="lineAgeVal" class="val"></span>
+                </div>
+                <input id="lineAge" type="range" min="0" max="1" step="0.001" value="0.2" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="duplex">Duplex Clamp</label>
+                  <span id="duplexVal" class="val"></span>
+                </div>
+                <input id="duplex" type="range" min="0" max="1" step="0.001" value="0.08" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="speakerRattle">Speaker / Housing Rattle</label>
+                  <span id="speakerRattleVal" class="val"></span>
+                </div>
+                <input id="speakerRattle" type="range" min="0" max="1" step="0.001" value="0.12" />
               </div>
 
               <div class="control">
@@ -304,6 +360,6 @@
       </footer>
     </main>
 
-    <script type="module" src="./src/main.js"></script>
+    <script type="module" src="./src/main.js?v=20260827.26"></script>
   </body>
 </html>

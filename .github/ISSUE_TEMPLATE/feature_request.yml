@@ -1,0 +1,61 @@
+name: Feature or device request
+description: Suggest a device model, platform, preset family, workflow, or sound-design feature.
+title: "[Request]: "
+labels:
+  - enhancement
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Existing Device Engine
+        - New device or signal path
+        - Web workstation
+        - Lost Audio Suite
+        - Lost Audio Sequencer
+        - Presets
+        - Platform or plugin format
+        - Accessibility or usability
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: need
+    attributes:
+      label: Creative need
+      description: What are you trying to make, and what is difficult or impossible today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Requested behavior
+      description: Describe the result or workflow. A solution is welcome, but the underlying need matters most.
+    validations:
+      required: true
+  - type: textarea
+    id: references
+    attributes:
+      label: Device or audio references
+      description: Link legally shareable references and distinguish authentic behavior from an intentionally stylized effect.
+  - type: dropdown
+    id: intensity
+    attributes:
+      label: Intended intensity
+      options:
+        - Subtle and realistic
+        - Realistic through damaged
+        - Heavily stylized
+        - Needs all three ranges
+        - Not applicable
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues for a similar request.
+          required: true

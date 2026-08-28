@@ -1,6 +1,6 @@
-import { buildCamcorderGraph, defaultSettings } from "./audio/graph.js";
+import { buildCamcorderGraph, defaultSettings } from "./audio/graph.js?v=20260827.27";
 import { encodeWavMono16 } from "./audio/wav.js";
-import { PRESETS } from "./presets.js";
+import { PRESETS } from "./presets.js?v=20260827.27";
 
 const WIND_MANIFEST_URL = new URL("../audio/manifest.json", import.meta.url);
 
@@ -25,6 +25,8 @@ const els = {
   camBedSource: document.querySelector("#camBedSource"),
   windBedSource: document.querySelector("#windBedSource"),
   windHitSource: document.querySelector("#windHitSource"),
+  format: document.querySelector("#format"),
+  micModel: document.querySelector("#micModel"),
 
   hpHz: document.querySelector("#hpHz"),
   lpHz: document.querySelector("#lpHz"),
@@ -32,10 +34,12 @@ const els = {
   boxHz: document.querySelector("#boxHz"),
   agcAmt: document.querySelector("#agcAmt"),
   agcSpeed: document.querySelector("#agcSpeed"),
+  agcPump: document.querySelector("#agcPump"),
   clip: document.querySelector("#clip"),
   crush: document.querySelector("#crush"),
   bits: document.querySelector("#bits"),
   rate: document.querySelector("#rate"),
+  flutter: document.querySelector("#flutter"),
   drop: document.querySelector("#drop"),
   dropMs: document.querySelector("#dropMs"),
   dropMode: document.querySelector("#dropMode"),
@@ -44,6 +48,7 @@ const els = {
   handling: document.querySelector("#handling"),
   rub: document.querySelector("#rub"),
   hiss: document.querySelector("#hiss"),
+  motorBleed: document.querySelector("#motorBleed"),
   ceiling: document.querySelector("#ceiling"),
   outGain: document.querySelector("#outGain"),
 
@@ -60,16 +65,20 @@ const els = {
   camBedSourceVal: document.querySelector("#camBedSourceVal"),
   windBedSourceVal: document.querySelector("#windBedSourceVal"),
   windHitSourceVal: document.querySelector("#windHitSourceVal"),
+  formatVal: document.querySelector("#formatVal"),
+  micModelVal: document.querySelector("#micModelVal"),
   hpHzVal: document.querySelector("#hpHzVal"),
   lpHzVal: document.querySelector("#lpHzVal"),
   boxDbVal: document.querySelector("#boxDbVal"),
   boxHzVal: document.querySelector("#boxHzVal"),
   agcAmtVal: document.querySelector("#agcAmtVal"),
   agcSpeedVal: document.querySelector("#agcSpeedVal"),
+  agcPumpVal: document.querySelector("#agcPumpVal"),
   clipVal: document.querySelector("#clipVal"),
   crushVal: document.querySelector("#crushVal"),
   bitsVal: document.querySelector("#bitsVal"),
   rateVal: document.querySelector("#rateVal"),
+  flutterVal: document.querySelector("#flutterVal"),
   dropVal: document.querySelector("#dropVal"),
   dropMsVal: document.querySelector("#dropMsVal"),
   dropModeVal: document.querySelector("#dropModeVal"),
@@ -78,6 +87,7 @@ const els = {
   handlingVal: document.querySelector("#handlingVal"),
   rubVal: document.querySelector("#rubVal"),
   hissVal: document.querySelector("#hissVal"),
+  motorBleedVal: document.querySelector("#motorBleedVal"),
   ceilingVal: document.querySelector("#ceilingVal"),
   outGainVal: document.querySelector("#outGainVal"),
 
@@ -240,9 +250,6 @@ async function populateWindSelects() {
   populate(els.windBedSource, windLists.windBed);
   populate(els.windHitSource, windLists.windHits);
 
-  // If the user hasn't chosen anything yet, default to the first available sources.
-  if (!els.camBedSource.value && windLists.camBed.length) els.camBedSource.value = windLists.camBed[0];
-  if (!els.windBedSource.value && windLists.windBed.length) els.windBedSource.value = windLists.windBed[0];
 }
 
 async function loadWindBuffersIfNeeded() {
@@ -352,11 +359,13 @@ function computeMacroTargets(primary) {
 
   const agcAmt = clamp01(0.45 + drv * 0.45 + cov * 0.15);
   const agcSpeed = clamp01(0.25 + drv * 0.5);
+  const agcPump = clamp01(0.12 + drv * 0.72 + cov * 0.12);
   const clip = clamp01(0.08 + drv * 0.75);
 
   const crush = clamp01(0.05 + cor * 0.45);
   const bits = Math.round(14 - cor * 6);
   const rate = Math.round(42000 - cor * 26000);
+  const flutter = clamp01(0.035 + cor * 0.62 + mov * 0.16);
 
   const drop = clamp01(0.05 + cor * 0.8);
   const dropMs = Math.round(16 + cor * 120);
@@ -367,16 +376,10 @@ function computeMacroTargets(primary) {
   const handling = clamp01(0.06 + mov * 0.7);
   const rub = clamp01(0.04 + mov * 0.7);
   const hiss = clamp01(0.06 + cov * 0.18 + cor * 0.08);
+  const motorBleed = clamp01(0.025 + mov * 0.24 + cor * 0.12);
 
   const ceiling = 0.94 - drv * 0.1;
   const outGain = Math.round((0.98 + drv * 0.18) * 100) / 100;
-  const wind = mov > 0.55 && cov > 0.45;
-
-  const windLevel = wind ? 1.05 : 0.95;
-  const camLevel = 0.35 + cov * 0.12;
-  const windBedLevel = clamp01(0.65 + mov * 0.25);
-  const windHitLevel = clamp01(0.45 + mov * 0.35);
-  const windHitRate = clamp01(0.18 + mov * 0.62);
 
   return {
     hpHz,
@@ -385,10 +388,12 @@ function computeMacroTargets(primary) {
     boxHz,
     agcAmt,
     agcSpeed,
+    agcPump,
     clip,
     crush,
     bits,
     rate,
+    flutter,
     drop,
     dropMs,
     dropMode,
@@ -397,14 +402,9 @@ function computeMacroTargets(primary) {
     handling,
     rub,
     hiss,
+    motorBleed,
     ceiling,
     outGain,
-    wind,
-    windLevel,
-    camLevel,
-    windBedLevel,
-    windHitLevel,
-    windHitRate,
   };
 }
 
@@ -423,6 +423,8 @@ function readSettingsFromUI() {
     camBedSource: els.camBedSource.value,
     windBedSource: els.windBedSource.value,
     windHitSource: els.windHitSource.value,
+    format: els.format.value,
+    micModel: els.micModel.value,
 
     hpHz: parseFloat(els.hpHz.value),
     lpHz: parseFloat(els.lpHz.value),
@@ -430,10 +432,12 @@ function readSettingsFromUI() {
     boxHz: parseFloat(els.boxHz.value),
     agcAmt: parseFloat(els.agcAmt.value),
     agcSpeed: parseFloat(els.agcSpeed.value),
+    agcPump: parseFloat(els.agcPump.value),
     clip: parseFloat(els.clip.value),
     crush: parseFloat(els.crush.value),
     bits: parseFloat(els.bits.value),
     rate: parseFloat(els.rate.value),
+    flutter: parseFloat(els.flutter.value),
     drop: parseFloat(els.drop.value),
     dropMs: parseFloat(els.dropMs.value),
     dropMode: els.dropMode.value,
@@ -442,6 +446,7 @@ function readSettingsFromUI() {
     handling: parseFloat(els.handling.value),
     rub: parseFloat(els.rub.value),
     hiss: parseFloat(els.hiss.value),
+    motorBleed: parseFloat(els.motorBleed.value),
     ceiling: parseFloat(els.ceiling.value),
     outGain: parseFloat(els.outGain.value),
   };
@@ -461,6 +466,8 @@ function writeSettingsToUI(s) {
   if (typeof s.camBedSource === "string") els.camBedSource.value = s.camBedSource;
   if (typeof s.windBedSource === "string") els.windBedSource.value = s.windBedSource;
   if (typeof s.windHitSource === "string") els.windHitSource.value = s.windHitSource;
+  els.format.value = s.format ?? "minidv";
+  els.micModel.value = s.micModel ?? "electret";
 
   els.hpHz.value = s.hpHz ?? 55;
   els.lpHz.value = s.lpHz ?? 9200;
@@ -468,10 +475,12 @@ function writeSettingsToUI(s) {
   els.boxHz.value = s.boxHz ?? 1650;
   els.agcAmt.value = s.agcAmt ?? 0.55;
   els.agcSpeed.value = s.agcSpeed ?? 0.45;
+  els.agcPump.value = s.agcPump ?? 0.45;
   els.clip.value = s.clip ?? 0.25;
   els.crush.value = s.crush ?? 0.12;
   els.bits.value = s.bits ?? 12;
   els.rate.value = s.rate ?? 24000;
+  els.flutter.value = s.flutter ?? 0.12;
   els.drop.value = s.drop ?? 0.18;
   els.dropMs.value = s.dropMs ?? 28;
   els.dropMode.value = s.dropMode ?? "hold";
@@ -480,6 +489,7 @@ function writeSettingsToUI(s) {
   els.handling.value = s.handling ?? 0.22;
   els.rub.value = s.rub ?? 0.18;
   els.hiss.value = s.hiss ?? 0.12;
+  els.motorBleed.value = s.motorBleed ?? 0.08;
   els.ceiling.value = s.ceiling ?? 0.92;
   els.outGain.value = s.outGain ?? 0.98;
   refreshValueLabels();
@@ -500,6 +510,8 @@ function refreshValueLabels() {
   els.camBedSourceVal.textContent = s.camBedSource ? s.camBedSource : "None";
   els.windBedSourceVal.textContent = s.windBedSource ? s.windBedSource : "None";
   els.windHitSourceVal.textContent = s.windHitSource ? s.windHitSource : "None";
+  els.formatVal.textContent = s.format;
+  els.micModelVal.textContent = s.micModel;
 
   els.hpHzVal.textContent = fmtHz(s.hpHz);
   els.lpHzVal.textContent = fmtHz(s.lpHz);
@@ -507,10 +519,12 @@ function refreshValueLabels() {
   els.boxHzVal.textContent = fmtHz(s.boxHz);
   els.agcAmtVal.textContent = pct01(s.agcAmt);
   els.agcSpeedVal.textContent = pct01(s.agcSpeed);
+  els.agcPumpVal.textContent = pct01(s.agcPump);
   els.clipVal.textContent = pct01(s.clip);
   els.crushVal.textContent = pct01(s.crush);
   els.bitsVal.textContent = `${Math.round(s.bits)}-bit`;
   els.rateVal.textContent = fmtHz(s.rate);
+  els.flutterVal.textContent = pct01(s.flutter);
   els.dropVal.textContent = pct01(s.drop);
   els.dropMsVal.textContent = `${Math.round(s.dropMs)} ms`;
   els.dropModeVal.textContent = s.dropMode;
@@ -519,6 +533,7 @@ function refreshValueLabels() {
   els.handlingVal.textContent = pct01(s.handling);
   els.rubVal.textContent = pct01(s.rub);
   els.hissVal.textContent = pct01(s.hiss);
+  els.motorBleedVal.textContent = pct01(s.motorBleed);
   els.ceilingVal.textContent = `${Math.round(s.ceiling * 100)}%`;
   els.outGainVal.textContent = `${s.outGain.toFixed(2)}x`;
 }
@@ -531,10 +546,12 @@ function applyMacrosFromPrimaryToAdvanced() {
   els.boxHz.value = t.boxHz;
   els.agcAmt.value = t.agcAmt;
   els.agcSpeed.value = t.agcSpeed;
+  els.agcPump.value = t.agcPump;
   els.clip.value = t.clip;
   els.crush.value = t.crush;
   els.bits.value = t.bits;
   els.rate.value = t.rate;
+  els.flutter.value = t.flutter;
   els.drop.value = t.drop;
   els.dropMs.value = t.dropMs;
   els.dropMode.value = t.dropMode;
@@ -543,14 +560,9 @@ function applyMacrosFromPrimaryToAdvanced() {
   els.handling.value = t.handling;
   els.rub.value = t.rub;
   els.hiss.value = t.hiss;
+  els.motorBleed.value = t.motorBleed;
   els.ceiling.value = t.ceiling;
   els.outGain.value = t.outGain;
-  els.wind.checked = Boolean(t.wind);
-  els.windLevel.value = t.windLevel;
-  els.camLevel.value = t.camLevel;
-  els.windBedLevel.value = t.windBedLevel;
-  els.windHitLevel.value = t.windHitLevel;
-  els.windHitRate.value = t.windHitRate;
   refreshValueLabels();
 }
 
@@ -718,16 +730,20 @@ function hookControls() {
     els.camBedSource,
     els.windBedSource,
     els.windHitSource,
+    els.format,
+    els.micModel,
     els.hpHz,
     els.lpHz,
     els.boxDb,
     els.boxHz,
     els.agcAmt,
     els.agcSpeed,
+    els.agcPump,
     els.clip,
     els.crush,
     els.bits,
     els.rate,
+    els.flutter,
     els.drop,
     els.dropMs,
     els.dropMode,
@@ -736,6 +752,7 @@ function hookControls() {
     els.handling,
     els.rub,
     els.hiss,
+    els.motorBleed,
     els.ceiling,
     els.outGain,
   ]) {
@@ -764,16 +781,20 @@ function hookControls() {
     if ("camBedSource" in s) els.camBedSource.value = s.camBedSource;
     if ("windBedSource" in s) els.windBedSource.value = s.windBedSource;
     if ("windHitSource" in s) els.windHitSource.value = s.windHitSource;
+    if ("format" in s) els.format.value = s.format;
+    if ("micModel" in s) els.micModel.value = s.micModel;
     if ("hpHz" in s) els.hpHz.value = s.hpHz;
     if ("lpHz" in s) els.lpHz.value = s.lpHz;
     if ("boxDb" in s) els.boxDb.value = s.boxDb;
     if ("boxHz" in s) els.boxHz.value = s.boxHz;
     if ("agcAmt" in s) els.agcAmt.value = s.agcAmt;
     if ("agcSpeed" in s) els.agcSpeed.value = s.agcSpeed;
+    if ("agcPump" in s) els.agcPump.value = s.agcPump;
     if ("clip" in s) els.clip.value = s.clip;
     if ("crush" in s) els.crush.value = s.crush;
     if ("bits" in s) els.bits.value = s.bits;
     if ("rate" in s) els.rate.value = s.rate;
+    if ("flutter" in s) els.flutter.value = s.flutter;
     if ("drop" in s) els.drop.value = s.drop;
     if ("dropMs" in s) els.dropMs.value = s.dropMs;
     if ("dropMode" in s) els.dropMode.value = s.dropMode;
@@ -782,6 +803,7 @@ function hookControls() {
     if ("handling" in s) els.handling.value = s.handling;
     if ("rub" in s) els.rub.value = s.rub;
     if ("hiss" in s) els.hiss.value = s.hiss;
+    if ("motorBleed" in s) els.motorBleed.value = s.motorBleed;
     if ("ceiling" in s) els.ceiling.value = s.ceiling;
     if ("outGain" in s) els.outGain.value = s.outGain;
     refreshValueLabels();

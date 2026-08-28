@@ -1,4 +1,4 @@
-const WORKLET_URL = new URL("./conference-processor.js", import.meta.url);
+const WORKLET_URL = new URL("./conference-processor.js?v=20260827.24", import.meta.url);
 
 function now(ctx) {
   return ctx.currentTime;
@@ -26,14 +26,20 @@ export function defaultSettings() {
     midFreq: 1750,
 
     concealMode: "hold",
-    packetLoss: 0.18,
-    packetMs: 24,
-    repeatMs: 42,
-    jitterMs: 0.12,
-    jitterRate: 34,
+    packetLoss: 0.045,
+    packetMs: 20,
+    repeatMs: 38,
+    jitterMs: 0.35,
+    jitterRate: 18,
     gate: 0.12,
     bits: 12,
     rate: 24000,
+    burstiness: 0.56,
+    suppression: 0.42,
+    agc: 0.34,
+    bufferSlip: 0.08,
+    bandwidthSwitch: 0.12,
+    comfortNoise: 0.22,
     ceiling: 0.92,
     outGain: 0.98,
   };
@@ -122,16 +128,22 @@ export async function buildConferenceGraph(ctx, { seed }) {
 
     processor.parameters.get("mode")?.setValueAtTime(modeToIndex(s.mode), time);
     processor.parameters.get("concealMode")?.setValueAtTime(concealToIndex(s.concealMode), time);
-    processor.parameters.get("packetLoss")?.setValueAtTime(s.packetLoss ?? 0.18, time);
-    processor.parameters.get("packetMs")?.setValueAtTime(s.packetMs ?? 24, time);
-    processor.parameters.get("repeatMs")?.setValueAtTime(s.repeatMs ?? 42, time);
-    processor.parameters.get("jitterMs")?.setValueAtTime(s.jitterMs ?? 0.12, time);
-    processor.parameters.get("jitterRate")?.setValueAtTime(s.jitterRate ?? 34, time);
+    processor.parameters.get("packetLoss")?.setValueAtTime(s.packetLoss ?? 0.045, time);
+    processor.parameters.get("packetMs")?.setValueAtTime(s.packetMs ?? 20, time);
+    processor.parameters.get("repeatMs")?.setValueAtTime(s.repeatMs ?? 38, time);
+    processor.parameters.get("jitterMs")?.setValueAtTime(s.jitterMs ?? 0.35, time);
+    processor.parameters.get("jitterRate")?.setValueAtTime(s.jitterRate ?? 18, time);
     processor.parameters.get("gate")?.setValueAtTime(s.gate ?? 0.12, time);
     processor.parameters.get("bits")?.setValueAtTime(s.bits ?? 12, time);
     processor.parameters.get("rate")?.setValueAtTime(s.rate ?? 24000, time);
     processor.parameters.get("robot")?.setValueAtTime(s.robot ?? 0.12, time);
     processor.parameters.get("noise")?.setValueAtTime(s.noise ?? 0.12, time);
+    processor.parameters.get("burstiness")?.setValueAtTime(s.burstiness ?? 0.56, time);
+    processor.parameters.get("suppression")?.setValueAtTime(s.suppression ?? 0.42, time);
+    processor.parameters.get("agc")?.setValueAtTime(s.agc ?? 0.34, time);
+    processor.parameters.get("bufferSlip")?.setValueAtTime(s.bufferSlip ?? 0.08, time);
+    processor.parameters.get("bandwidthSwitch")?.setValueAtTime(s.bandwidthSwitch ?? 0.12, time);
+    processor.parameters.get("comfortNoise")?.setValueAtTime(s.comfortNoise ?? 0.22, time);
     processor.parameters.get("ceiling")?.setValueAtTime(s.ceiling ?? 0.92, time);
     processor.parameters.get("outGain")?.setValueAtTime(s.outGain ?? 0.98, time);
   }

@@ -1,6 +1,6 @@
-import { buildCommsGraph, defaultSettings } from "./audio/graph.js";
+import { buildCommsGraph, defaultSettings } from "./audio/graph.js?v=20260827.26";
 import { encodeWavMono16 } from "./audio/wav.js";
-import { PRESETS } from "./presets.js";
+import { PRESETS } from "./presets.js?v=20260827.26";
 
 const els = {
   fileInput: document.querySelector("#fileInput"),
@@ -14,6 +14,8 @@ const els = {
   drive: document.querySelector("#drive"),
   glitch: document.querySelector("#glitch"),
   noise: document.querySelector("#noise"),
+  character: document.querySelector("#character"),
+  distance: document.querySelector("#distance"),
   preset: document.querySelector("#preset"),
   alarmTone: document.querySelector("#alarmTone"),
 
@@ -29,6 +31,10 @@ const els = {
   hum: document.querySelector("#hum"),
   hiss: document.querySelector("#hiss"),
   toneMix: document.querySelector("#toneMix"),
+  transducer: document.querySelector("#transducer"),
+  lineAge: document.querySelector("#lineAge"),
+  duplex: document.querySelector("#duplex"),
+  speakerRattle: document.querySelector("#speakerRattle"),
   ceiling: document.querySelector("#ceiling"),
   outGain: document.querySelector("#outGain"),
   echoMix: document.querySelector("#echoMix"),
@@ -44,6 +50,8 @@ const els = {
   driveVal: document.querySelector("#driveVal"),
   glitchVal: document.querySelector("#glitchVal"),
   noiseVal: document.querySelector("#noiseVal"),
+  characterVal: document.querySelector("#characterVal"),
+  distanceVal: document.querySelector("#distanceVal"),
 
   hpHzVal: document.querySelector("#hpHzVal"),
   lpHzVal: document.querySelector("#lpHzVal"),
@@ -57,6 +65,10 @@ const els = {
   humVal: document.querySelector("#humVal"),
   hissVal: document.querySelector("#hissVal"),
   toneMixVal: document.querySelector("#toneMixVal"),
+  transducerVal: document.querySelector("#transducerVal"),
+  lineAgeVal: document.querySelector("#lineAgeVal"),
+  duplexVal: document.querySelector("#duplexVal"),
+  speakerRattleVal: document.querySelector("#speakerRattleVal"),
   ceilingVal: document.querySelector("#ceilingVal"),
   outGainVal: document.querySelector("#outGainVal"),
   echoGroupVal: document.querySelector("#echoGroupVal"),
@@ -122,6 +134,8 @@ function readPrimaryFromUI() {
     drive: parseFloat(els.drive.value),
     glitch: parseFloat(els.glitch.value),
     noise: parseFloat(els.noise.value),
+    character: parseFloat(els.character.value),
+    distance: parseFloat(els.distance.value),
   };
 }
 
@@ -131,22 +145,25 @@ function computeMacroTargets(primary) {
   const drive = clamp01(primary.drive ?? 0.35);
   const glitch = clamp01(primary.glitch ?? 0.2);
   const noise = clamp01(primary.noise ?? 0.18);
+  const character = clamp01(primary.character ?? 0.45);
+  const distance = clamp01(primary.distance ?? 0.15);
 
   const narrow = Math.pow(1 - bandwidth, 1.35);
   const drv = Math.pow(drive, 1.25);
   const g = Math.pow(glitch, 1.35);
   const n = Math.pow(noise, 1.2);
+  const ch = Math.pow(character, 0.9);
 
   const base =
     mode === "cell"
-      ? { hp: 220, hpR: 360, lp: 3700, lpR: 1600, hump: 2.0, humpR: 4.2, mid: 1700, midR: 450, comp: 0.58, out: 1.02, ceil: 0.92 }
+      ? { hp: 170, hpR: 390, lp: 7200, lpR: 4600, hump: 1.4, humpR: 3.8, mid: 2050, midR: 550, comp: 0.58, out: 0.98, ceil: 0.92, device: 0.2, line: 0.04, duplex: 0.08, rattle: 0.04, bits: 13, rate: 32000, rateR: 25000 }
       : mode === "intercom"
-        ? { hp: 340, hpR: 380, lp: 3300, lpR: 1100, hump: 4.2, humpR: 6.0, mid: 1950, midR: 450, comp: 0.66, out: 0.98, ceil: 0.9 }
+        ? { hp: 310, hpR: 420, lp: 4100, lpR: 1900, hump: 4.6, humpR: 5.8, mid: 1950, midR: 420, comp: 0.65, out: 0.94, ceil: 0.9, device: 0.68, line: 0.28, duplex: 0.48, rattle: 0.5, bits: 15, rate: 44000, rateR: 30000 }
         : mode === "pa"
-          ? { hp: 160, hpR: 280, lp: 6800, lpR: 2600, hump: 1.6, humpR: 3.2, mid: 1500, midR: 450, comp: 0.42, out: 1.15, ceil: 0.88 }
+          ? { hp: 120, hpR: 330, lp: 9800, lpR: 5200, hump: 1.2, humpR: 3.0, mid: 1420, midR: 400, comp: 0.46, out: 0.94, ceil: 0.9, device: 0.58, line: 0.1, duplex: 0.04, rattle: 0.46, bits: 16, rate: 48000, rateR: 28000 }
           : mode === "alarm"
-            ? { hp: 250, hpR: 360, lp: 7600, lpR: 3400, hump: 1.0, humpR: 3.0, mid: 1600, midR: 700, comp: 0.46, out: 1.05, ceil: 0.9 }
-            : { hp: 250, hpR: 320, lp: 4300, lpR: 1900, hump: 2.8, humpR: 5.4, mid: 1850, midR: 380, comp: 0.54, out: 0.95, ceil: 0.92 };
+            ? { hp: 230, hpR: 390, lp: 8200, lpR: 4300, hump: 1.4, humpR: 3.2, mid: 1740, midR: 620, comp: 0.48, out: 0.94, ceil: 0.9, device: 0.62, line: 0.16, duplex: 0.02, rattle: 0.28, bits: 15, rate: 46000, rateR: 30000 }
+            : { hp: 250, hpR: 330, lp: 3900, lpR: 1500, hump: 3.0, humpR: 5.0, mid: 1820, midR: 360, comp: 0.52, out: 0.94, ceil: 0.92, device: 0.52, line: 0.3, duplex: 0.02, rattle: 0.16, bits: 14, rate: 44000, rateR: 30000 };
 
   const hpHz = Math.round(base.hp + narrow * base.hpR);
   const lpHz = Math.round(base.lp - narrow * base.lpR);
@@ -154,9 +171,8 @@ function computeMacroTargets(primary) {
   const midFreq = Math.round(base.mid + (0.55 - narrow) * base.midR);
 
   const comp = clamp01(base.comp + drv * 0.38);
-  const bitsBase = mode === "pa" ? 14 : 13;
-  const bits = Math.round(clamp01(1 - g) * (bitsBase - 4) + 4);
-  const rate = Math.round(46000 - g * 38000);
+  const bits = Math.round((1 - g) * (base.bits - 5) + 5);
+  const rate = Math.round(base.rate - g * base.rateR);
 
   const packetScale = mode === "cell" ? 0.72 : mode === "alarm" ? 0.35 : 0.25;
   const packet = clamp01(g * packetScale);
@@ -165,6 +181,10 @@ function computeMacroTargets(primary) {
   const hum = clamp01(0.06 + n * (mode === "intercom" ? 0.55 : 0.4));
   const hiss = clamp01(0.08 + n * 0.55);
   const toneMix = clamp01((mode === "alarm" ? 0.45 : 0.22) + n * 0.15);
+  const transducer = clamp01(base.device * 0.5 + ch * 0.72);
+  const lineAge = clamp01(base.line + drv * 0.24 + n * 0.18);
+  const duplex = clamp01(base.duplex + g * (mode === "intercom" ? 0.35 : 0.18) + ch * (mode === "intercom" ? 0.12 : 0.03));
+  const speakerRattle = clamp01(base.rattle * (0.35 + ch * 0.9) + drv * (mode === "pa" || mode === "intercom" ? 0.28 : 0.12));
 
   const ceiling = clamp01(base.ceil);
   const outGain = Math.round((base.out + drv * 0.12) * 100) / 100;
@@ -193,6 +213,11 @@ function computeMacroTargets(primary) {
     hum,
     hiss,
     toneMix,
+    transducer,
+    lineAge,
+    duplex,
+    speakerRattle,
+    distance,
     ceiling,
     outGain,
     echoMix,
@@ -212,6 +237,8 @@ function readSettingsFromUI() {
     drive: parseFloat(els.drive.value),
     glitch: parseFloat(els.glitch.value),
     noise: parseFloat(els.noise.value),
+    character: parseFloat(els.character.value),
+    distance: parseFloat(els.distance.value),
     alarmTone: Boolean(els.alarmTone.checked),
 
     hpHz: parseFloat(els.hpHz.value),
@@ -226,6 +253,10 @@ function readSettingsFromUI() {
     hum: parseFloat(els.hum.value),
     hiss: parseFloat(els.hiss.value),
     toneMix: parseFloat(els.toneMix.value),
+    transducer: parseFloat(els.transducer.value),
+    lineAge: parseFloat(els.lineAge.value),
+    duplex: parseFloat(els.duplex.value),
+    speakerRattle: parseFloat(els.speakerRattle.value),
     ceiling: parseFloat(els.ceiling.value),
     outGain: parseFloat(els.outGain.value),
     echoMix: parseFloat(els.echoMix.value),
@@ -244,6 +275,8 @@ function writeSettingsToUI(s) {
   els.drive.value = s.drive ?? 0.35;
   els.glitch.value = s.glitch ?? 0.2;
   els.noise.value = s.noise ?? 0.18;
+  els.character.value = s.character ?? 0.45;
+  els.distance.value = s.distance ?? 0.15;
   els.alarmTone.checked = Boolean(s.alarmTone);
 
   els.hpHz.value = s.hpHz ?? 280;
@@ -258,6 +291,10 @@ function writeSettingsToUI(s) {
   els.hum.value = s.hum ?? 0.25;
   els.hiss.value = s.hiss ?? 0.22;
   els.toneMix.value = s.toneMix ?? 0.35;
+  els.transducer.value = s.transducer ?? 0.45;
+  els.lineAge.value = s.lineAge ?? 0.2;
+  els.duplex.value = s.duplex ?? 0.08;
+  els.speakerRattle.value = s.speakerRattle ?? 0.12;
   els.ceiling.value = s.ceiling ?? 0.92;
   els.outGain.value = s.outGain ?? 0.95;
   els.echoMix.value = s.echoMix ?? 0;
@@ -287,6 +324,8 @@ function refreshValueLabels() {
   els.driveVal.textContent = pct01(s.drive);
   els.glitchVal.textContent = pct01(s.glitch);
   els.noiseVal.textContent = pct01(s.noise);
+  els.characterVal.textContent = pct01(s.character);
+  els.distanceVal.textContent = pct01(s.distance);
 
   els.hpHzVal.textContent = fmtHz(s.hpHz);
   els.lpHzVal.textContent = fmtHz(s.lpHz);
@@ -300,6 +339,10 @@ function refreshValueLabels() {
   els.humVal.textContent = pct01(s.hum);
   els.hissVal.textContent = pct01(s.hiss);
   els.toneMixVal.textContent = pct01(s.toneMix);
+  els.transducerVal.textContent = pct01(s.transducer);
+  els.lineAgeVal.textContent = pct01(s.lineAge);
+  els.duplexVal.textContent = pct01(s.duplex);
+  els.speakerRattleVal.textContent = pct01(s.speakerRattle);
   els.ceilingVal.textContent = `${Math.round(s.ceiling * 100)}%`;
   els.outGainVal.textContent = `${s.outGain.toFixed(2)}x`;
 
@@ -330,6 +373,10 @@ function applyMacrosFromPrimaryToAdvanced() {
   els.hum.value = t.hum;
   els.hiss.value = t.hiss;
   els.toneMix.value = t.toneMix;
+  els.transducer.value = t.transducer;
+  els.lineAge.value = t.lineAge;
+  els.duplex.value = t.duplex;
+  els.speakerRattle.value = t.speakerRattle;
   els.ceiling.value = t.ceiling;
   els.outGain.value = t.outGain;
   els.echoMix.value = t.echoMix;
@@ -440,7 +487,7 @@ function applyToGraphAndMarkCustom() {
 }
 
 function hookControls() {
-  for (const el of [els.mode, els.bandwidth, els.drive, els.glitch, els.noise]) {
+  for (const el of [els.mode, els.bandwidth, els.drive, els.glitch, els.noise, els.character, els.distance]) {
     const evt = el.tagName === "SELECT" ? "change" : "input";
     el.addEventListener(evt, () => {
       applyMacrosFromPrimaryToAdvanced();
@@ -462,6 +509,10 @@ function hookControls() {
     els.hum,
     els.hiss,
     els.toneMix,
+    els.transducer,
+    els.lineAge,
+    els.duplex,
+    els.speakerRattle,
     els.ceiling,
     els.outGain,
     els.echoMix,
@@ -499,6 +550,10 @@ function hookControls() {
       "hum",
       "hiss",
       "toneMix",
+      "transducer",
+      "lineAge",
+      "duplex",
+      "speakerRattle",
       "ceiling",
       "outGain",
       "echoMix",
@@ -525,6 +580,10 @@ function hookControls() {
       else if (k === "hum") els.hum.value = v;
       else if (k === "hiss") els.hiss.value = v;
       else if (k === "toneMix") els.toneMix.value = v;
+      else if (k === "transducer") els.transducer.value = v;
+      else if (k === "lineAge") els.lineAge.value = v;
+      else if (k === "duplex") els.duplex.value = v;
+      else if (k === "speakerRattle") els.speakerRattle.value = v;
       else if (k === "ceiling") els.ceiling.value = v;
       else if (k === "outGain") els.outGain.value = v;
       else if (k === "echoMix") els.echoMix.value = v;

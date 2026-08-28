@@ -1,0 +1,27 @@
+name: Repository validation
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  source-and-dsp:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate repository structure and source
+        run: node scripts/validate-repository.mjs
+      - name: Run deterministic Obfuscation worklet test
+        run: node tests/obfuscation-body-harness.mjs
+      - name: Generate deterministic parity fixtures
+        run: python tests/parity/parity.py generate --out tests/parity/fixtures

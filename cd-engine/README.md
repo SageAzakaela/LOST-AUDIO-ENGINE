@@ -2,6 +2,12 @@
 
 Device simulator for CD/optical read artifacts: scratches/clicks, tracking skips/repeats, clock jitter, and error concealment.
 
+Damage behavior and damage placement are separate controls:
+
+- `Conceal Mode` chooses Hold, Mute, Interpolate, Repeat, or Random per failed read.
+- `Damage Pattern` distributes defects as a radial scar, sine/triangle/square/saw sweep, or random pits around each disc revolution.
+- `Trigger Damage` forces the current concealment behavior; `Trigger Skip` forces a read-head jump using real buffered program audio.
+
 ## Run locally
 
 AudioWorklet requires serving over HTTP(S):

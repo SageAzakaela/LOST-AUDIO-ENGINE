@@ -76,17 +76,36 @@
               <select id="preset">
                 <option value="">Custom</option>
                 <option value="cleanPlayer">Clean Player</option>
+                <option value="hiFiDeck">Hi-Fi Deck</option>
+                <option value="lightDust">Light Dust</option>
                 <option value="dustyDisc">Dusty Disc</option>
+                <option value="oneBadRip">One Bad Rip</option>
+                <option value="portableJogMild">Portable Jog Mild</option>
+                <option value="carPlayerMild">Car Player Mild</option>
                 <option value="scratchedHook">Scratched Hook</option>
                 <option value="portableSkip">Portable Skip</option>
                 <option value="carCdPlayer">Car CD Player</option>
                 <option value="rottedRip">Rotted Rip</option>
+                <option value="rotationalScarExaggerated">Rotational Scar — Exaggerated</option>
+                <option value="stuckSectorExaggerated">Stuck Sector — Exaggerated</option>
+                <option value="laserPanicExaggerated">Laser Panic — Exaggerated</option>
               </select>
             </div>
             <label class="toggle">
-              <input id="softClip" type="checkbox" checked />
+              <input id="softClip" type="checkbox" />
               <span>Soft Clip</span>
             </label>
+          </div>
+
+          <div class="control triggerRow" aria-label="Live CD performance triggers">
+            <div>
+              <strong>Live Damage</strong>
+              <p>Force the optical decoder to fail now, or kick the read head backward.</p>
+            </div>
+            <div class="triggerButtons">
+              <button id="triggerDamageBtn" type="button">Trigger Damage</button>
+              <button id="triggerSkipBtn" type="button">Trigger Skip</button>
+            </div>
           </div>
 
           <details class="advanced">
@@ -98,10 +117,26 @@
                   <span id="modeVal" class="val"></span>
                 </div>
                 <select id="mode">
-                  <option value="hold" selected>Hold</option>
+                  <option value="hold">Hold</option>
                   <option value="mute">Mute</option>
-                  <option value="interp">Interpolate</option>
+                  <option value="interp" selected>Interpolate</option>
                   <option value="repeat">Repeat Frames</option>
+                  <option value="random">Random per Damage</option>
+                </select>
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="damageShape">Damage Pattern</label>
+                  <span id="damageShapeVal" class="val"></span>
+                </div>
+                <select id="damageShape">
+                  <option value="radial" selected>Radial Scar</option>
+                  <option value="sine">Sine Sweep</option>
+                  <option value="triangle">Triangle Sweep</option>
+                  <option value="square">Square Cluster</option>
+                  <option value="saw">Saw Ramp</option>
+                  <option value="random">Random Pits</option>
                 </select>
               </div>
 
@@ -110,7 +145,7 @@
                   <label for="errorRate">Error Rate</label>
                   <span id="errorRateVal" class="val"></span>
                 </div>
-                <input id="errorRate" type="range" min="0" max="1" step="0.001" value="0.18" />
+                <input id="errorRate" type="range" min="0" max="1" step="0.001" value="0.12" />
               </div>
 
               <div class="control">
@@ -118,7 +153,7 @@
                   <label for="burstMs">Burst Length</label>
                   <span id="burstMsVal" class="val"></span>
                 </div>
-                <input id="burstMs" type="range" min="4" max="260" step="1" value="24" />
+                <input id="burstMs" type="range" min="1" max="600" step="1" value="18" />
               </div>
 
               <div class="control">
@@ -126,7 +161,7 @@
                   <label for="repeatMs">Repeat Depth</label>
                   <span id="repeatMsVal" class="val"></span>
                 </div>
-                <input id="repeatMs" type="range" min="6" max="220" step="1" value="42" />
+                <input id="repeatMs" type="range" min="1" max="400" step="1" value="36" />
               </div>
 
               <div class="control">
@@ -134,7 +169,7 @@
                   <label for="scratchRate">Scratch Rate</label>
                   <span id="scratchRateVal" class="val"></span>
                 </div>
-                <input id="scratchRate" type="range" min="0" max="1" step="0.001" value="0.25" />
+                <input id="scratchRate" type="range" min="0" max="1" step="0.001" value="0.14" />
               </div>
 
               <div class="control">
@@ -142,7 +177,55 @@
                   <label for="scratchAmt">Scratch Amount</label>
                   <span id="scratchAmtVal" class="val"></span>
                 </div>
-                <input id="scratchAmt" type="range" min="0" max="1" step="0.001" value="0.35" />
+                <input id="scratchAmt" type="range" min="0" max="1" step="0.001" value="0.2" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="correction">Error Correction</label>
+                  <span id="correctionVal" class="val"></span>
+                </div>
+                <input id="correction" type="range" min="0" max="1" step="0.001" value="0.88" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="interpolationMs">Interpolation Window</label>
+                  <span id="interpolationMsVal" class="val"></span>
+                </div>
+                <input id="interpolationMs" type="range" min="0.25" max="30" step="0.25" value="5" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="rotationHz">Disc Rotation</label>
+                  <span id="rotationHzVal" class="val"></span>
+                </div>
+                <input id="rotationHz" type="range" min="2" max="10" step="0.1" value="5.2" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="trackingRate">Tracking Failures</label>
+                  <span id="trackingRateVal" class="val"></span>
+                </div>
+                <input id="trackingRate" type="range" min="0" max="1" step="0.001" value="0.08" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="trackingMs">Head Jump</label>
+                  <span id="trackingMsVal" class="val"></span>
+                </div>
+                <input id="trackingMs" type="range" min="10" max="1800" step="5" value="140" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="servoHunt">Servo Hunt</label>
+                  <span id="servoHuntVal" class="val"></span>
+                </div>
+                <input id="servoHunt" type="range" min="0" max="1" step="0.001" value="0.18" />
               </div>
 
               <div class="control">
@@ -150,7 +233,7 @@
                   <label for="jitterMs">Jitter Depth</label>
                   <span id="jitterMsVal" class="val"></span>
                 </div>
-                <input id="jitterMs" type="range" min="0" max="1.4" step="0.01" value="0.18" />
+                <input id="jitterMs" type="range" min="0" max="1.25" step="0.001" value="0.025" />
               </div>
 
               <div class="control">
@@ -158,7 +241,7 @@
                   <label for="jitterRate">Jitter Rate</label>
                   <span id="jitterRateVal" class="val"></span>
                 </div>
-                <input id="jitterRate" type="range" min="8" max="140" step="1" value="38" />
+                <input id="jitterRate" type="range" min="1" max="200" step="1" value="34" />
               </div>
 
               <div class="control">
@@ -166,7 +249,7 @@
                   <label for="hfLoss">HF Loss</label>
                   <span id="hfLossVal" class="val"></span>
                 </div>
-                <input id="hfLoss" type="range" min="0" max="1" step="0.001" value="0.1" />
+                <input id="hfLoss" type="range" min="0" max="1" step="0.001" value="0.025" />
               </div>
 
               <div class="control">
@@ -174,7 +257,7 @@
                   <label for="servoNoise">Servo Noise</label>
                   <span id="servoNoiseVal" class="val"></span>
                 </div>
-                <input id="servoNoise" type="range" min="0" max="1" step="0.001" value="0.12" />
+                <input id="servoNoise" type="range" min="0" max="1" step="0.001" value="0.08" />
               </div>
 
               <div class="control">
@@ -190,7 +273,7 @@
                   <label for="outGain">Output Gain</label>
                   <span id="outGainVal" class="val"></span>
                 </div>
-                <input id="outGain" type="range" min="0" max="1.5" step="0.01" value="0.98" />
+                <input id="outGain" type="range" min="0" max="1.2" step="0.01" value="0.98" />
               </div>
             </div>
           </details>
@@ -216,6 +299,6 @@
       </footer>
     </main>
 
-    <script type="module" src="./src/main.js"></script>
+    <script type="module" src="./src/main.js?v=20260827.7"></script>
   </body>
 </html>

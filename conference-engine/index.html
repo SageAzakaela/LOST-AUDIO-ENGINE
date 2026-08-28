@@ -139,10 +139,10 @@
                   <span id="concealModeVal" class="val"></span>
                 </div>
                 <select id="concealMode">
-                  <option value="hold">Hold</option>
+                  <option value="hold">Speech PLC</option>
                   <option value="mute">Mute</option>
-                  <option value="interp">Interpolate</option>
-                  <option value="repeat">Repeat Frames</option>
+                  <option value="interp">Decay / Interpolate</option>
+                  <option value="repeat">Deep Frame Repeat</option>
                 </select>
               </div>
 
@@ -151,7 +151,7 @@
                   <label for="packetLoss">Packet Loss</label>
                   <span id="packetLossVal" class="val"></span>
                 </div>
-                <input id="packetLoss" type="range" min="0" max="1" step="0.001" value="0.18" />
+                <input id="packetLoss" type="range" min="0" max="1" step="0.001" value="0.045" />
               </div>
 
               <div class="control">
@@ -159,7 +159,7 @@
                   <label for="packetMs">Packet Size</label>
                   <span id="packetMsVal" class="val"></span>
                 </div>
-                <input id="packetMs" type="range" min="8" max="180" step="1" value="24" />
+                <input id="packetMs" type="range" min="8" max="180" step="1" value="20" />
               </div>
 
               <div class="control">
@@ -167,28 +167,60 @@
                   <label for="repeatMs">Repeat Depth</label>
                   <span id="repeatMsVal" class="val"></span>
                 </div>
-                <input id="repeatMs" type="range" min="6" max="240" step="1" value="42" />
+                <input id="repeatMs" type="range" min="6" max="240" step="1" value="38" />
               </div>
 
               <div class="control">
                 <div class="labelRow">
-                  <label for="jitterMs">Jitter Depth</label>
+                  <label for="jitterMs">Buffer Wander</label>
                   <span id="jitterMsVal" class="val"></span>
                 </div>
-                <input id="jitterMs" type="range" min="0" max="2" step="0.01" value="0.12" />
+                <input id="jitterMs" type="range" min="0" max="20" step="0.01" value="0.35" />
               </div>
 
               <div class="control">
                 <div class="labelRow">
-                  <label for="jitterRate">Jitter Rate</label>
+                  <label for="jitterRate">Jitter Activity</label>
                   <span id="jitterRateVal" class="val"></span>
                 </div>
-                <input id="jitterRate" type="range" min="6" max="140" step="1" value="34" />
+                <input id="jitterRate" type="range" min="1" max="80" step="1" value="18" />
               </div>
 
               <div class="control">
                 <div class="labelRow">
-                  <label for="gate">Noise Gate</label>
+                  <label for="burstiness">Loss Burstiness</label>
+                  <span id="burstinessVal" class="val"></span>
+                </div>
+                <input id="burstiness" type="range" min="0" max="1" step="0.001" value="0.56" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="bufferSlip">Buffer Slips</label>
+                  <span id="bufferSlipVal" class="val"></span>
+                </div>
+                <input id="bufferSlip" type="range" min="0" max="1" step="0.001" value="0.08" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="bandwidthSwitch">Bandwidth Collapse</label>
+                  <span id="bandwidthSwitchVal" class="val"></span>
+                </div>
+                <input id="bandwidthSwitch" type="range" min="0" max="1" step="0.001" value="0.12" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="suppression">Noise Suppression</label>
+                  <span id="suppressionVal" class="val"></span>
+                </div>
+                <input id="suppression" type="range" min="0" max="1" step="0.001" value="0.42" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="gate">Speech Gate</label>
                   <span id="gateVal" class="val"></span>
                 </div>
                 <input id="gate" type="range" min="0" max="1" step="0.001" value="0.12" />
@@ -196,7 +228,23 @@
 
               <div class="control">
                 <div class="labelRow">
-                  <label for="bits">Bit Depth</label>
+                  <label for="agc">Call AGC</label>
+                  <span id="agcVal" class="val"></span>
+                </div>
+                <input id="agc" type="range" min="0" max="1" step="0.001" value="0.34" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="comfortNoise">Comfort Noise</label>
+                  <span id="comfortNoiseVal" class="val"></span>
+                </div>
+                <input id="comfortNoise" type="range" min="0" max="1" step="0.001" value="0.22" />
+              </div>
+
+              <div class="control">
+                <div class="labelRow">
+                  <label for="bits">Codec Resolution</label>
                   <span id="bitsVal" class="val"></span>
                 </div>
                 <input id="bits" type="range" min="4" max="16" step="1" value="12" />
@@ -204,7 +252,7 @@
 
               <div class="control">
                 <div class="labelRow">
-                  <label for="rate">Sample Rate</label>
+                  <label for="rate">Codec Bandwidth</label>
                   <span id="rateVal" class="val"></span>
                 </div>
                 <input id="rate" type="range" min="6000" max="48000" step="100" value="24000" />
@@ -238,7 +286,7 @@
       </section>
     </main>
 
-    <script type="module" src="./src/main.js"></script>
+    <script type="module" src="./src/main.js?v=20260827.25"></script>
   </body>
 </html>
 

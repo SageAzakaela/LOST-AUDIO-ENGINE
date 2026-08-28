@@ -1,0 +1,235 @@
+{
+  "format": "PCM16 WAV",
+  "sample_rates": [
+    44100,
+    48000,
+    96000
+  ],
+  "fixtures": [
+    {
+      "file": "silence-44100.wav",
+      "channels": 1,
+      "sample_width": 2,
+      "sample_rate": 44100,
+      "frames": 44100,
+      "metrics": [
+        {
+          "peak": 0.0,
+          "rms": 0.0,
+          "dc": 0.0
+        }
+      ]
+    },
+    {
+      "file": "impulse-44100.wav",
+      "channels": 1,
+      "sample_width": 2,
+      "sample_rate": 44100,
+      "frames": 88200,
+      "metrics": [
+        {
+          "peak": 0.8000122074037904,
+          "rms": 0.0026937812232725664,
+          "dc": 9.070433190519166e-06
+        }
+      ]
+    },
+    {
+      "file": "sweep-44100.wav",
+      "channels": 1,
+      "sample_width": 2,
+      "sample_rate": 44100,
+      "frames": 220500,
+      "metrics": [
+        {
+          "peak": 0.250007629627369,
+          "rms": 0.17629053515177603,
+          "dc": 9.286028121180212e-05
+        }
+      ]
+    },
+    {
+      "file": "transients-44100.wav",
+      "channels": 1,
+      "sample_width": 2,
+      "sample_rate": 44100,
+      "frames": 176400,
+      "metrics": [
+        {
+          "peak": 0.6267586291085543,
+          "rms": 0.021067722128471928,
+          "dc": -1.9326659260564892e-05
+        }
+      ]
+    },
+    {
+      "file": "stereo-44100.wav",
+      "channels": 2,
+      "sample_width": 2,
+      "sample_rate": 44100,
+      "frames": 132300,
+      "metrics": [
+        {
+          "peak": 0.500015259254738,
+          "rms": 0.17678185144250783,
+          "dc": 3.77940483185743e-06
+        },
+        {
+          "peak": 0.500015259254738,
+          "rms": 0.17678185144250783,
+          "dc": 3.77940483185743e-06
+        }
+      ]
+    },
+    {
+      "file": "silence-48000.wav",
+      "channels": 1,
+      "sample_width": 2,
+      "sample_rate": 48000,
+      "frames": 48000,
+      "metrics": [
+        {
+          "peak": 0.0,
+          "rms": 0.0,
+          "dc": 0.0
+        }
+      ]
+    },
+    {
+      "file": "impulse-48000.wav",
+      "channels": 1,
+      "sample_width": 2,
+      "sample_rate": 48000,
+      "frames": 96000,
+      "metrics": [
+        {
+          "peak": 0.8000122074037904,
+          "rms": 0.0025820282966979285,
+          "dc": 8.333460493789484e-06
+        }
+      ]
+    },
+    {
+      "file": "sweep-48000.wav",
+      "channels": 1,
+      "sample_width": 2,
+      "sample_rate": 48000,
+      "frames": 240000,
+      "metrics": [
+        {
+          "peak": 0.250007629627369,
+          "rms": 0.1762905095684976,
+          "dc": 9.284862310658081e-05
+        }
+      ]
+    },
+    {
+      "file": "transients-48000.wav",
+      "channels": 1,
+      "sample_width": 2,
+      "sample_rate": 48000,
+      "frames": 192000,
+      "metrics": [
+        {
+          "peak": 0.6191900387585071,
+          "rms": 0.021129583192221114,
+          "dc": 6.447861669769382e-05
+        }
+      ]
+    },
+    {
+      "file": "stereo-48000.wav",
+      "channels": 2,
+      "sample_width": 2,
+      "sample_rate": 48000,
+      "frames": 144000,
+      "metrics": [
+        {
+          "peak": 0.500015259254738,
+          "rms": 0.17678132223407808,
+          "dc": 3.4723281892690137e-06
+        },
+        {
+          "peak": 0.500015259254738,
+          "rms": 0.176781122205073,
+          "dc": 3.4723281892690137e-06
+        }
+      ]
+    },
+    {
+      "file": "silence-96000.wav",
+      "channels": 1,
+      "sample_width": 2,
+      "sample_rate": 96000,
+      "frames": 96000,
+      "metrics": [
+        {
+          "peak": 0.0,
+          "rms": 0.0,
+          "dc": 0.0
+        }
+      ]
+    },
+    {
+      "file": "impulse-96000.wav",
+      "channels": 1,
+      "sample_width": 2,
+      "sample_rate": 96000,
+      "frames": 192000,
+      "metrics": [
+        {
+          "peak": 0.8000122074037904,
+          "rms": 0.0018257697178106563,
+          "dc": 4.166730246894742e-06
+        }
+      ]
+    },
+    {
+      "file": "sweep-96000.wav",
+      "channels": 1,
+      "sample_width": 2,
+      "sample_rate": 96000,
+      "frames": 480000,
+      "metrics": [
+        {
+          "peak": 0.250007629627369,
+          "rms": 0.17629051659943462,
+          "dc": 9.28381959491765e-05
+        }
+      ]
+    },
+    {
+      "file": "transients-96000.wav",
+      "channels": 1,
+      "sample_width": 2,
+      "sample_rate": 96000,
+      "frames": 384000,
+      "metrics": [
+        {
+          "peak": 0.6322214423047579,
+          "rms": 0.021173634201771634,
+          "dc": 5.1984942930387284e-05
+        }
+      ]
+    },
+    {
+      "file": "stereo-96000.wav",
+      "channels": 2,
+      "sample_width": 2,
+      "sample_rate": 96000,
+      "frames": 288000,
+      "metrics": [
+        {
+          "peak": 0.500015259254738,
+          "rms": 0.1767785817356469,
+          "dc": 1.7361640946345069e-06
+        },
+        {
+          "peak": 0.500015259254738,
+          "rms": 0.17677886689955072,
+          "dc": 1.7361640946345069e-06
+        }
+      ]
+    }
+  ]
+}

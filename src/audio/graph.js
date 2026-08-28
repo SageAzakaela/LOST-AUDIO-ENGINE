@@ -1,4 +1,4 @@
-const WORKLET_URL = new URL("./transmission-processor.js", import.meta.url);
+const WORKLET_URL = new URL("./transmission-processor.js?v=20260827.2", import.meta.url);
 function now(ctx) {
   return ctx.currentTime;
 }
@@ -8,11 +8,13 @@ export async function ensureWorklet(ctx) {
   ctx.__transmissionWorkletLoaded = true;
 }
 export function mapBandwidth(bw) {
-  const hp = 600 - bw * 400;
-  const lp = 2500 + bw * 3500;
-  const midGainDb = (1 - bw) * 5.2;
-  const midQ = 0.9 + (1 - bw) * 1.2;
-  return { hp, lp, midGainDb, midQ, midFreq: 1550 };
+  const b = Math.min(1, Math.max(0, Number(bw) || 0));
+  const hp = 650 - Math.pow(b, 0.8) * 560;
+  const lp = 2000 + Math.pow(b, 1.35) * 12500;
+  const midGainDb = Math.pow(1 - b, 1.15) * 6.2;
+  const midQ = 0.85 + (1 - b) * 1.55;
+  const midFreq = 1450 + b * 350;
+  return { hp, lp, midGainDb, midQ, midFreq };
 }
 export function defaultSettings() {
   return {
@@ -174,12 +176,13 @@ export async function buildTransmissionGraph(ctx, { seed, passes = 1, tuningEdge
     const drive = settings.drive ?? 0.35;
     const preDrive = settings.preDrive ?? Math.pow(drive, 0.85) * 0.75;
     const postDrive = settings.postDrive ?? drive;
+    const perStage = (value) => 1 - Math.pow(1 - Math.max(0, Math.min(1, value)), 1 / passCount);
     for (const st of stages) {
-      st.preSat.parameters.get("drive")?.setValueAtTime(preDrive, time);
+      st.preSat.parameters.get("drive")?.setValueAtTime(perStage(preDrive), time);
       st.preSat.parameters.get("asym")?.setValueAtTime(settings.asym ?? drive * 0.6, time);
       st.preSat.parameters.get("mix")?.setValueAtTime(1, time);
 
-      st.postNode.parameters.get("drive")?.setValueAtTime(postDrive, time);
+      st.postNode.parameters.get("drive")?.setValueAtTime(perStage(postDrive), time);
       st.postNode.parameters.get("asym")?.setValueAtTime(settings.asym ?? drive * 0.6, time);
       st.postNode.parameters.get("comp")?.setValueAtTime(settings.comp ?? (0.18 + drive * 0.65), time);
       st.postNode.parameters.get("crush")?.setValueAtTime(settings.crush ?? 0, time);
@@ -196,14 +199,20 @@ export async function buildTransmissionGraph(ctx, { seed, passes = 1, tuningEdge
     }
 
     const noise = settings.noiseProfile ?? 0.2;
+    const stageNoiseScale = Math.pow(passCount, -0.4);
+    const totalOutGain = Math.max(0, Math.min(1.5, settings.outGain ?? 0.92));
+    // Repeated band-limits and saturators can otherwise build mid-band energy.
+    // Preserve a small generational loss instead of allowing passes to get louder.
+    const passLoss = 1 / Math.sqrt(1 + 0.55 * (passCount - 1));
+    const perStageOutGain = Math.pow(totalOutGain * passLoss, 1 / passCount);
     for (const st of stages) {
-      st.postNode.parameters.get("noise")?.setValueAtTime(noise, time);
-      st.postNode.parameters.get("hiss")?.setValueAtTime(settings.hiss ?? noise * 0.95, time);
+      st.postNode.parameters.get("noise")?.setValueAtTime(noise * stageNoiseScale, time);
+      st.postNode.parameters.get("hiss")?.setValueAtTime((settings.hiss ?? noise * 0.95) * stageNoiseScale, time);
       st.postNode.parameters.get("noiseColor")?.setValueAtTime(
         settings.noiseColor ?? (settings.pinkNoise ? 1 : Math.max(0, (noise - 0.55) * 2)),
         time,
       );
-      st.postNode.parameters.get("outGain")?.setValueAtTime(settings.outGain ?? 0.92, time);
+      st.postNode.parameters.get("outGain")?.setValueAtTime(perStageOutGain, time);
     }
 
     clickNode.parameters.get("walkieEnable")?.setValueAtTime(settings.walkieMode ? 1 : 0, time);
@@ -224,6 +233,8 @@ export async function buildTransmissionGraph(ctx, { seed, passes = 1, tuningEdge
     input: clickNode,
     output: out,
     passes: passCount,
+    latencySeconds: passCount * 0.006,
+    mixLaw: "linear",
     nodes: { clickNode, tuningNode, stages, out },
     reset,
     applySettings,

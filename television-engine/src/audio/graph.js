@@ -47,9 +47,9 @@ export function defaultSettings() {
     noiseHiss: 0.55,
     noiseCrackle: 0.08,
 
-    bedEnable: false,
-    bedLevel: 0.22,
-    bedSource: "",
+    bedEnable: true,
+    bedLevel: 0.5,
+    bedSource: "crt.mp3",
 
     outGain: 1,
   };
@@ -131,6 +131,15 @@ export async function buildTelevisionGraph(ctx, { seed } = {}) {
   whineGain.connect(sfxSum);
   whineOsc.start();
 
+  // A real NTSC flyback tone sits near 15.7 kHz and disappears for many
+  // listeners/speakers. Its octave-down component only emerges at stronger
+  // settings, preserving realism at the low end while making exaggeration useful.
+  const flybackSubOsc = new OscillatorNode(ctx, { type: "sine", frequency: whineHz * 0.5 });
+  const flybackSubGain = new GainNode(ctx, { gain: 0 });
+  flybackSubOsc.connect(flybackSubGain);
+  flybackSubGain.connect(sfxSum);
+  flybackSubOsc.start();
+
   const noise = new AudioWorkletNode(ctx, "tv-noise", {
     numberOfInputs: 0,
     numberOfOutputs: 1,
@@ -204,27 +213,30 @@ export async function buildTelevisionGraph(ctx, { seed } = {}) {
     comp.release.setValueAtTime(0.18 - compAmt * 0.08, time);
 
     const staticAmt = clamp01(s.static ?? 0.12);
-    noise.parameters.get("level")?.setValueAtTime(staticAmt, time);
+    noise.parameters.get("level")?.setValueAtTime(Math.pow(staticAmt, 0.72), time);
     noise.parameters.get("hiss")?.setValueAtTime(clamp01(s.noiseHiss ?? macro.noiseHiss), time);
     noise.parameters.get("crackle")?.setValueAtTime(clamp01(s.noiseCrackle ?? macro.noiseCrackle), time);
     noise.parameters.get("seed")?.setValueAtTime(((seed ?? 1) ^ 0x6d2b79f5) >>> 0, time);
 
     noiseGain.gain.cancelScheduledValues(time);
     noiseGain.gain.setValueAtTime(noiseGain.gain.value, time);
-    noiseGain.gain.linearRampToValueAtTime(0.85, t1);
+    noiseGain.gain.linearRampToValueAtTime(1.15, t1);
     noiseHP.frequency.setValueAtTime(1200 + macro.noiseHiss * 5200, time);
 
     const humAmt = clamp01(s.hum ?? macro.hum);
     humGain.gain.cancelScheduledValues(time);
     humGain.gain.setValueAtTime(humGain.gain.value, time);
-    humGain.gain.linearRampToValueAtTime(humAmt * 0.03, t1);
+    humGain.gain.linearRampToValueAtTime(humAmt * 0.045, t1);
 
     const wh = clamp01(s.whine ?? macro.whine);
     whineGain.gain.cancelScheduledValues(time);
     whineGain.gain.setValueAtTime(whineGain.gain.value, time);
-    whineGain.gain.linearRampToValueAtTime(wh * 0.003, t1);
+    whineGain.gain.linearRampToValueAtTime(wh * 0.004, t1);
+    flybackSubGain.gain.cancelScheduledValues(time);
+    flybackSubGain.gain.setValueAtTime(flybackSubGain.gain.value, time);
+    flybackSubGain.gain.linearRampToValueAtTime(wh * wh * 0.006, t1);
 
-    const bedLevel = clamp01(s.bedLevel ?? 0.22);
+    const bedLevel = clamp01(s.bedLevel ?? 0.5);
     sfxLevel.gain.cancelScheduledValues(time);
     sfxLevel.gain.setValueAtTime(sfxLevel.gain.value, time);
     sfxLevel.gain.linearRampToValueAtTime(bedLevel, t1);
@@ -238,7 +250,7 @@ export async function buildTelevisionGraph(ctx, { seed } = {}) {
   return {
     input,
     output: outGain,
-    nodes: { input, hp1, hp2, dip, hump, lp1, lp2, shaper, comp, sfx, sfxSum, sfxLevel, humOsc, humGain, whineOsc, whineGain, noise, noiseGain, noiseHP, sum, outGain },
+    nodes: { input, hp1, hp2, dip, hump, lp1, lp2, shaper, comp, sfx, sfxSum, sfxLevel, humOsc, humGain, whineOsc, whineGain, flybackSubOsc, flybackSubGain, noise, noiseGain, noiseHP, sum, outGain },
     reset,
     applySettings,
   };

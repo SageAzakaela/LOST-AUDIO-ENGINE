@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: itch.io community
+    url: https://azakaela.itch.io/lost-audio-engine/community
+    about: View the original public community threads; implementation work is tracked in GitHub Issues.
+  - name: Product roadmap and reconciled feedback
+    url: https://github.com/SageAzakaela/LOST-AUDIO-ENGINE/blob/main/docs/feedback-tracker.md
+    about: Review accepted direction, previously found requests, and their evidence before opening a duplicate.

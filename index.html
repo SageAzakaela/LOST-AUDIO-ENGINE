@@ -3,174 +3,222 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Lost Audio Engine</title>
-    <link rel="stylesheet" href="./lame/styles.css" />
+    <meta name="theme-color" content="#08090a" />
+    <meta name="description" content="Lost Audio Engine is B&E Digital's modular browser audio workstation for convincing device, media, transmission, and space degradation." />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <link rel="canonical" href="https://bande.digital/tools/lost/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="B&E Digital" />
+    <meta property="og:title" content="Lost Audio Engine | B&E Digital" />
+    <meta property="og:description" content="Build and tune a live signal path through tape, phones, CRTs, damaged media, spaces, and unreliable codecs." />
+    <meta property="og:url" content="https://bande.digital/tools/lost/" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Lost Audio Engine | B&E Digital" />
+    <meta name="twitter:description" content="A modular browser workstation for making audio sound old, strange, distant, damaged, or unreliable." />
+    <title>Lost Audio Engine — Modular Device Workstation</title>
+    <link rel="stylesheet" href="./lame/styles.css?v=20260827.25" />
   </head>
   <body>
-    <main class="app">
-      <header class="top">
-        <div class="title">
-          <h1>Lost Audio Engine</h1>
-          <p class="sub">Modular lost-media device chain: toggle modules, set wetness, bounce WAV.</p>
-        </div>
-
-        <div class="topActions">
-          <label class="file">
-            <input id="fileInput" type="file" accept=".wav,.mp3,audio/wav,audio/mpeg" />
-            <span>Upload WAV/MP3</span>
-          </label>
-          <label class="selectWrap">
-            <span class="selectLabel">View</span>
-            <select id="viewSelect"></select>
-          </label>
-          <label class="selectWrap">
-            <span class="selectLabel">Master Preset</span>
-            <select id="masterPreset"></select>
-          </label>
-          <button id="saveMasterPresetBtn" class="miniBtn" type="button">Save Preset</button>
-          <button id="deleteMasterPresetBtn" class="miniBtn" type="button" disabled>Delete</button>
-          <button id="playBtn" class="primary" disabled>Play</button>
-          <button id="stopBtn" disabled>Stop</button>
-          <label class="toggle">
-            <input id="loopToggle" type="checkbox" />
-            <span>Loop</span>
-          </label>
-          <button id="exportBtn" disabled>Export WAV</button>
-        </div>
-
-        <section class="master">
-          <div class="masterGrid">
-            <div class="control">
-              <div class="labelRow">
-                <label for="masterGain">Master Gain</label>
-                <span id="masterGainVal" class="val"></span>
-              </div>
-              <input id="masterGain" type="range" min="0" max="1.5" step="0.01" value="0.25" />
-            </div>
-
-            <div class="control">
-              <div class="labelRow">
-                <label for="masterHpHz">Master HP</label>
-                <span id="masterHpHzVal" class="val"></span>
-              </div>
-              <input id="masterHpHz" type="range" min="20" max="800" step="1" value="20" />
-            </div>
-
-            <div class="control">
-              <div class="labelRow">
-                <label for="masterLpHz">Master LP</label>
-                <span id="masterLpHzVal" class="val"></span>
-              </div>
-              <input id="masterLpHz" type="range" min="2000" max="20000" step="10" value="20000" />
-            </div>
-
-            <div class="control">
-              <div class="labelRow">
-                <label for="masterComp">Master Comp</label>
-                <span id="masterCompVal" class="val"></span>
-              </div>
-              <input id="masterComp" type="range" min="0" max="1" step="0.001" value="0" />
-            </div>
-
-            <div class="control">
-              <div class="labelRow">
-                <label for="ceiling">Ceiling</label>
-                <span id="ceilingVal" class="val"></span>
-              </div>
-              <input id="ceiling" type="range" min="0.2" max="1" step="0.001" value="0.92" />
-            </div>
-
-            <div class="control">
-              <div class="labelRow">
-                <label for="limiter">Limiter</label>
-                <span id="limiterVal" class="val"></span>
-              </div>
-              <input id="limiter" type="range" min="0" max="1" step="0.001" value="0.45" />
-            </div>
-
-            <div class="control">
-              <div class="labelRow">
-                <label>Options</label>
-                <span class="val" id="optsVal"></span>
-              </div>
-              <div class="optRow">
-                <label class="toggle">
-                  <input id="softClip" type="checkbox" checked />
-                  <span>Soft Clip</span>
-                </label>
-                <label class="toggle">
-                  <input id="monoOut" type="checkbox" checked />
-                  <span>Mono Output</span>
-                </label>
-              </div>
-            </div>
+    <section class="mobile-gate" aria-labelledby="mobile-gate-title">
+      <div class="mobile-gate__signal" aria-hidden="true"><i></i><b>LOST AUDIO ENGINE</b><i></i></div>
+      <span>B&amp;E / DESKTOP AUDIO INSTRUMENT</span>
+      <h1 id="mobile-gate-title">This workstation needs a desktop.</h1>
+      <p>Lost Audio Engine is a live modular audio rack with precision controls, waveform editing, drag-and-drop hardware, and realtime monitoring. A phone-sized version would hide the instrument instead of preserving it.</p>
+      <strong>This tool is available only on desktop devices. Open this page on a laptop or desktop browser at least 1024px wide.</strong>
+      <small>Your audio is processed locally in the browser.</small>
+    </section>
+    <main class="workstation-shell">
+      <header class="workstation-header">
+        <div class="instrument-brand"><a class="instrument-return" href="/?channel=tools" aria-label="Return to B&E Digital tools">← B&amp;E DIGITAL / TOOLS</a><h1>Lost Audio Engine</h1><p>MODULAR DEVICE EMULATION WORKSTATION <b id="accessState">15:00 FREE</b></p></div>
+        <div class="header-session">
+          <div class="header-levels" aria-label="Input and playback levels">
+            <label class="header-level"><span>SOURCE TRIM <b id="inputTrimVal">-6.0 dB</b></span><input id="inputTrim" type="range" min="0" max="1" step="0.01" value="0.5" aria-label="Source input trim" /></label>
+            <label class="header-level"><span>MONITOR VOL <b id="monitorVolumeVal">-3.1 dB</b></span><input id="monitorVolume" type="range" min="0" max="1" step="0.01" value="0.7" aria-label="Playback monitor volume" /></label>
           </div>
-
-          <div class="status">
-            <div><span class="k">File</span> <span id="fileName" class="v">None</span></div>
-            <div><span class="k">Duration</span> <span id="duration" class="v">-</span></div>
-            <div><span class="k">Sample Rate</span> <span id="sampleRate" class="v">-</span></div>
-            <div><span class="k">State</span> <span id="state" class="v">Idle</span></div>
-          </div>
-        </section>
+          <label class="file-button"><input id="fileInput" type="file" accept=".wav,.mp3,audio/wav,audio/mpeg" /><span>LOAD AUDIO</span><b>＋</b></label>
+          <label class="header-select"><span>RACK PRESET</span><select id="masterPreset"></select></label>
+          <button id="saveMasterPresetBtn" class="utility-button" type="button">SAVE RACK</button>
+          <button id="deleteMasterPresetBtn" class="utility-button" type="button" disabled>DELETE</button>
+          <button id="guideBtn" class="utility-button utility-button--guide" type="button" aria-haspopup="dialog">GUIDE ?</button>
+          <label class="header-select header-select--view"><span>WORKSPACE</span><select id="viewSelect"></select></label>
+          <button id="exportBtn" class="export-button" type="button" disabled>EXPORT WAV ↓</button>
+        </div>
       </header>
-
-      <section class="modules">
-        <div id="moduleRow" class="moduleRow"></div>
-      </section>
-
-      <section id="automationView" class="automation hidden">
-        <div class="automationBar">
-          <div class="control slim">
-            <div class="labelRow">
-              <label for="autoBpm">BPM</label>
-              <span id="autoBpmVal" class="val"></span>
-            </div>
-            <input id="autoBpm" type="number" min="30" max="240" step="0.1" value="120" />
-          </div>
-          <div class="control slim">
-            <div class="labelRow">
-              <label for="autoZoom">Zoom</label>
-              <span id="autoZoomVal" class="val"></span>
-            </div>
-            <input id="autoZoom" type="range" min="20" max="400" step="1" value="100" />
-          </div>
-          <label class="toggle">
-            <input id="autoSnap" type="checkbox" checked />
-            <span>Snap</span>
-          </label>
-          <div class="control slim">
-            <div class="labelRow">
-              <label>Length</label>
-              <span id="autoLenVal" class="val"></span>
-            </div>
-            <div id="autoLenText" class="val">-</div>
-          </div>
-          <div class="control slim">
-            <div class="labelRow">
-              <label for="autoTarget">Automation</label>
-              <span class="val">Wet/Enable</span>
-            </div>
-            <select id="autoTarget"></select>
-          </div>
+      <section class="transport-deck" aria-label="Playback and signal monitor">
+        <div class="transport-controls">
+          <button id="playBtn" class="transport-button transport-button--play" type="button" disabled aria-label="Play or pause"><span aria-hidden="true">▶</span><b>PLAY</b></button>
+          <button id="stopBtn" class="transport-button" type="button" disabled aria-label="Stop and return to start"><span aria-hidden="true">■</span><b>STOP</b></button>
+          <button id="monitorBtn" class="transport-button" type="button" aria-pressed="false"><span aria-hidden="true">A/B</span><b>PROCESSED</b></button>
+          <button id="panicBtn" class="transport-button transport-button--safe" type="button"><span aria-hidden="true">!</span><b>SAFE STOP</b></button>
         </div>
-
-        <div class="automationWrap">
-          <div id="automationTracks" class="automationTracks"></div>
-          <div class="automationLane">
-            <canvas id="autoLaneCanvas" width="1200" height="140"></canvas>
-            <div class="laneHint">Click to add • Drag to move • Right-click to delete</div>
-          </div>
+        <div class="waveform-deck">
+          <div class="waveform-label waveform-label--source"><span>SOURCE OVERVIEW</span><b id="transportTime">0:00 / 0:00</b></div>
+          <canvas id="sourceWaveformCanvas" width="1200" height="72" aria-label="Source waveform overview"></canvas>
+          <div class="waveform-label waveform-label--output"><span>LIVE OUTPUT SCOPE</span><b id="scopeState">WAITING FOR SIGNAL</b></div>
+          <canvas id="processedWaveformCanvas" width="1200" height="72" aria-label="Live processed waveform"></canvas>
+          <input id="transportSeek" class="transport-seek" type="range" min="0" max="1" step="0.001" value="0" aria-label="Playback position" disabled />
+        </div>
+        <div class="transport-options">
+          <div class="transport-file"><span>NOW HOLDING</span><strong id="fileName">None</strong><small><b id="duration">-</b> / <b id="sampleRate">-</b></small></div>
+          <div class="transport-state"><span>ENGINE</span><strong id="state">Idle</strong></div>
+          <label class="transport-toggle"><input id="loopToggle" type="checkbox" /><span>LOOP</span></label>
+          <label class="loop-field"><span>IN</span><input id="loopStart" type="number" min="0" step="0.01" value="0" /></label>
+          <label class="loop-field"><span>OUT</span><input id="loopEnd" type="number" min="0" step="0.01" value="0" /></label>
         </div>
       </section>
-
-      <footer class="footer">
-        <a href="./lame/README.md" target="_blank" rel="noreferrer">README</a>
-        <span class="sep">Aú</span>
-        <span class="muted">Preview and export share the same modular graph.</span>
-      </footer>
+      <section class="workbench-grid">
+        <aside class="device-library" aria-labelledby="device-library-title">
+          <header class="bay-heading"><span>DEVICE LIBRARY</span><h2 id="device-library-title">Hardware</h2><p>Drag from the grip into the signal path, or use the add switch.</p></header>
+          <div class="library-filter" role="group" aria-label="Filter devices"><button type="button" data-library-filter="all" aria-pressed="true">ALL</button><button type="button" data-library-filter="analog" aria-pressed="false">ANALOG</button><button type="button" data-library-filter="digital" aria-pressed="false">DIGITAL</button><button type="button" data-library-filter="space" aria-pressed="false">SPACE</button></div>
+          <div id="deviceLibrary" class="device-shelf"></div>
+        </aside>
+        <section class="rack-bay" aria-labelledby="rack-title">
+          <header class="bay-heading bay-heading--rack"><div><span>SIGNAL PATH / LEFT TO RIGHT</span><h2 id="rack-title">Live rack</h2></div><div class="rack-readout"><span>ACTIVE DEVICES</span><strong id="rackCount">00</strong></div></header>
+          <div id="moduleRow" class="rack-chain" role="list" aria-label="Active device chain"><div id="rackEmpty" class="rack-empty"><span class="rack-empty__jack" aria-hidden="true">IN</span><strong>DRAG HARDWARE HERE</strong><p>The dry signal is already passing through. Add a device whenever you want to disturb it.</p><span class="rack-empty__jack rack-empty__jack--out" aria-hidden="true">OUT</span></div></div>
+          <div class="rack-signal-line" aria-hidden="true"><span>INPUT</span><i></i><b>OUTPUT</b></div>
+        </section>
+        <aside class="device-inspector" aria-labelledby="inspector-title">
+          <header class="bay-heading inspector-heading"><span>FOCUSED DEVICE</span><h2 id="inspector-title">Inspector</h2><p>Deep controls and presets for the selected hardware. The playable controls remain on the device.</p></header>
+          <div id="inspectorContent" class="inspector-content"><div class="inspector-empty"><span>NO DEVICE SELECTED</span><strong>Choose a module from the rack.</strong><p>The signal path stays visible while the selected device opens here.</p></div></div>
+        </aside>
+      </section>
+      <section id="toolDrawer" class="tool-drawer" data-drawer-tab="mastering" data-drawer-open="false" aria-label="Mastering and automation drawers">
+        <nav class="drawer-tabs" aria-label="Open workstation drawer">
+          <button type="button" data-drawer-target="mastering" aria-pressed="true"><span>01</span> MASTERING <b>FINAL CHAIN</b></button>
+          <button type="button" data-drawer-target="automation" aria-pressed="false"><span>02</span> AUTOMATION <b>CURVE LANES</b></button>
+          <button id="drawerToggle" class="drawer-toggle" type="button" aria-expanded="false" aria-controls="drawerBody"><span>OPEN</span><b aria-hidden="true">↑</b></button>
+        </nav>
+        <div id="drawerBody" class="drawer-body">
+          <section class="drawer-panel drawer-panel--mastering" data-drawer-panel="mastering" aria-labelledby="mastering-title">
+            <header class="drawer-heading"><div><span>FINAL POST PROCESSING</span><h2 id="mastering-title">Mastering rack</h2></div><p>Measured output, tonal cleanup, dynamics, ambience, and protected delivery.</p></header>
+            <div class="mastering-workspace">
+              <section class="master-meter-bank" aria-label="Master level measurements">
+                <header><span>OUTPUT TELEMETRY</span><b>POST CHAIN</b></header>
+                <div class="meter-readouts"><div><span>PEAK</span><strong id="masterPeakDb">−∞</strong><small>dBFS</small></div><div><span>RMS</span><strong id="masterRmsDb">−∞</strong><small>dBFS</small></div><div><span>LOUDNESS</span><strong id="masterLufs">−∞</strong><small>LUFS-M EST</small></div><div><span>HEADROOM</span><strong id="masterHeadroom">—</strong><small>dB</small></div></div>
+                <div class="master-level-meter" aria-hidden="true"><i id="masterLevelFill"></i><b id="masterPeakHold"></b></div>
+                <canvas id="masterEqCanvas" width="720" height="190" aria-label="Master equalizer response"></canvas>
+                <p class="measurement-note">LUFS-M is a monitoring estimate for tuning; exported files still require a standards-compliant loudness scan for delivery.</p>
+              </section>
+              <section class="master-rack" aria-label="Master processing chain">
+                <article class="master-device master-device--eq"><header><span>01</span><h3>Graphic EQ</h3><b>10 BAND + CUTS</b></header><div class="master-device-grid">
+                  <div class="control"><div class="labelRow"><label for="masterHpHz">HIGH PASS</label><span id="masterHpHzVal" class="val"></span></div><input id="masterHpHz" type="range" min="20" max="800" step="1" value="20" /></div>
+                  <div id="masterEqBands" class="graphic-eq-bands" aria-label="Ten band graphic equalizer"></div>
+                  <div class="control"><div class="labelRow"><label for="masterLpHz">LOW PASS</label><span id="masterLpHzVal" class="val"></span></div><input id="masterLpHz" type="range" min="2000" max="20000" step="10" value="20000" /></div>
+                </div></article>
+                <article class="master-device master-device--denoise"><header><span>02</span><h3>Noise Reducer</h3><b>ADAPTIVE EXPANDER</b></header><div class="master-device-grid">
+                  <label class="noise-learn"><input id="masterNoiseLearn" type="checkbox" /><span>LEARN NOISE FLOOR</span><b id="noiseReducerState">MANUAL THRESHOLD</b></label>
+                  <div class="control"><div class="labelRow"><label for="masterNoiseThreshold">THRESHOLD</label><span id="masterNoiseThresholdVal" class="val"></span></div><input id="masterNoiseThreshold" type="range" min="-80" max="-20" step="0.5" value="-55" /></div>
+                  <div class="control"><div class="labelRow"><label for="masterNoiseReductionDb">REDUCTION</label><span id="masterNoiseReductionDbVal" class="val"></span></div><input id="masterNoiseReductionDb" type="range" min="0" max="36" step="0.5" value="12" /></div>
+                  <div class="control"><div class="labelRow"><label for="masterNoiseAttack">ATTACK</label><span id="masterNoiseAttackVal" class="val"></span></div><input id="masterNoiseAttack" type="range" min="1" max="100" step="1" value="12" /></div>
+                  <div class="control"><div class="labelRow"><label for="masterNoiseRelease">RELEASE</label><span id="masterNoiseReleaseVal" class="val"></span></div><input id="masterNoiseRelease" type="range" min="20" max="1000" step="5" value="220" /></div>
+                  <div class="control"><div class="labelRow"><label for="masterNoiseMix">BLEND</label><span id="masterNoiseMixVal" class="val"></span></div><input id="masterNoiseMix" type="range" min="0" max="1" step="0.001" value="0" /></div>
+                </div></article>
+                <article class="master-device master-device--color"><header><span>03</span><h3>Color + Space</h3><b>PARALLEL DEVICES</b></header><div class="master-device-grid">
+                  <div class="control"><div class="labelRow"><label for="masterSaturation">SATURATION</label><span id="masterSaturationVal" class="val"></span></div><input id="masterSaturation" type="range" min="0" max="1" step="0.001" value="0" /></div>
+                  <div class="control"><div class="labelRow"><label for="masterDelayTime">DELAY TIME</label><span id="masterDelayTimeVal" class="val"></span></div><input id="masterDelayTime" type="range" min="10" max="1000" step="1" value="180" /></div>
+                  <div class="control"><div class="labelRow"><label for="masterDelayFeedback">FEEDBACK</label><span id="masterDelayFeedbackVal" class="val"></span></div><input id="masterDelayFeedback" type="range" min="0" max="0.85" step="0.001" value="0.18" /></div>
+                  <div class="control"><div class="labelRow"><label for="masterDelayDamping">DELAY DAMPING</label><span id="masterDelayDampingVal" class="val"></span></div><input id="masterDelayDamping" type="range" min="800" max="18000" step="10" value="8000" /></div>
+                  <div class="control"><div class="labelRow"><label for="masterDelayMix">DELAY MIX</label><span id="masterDelayMixVal" class="val"></span></div><input id="masterDelayMix" type="range" min="0" max="1" step="0.001" value="0" /></div>
+                  <div class="control"><div class="labelRow"><label for="masterReverbPreDelay">PRE-DELAY</label><span id="masterReverbPreDelayVal" class="val"></span></div><input id="masterReverbPreDelay" type="range" min="0" max="200" step="1" value="18" /></div>
+                  <div class="control"><div class="labelRow"><label for="masterReverbDecay">DECAY</label><span id="masterReverbDecayVal" class="val"></span></div><input id="masterReverbDecay" type="range" min="0.3" max="8" step="0.05" value="1.35" /></div>
+                  <div class="control"><div class="labelRow"><label for="masterReverbDamping">REVERB DAMPING</label><span id="masterReverbDampingVal" class="val"></span></div><input id="masterReverbDamping" type="range" min="800" max="18000" step="10" value="6500" /></div>
+                  <div class="control"><div class="labelRow"><label for="masterReverbMix">REVERB MIX</label><span id="masterReverbMixVal" class="val"></span></div><input id="masterReverbMix" type="range" min="0" max="1" step="0.001" value="0" /></div>
+                </div></article>
+                <article class="master-device master-device--dynamics"><header><span>04</span><h3>Dynamics</h3><b>PROTECTED</b></header><div class="master-device-grid"><div class="control"><div class="labelRow"><label for="masterGain">POST-RACK MAKEUP</label><span id="masterGainVal" class="val"></span></div><input id="masterGain" type="range" min="0" max="1.5" step="0.01" value="0.25" /></div><div class="control"><div class="labelRow"><label for="masterComp">BUS COMP</label><span id="masterCompVal" class="val"></span></div><input id="masterComp" type="range" min="0" max="1" step="0.001" value="0" /></div><div class="control"><div class="labelRow"><label for="limiter">LIMITER</label><span id="limiterVal" class="val"></span></div><input id="limiter" type="range" min="0" max="1" step="0.001" value="0.45" /></div><div class="control"><div class="labelRow"><label for="ceiling">CEILING</label><span id="ceilingVal" class="val"></span></div><input id="ceiling" type="range" min="0.2" max="1" step="0.001" value="0.92" /></div><div class="control control--switches"><div class="labelRow"><label>OUTPUT</label><span class="val" id="optsVal"></span></div><div class="optRow"><label class="toggle"><input id="softClip" type="checkbox" checked /><span>CLIPPER</span></label><label class="toggle"><input id="monoOut" type="checkbox" checked /><span>MONO</span></label></div></div></div></article>
+              </section>
+            </div>
+          </section>
+          <section id="automationView" class="drawer-panel drawer-panel--automation" data-drawer-panel="automation" aria-labelledby="automation-title" hidden>
+            <header class="drawer-heading"><div><span>FILE-TIME MODULATION</span><h2 id="automation-title">Automation</h2></div><p>Select an exposed rack or mastering control, then draw its movement against the file.</p></header>
+            <div class="automationBar"><div class="control slim"><div class="labelRow"><label for="autoBpm">BPM</label><span id="autoBpmVal" class="val"></span></div><input id="autoBpm" type="number" min="30" max="240" step="0.1" value="120" /></div><div class="control slim"><div class="labelRow"><label for="autoZoom">ZOOM</label><span id="autoZoomVal" class="val"></span></div><input id="autoZoom" type="range" min="20" max="400" step="1" value="100" /></div><label class="toggle"><input id="autoSnap" type="checkbox" checked /><span>SNAP</span></label><div class="control slim"><div class="labelRow"><label>LENGTH</label></div><div id="autoLenText" class="val">-</div></div><div class="control slim control--target"><div class="labelRow"><label for="autoTarget">EXPOSED CONTROL</label><span class="val">DRAW LANE</span></div><select id="autoTarget"></select></div></div>
+            <div class="automation-live-grid"><div id="automationTracks" class="automation-target-list" aria-label="Automatable controls"></div><div class="automationLane"><canvas id="autoLaneCanvas" width="1200" height="220"></canvas><div class="laneHint">Click to add • Drag points to shape the curve • Right-click to delete</div></div></div>
+          </section>
+        </div>
+      </section>
+      <footer class="workstation-footer"><span>LOST AUDIO ENGINE / LOCAL SIGNAL PROCESSING</span><nav aria-label="LOST project links"><a href="/?channel=tools">B&amp;E TOOLS ↗</a><a href="https://github.com/SageAzakaela/LOST-AUDIO-ENGINE" target="_blank" rel="noreferrer">SOURCE ↗</a></nav></footer>
     </main>
 
-    <script type="module" src="./lame/src/main.js"></script>
+    <section id="accessGate" class="access-gate" role="dialog" aria-modal="true" aria-labelledby="accessGateTitle" hidden>
+      <div class="access-gate__backdrop" aria-hidden="true"></div>
+      <article class="access-gate__panel">
+        <header><span>LOST AUDIO ENGINE / CONTINUE THE SESSION</span><b>15:00 COMPLETE</b></header>
+        <div class="access-gate__signal" aria-hidden="true"><i></i><strong>∞</strong><i></i></div>
+        <p class="access-gate__eyebrow">KEEP THE SIGNAL OPEN</p>
+        <h2 id="accessGateTitle">Unlock unlimited use.</h2>
+        <p>Your rack and audio are still right where you left them. Enter your email to join B&amp;E Digital’s occasional mailing list and keep using Lost Audio Engine without a time limit.</p>
+        <form id="accessForm" action="/api/color-systems/lost-access" method="post">
+          <input type="hidden" name="source" value="Lost Audio Engine access gate" />
+          <div class="access-gate__trap" aria-hidden="true"><label for="accessCompany">Leave this field empty</label><input id="accessCompany" name="gotcha" type="text" tabindex="-1" autocomplete="off" /></div>
+          <label for="accessEmail">EMAIL ADDRESS</label>
+          <div class="access-gate__entry"><input id="accessEmail" name="email" type="email" autocomplete="email" inputmode="email" maxlength="180" placeholder="you@somewhere.cool" required /><button type="submit">UNLOCK THE ENGINE <span aria-hidden="true">↗</span></button></div>
+          <p id="accessStatus" class="access-gate__status" aria-live="polite">Your email is recorded by B&amp;E so the unlock follows a real signup. Occasional tools and studio transmissions; unsubscribe anytime.</p>
+        </form>
+        <footer><span>NO ACCOUNT · NO PASSWORD · AUDIO STAYS LOCAL</span><a href="/?channel=tools">RETURN TO B&amp;E TOOLS ↗</a></footer>
+      </article>
+    </section>
+
+    <aside id="welcomeCoach" class="welcome-coach" aria-labelledby="welcomeCoachTitle" hidden>
+      <button id="welcomeCoachClose" class="icon-close" type="button" aria-label="Dismiss getting started">×</button>
+      <span>FIRST SIGNAL</span>
+      <h2 id="welcomeCoachTitle">New to the rack?</h2>
+      <p>Take the two-minute walkthrough, or begin immediately—the workstation is already ready for audio.</p>
+      <div>
+        <button id="welcomeTourBtn" class="guide-action guide-action--primary" type="button">START WALKTHROUGH</button>
+        <button id="welcomeGuideBtn" class="guide-action" type="button">OPEN GUIDE</button>
+      </div>
+    </aside>
+
+    <section id="guideDialog" class="guide-dialog" role="dialog" aria-modal="true" aria-labelledby="guideTitle" hidden>
+      <div class="guide-dialog__backdrop" data-guide-close></div>
+      <article class="guide-book">
+        <header>
+          <div><span>B&amp;E / LOST FIELD MANUAL</span><h2 id="guideTitle">Build a signal in under two minutes.</h2></div>
+          <button id="guideCloseBtn" class="icon-close" type="button" aria-label="Close guide">×</button>
+        </header>
+        <div class="guide-book__body">
+          <section class="guide-quickstart" aria-labelledby="quickstartTitle">
+            <span>THE WORKFLOW</span>
+            <h3 id="quickstartTitle">The shortest useful path</h3>
+            <ol>
+              <li><b>Load audio.</b><p>WAV and MP3 remain local to this browser.</p></li>
+              <li><b>Play or loop a useful moment.</b><p>Tune while the sound moves through the rack.</p></li>
+              <li><b>Add hardware from the left.</b><p>Drag it into the signal path or press its plus switch.</p></li>
+              <li><b>Play the device surface.</b><p>Use its large macros and Mix first; click the device for deeper controls.</p></li>
+              <li><b>Finish and export.</b><p>Use Mastering for delivery, Automation for movement, then export the audible chain.</p></li>
+            </ol>
+          </section>
+          <section class="guide-reference" aria-labelledby="referenceTitle">
+            <span>WHAT MATTERS</span>
+            <h3 id="referenceTitle">Rack rules</h3>
+            <dl>
+              <div><dt>LEFT → RIGHT</dt><dd>Rack position is processing order. Reorder devices by their grip.</dd></div>
+              <div><dt>SURFACE</dt><dd>The controls you are most likely to perform live.</dd></div>
+              <div><dt>INSPECTOR</dt><dd>Device models, failure mechanics, presets, and precise values.</dd></div>
+              <div><dt>A/B</dt><dd>Switch between the dry source and the complete processed path.</dd></div>
+              <div><dt>SAFE STOP</dt><dd>Immediately ends playback if a state becomes unpleasant.</dd></div>
+              <div><dt>MASTERING</dt><dd>A separate post-rack stage for cleanup, meters, dynamics, and delivery.</dd></div>
+            </dl>
+            <div class="guide-callout"><b>Good starting move</b><p>Choose a rack preset, lower each device Mix, then exaggerate one behavior at a time.</p></div>
+          </section>
+        </div>
+        <footer>
+          <p>Nothing in this guide is required before you can use the instrument.</p>
+          <button id="guideStartTourBtn" class="guide-action guide-action--primary" type="button">SHOW ME THE WORKSTATION</button>
+        </footer>
+      </article>
+    </section>
+
+    <aside id="tourPanel" class="tour-panel" role="dialog" aria-modal="false" aria-labelledby="tourTitle" hidden>
+      <header><span id="tourProgress">01 / 07</span><button id="tourCloseBtn" class="icon-close" type="button" aria-label="Exit walkthrough">×</button></header>
+      <strong id="tourEyebrow">BEGIN HERE</strong>
+      <h2 id="tourTitle">Load something worth damaging.</h2>
+      <p id="tourBody"></p>
+      <footer>
+        <button id="tourPrevBtn" class="guide-action" type="button">BACK</button>
+        <button id="tourNextBtn" class="guide-action guide-action--primary" type="button">NEXT</button>
+      </footer>
+    </aside>
+
+    <script type="module" src="./lame/src/main.js?v=20260827.51"></script>
   </body>
 </html>

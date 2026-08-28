@@ -1,6 +1,6 @@
-import { buildCdGraph, defaultSettings } from "./audio/graph.js";
+import { buildCdGraph, defaultSettings } from "./audio/graph.js?v=20260827.6";
 import { encodeWavMono16 } from "./audio/wav.js";
-import { PRESETS } from "./presets.js";
+import { PRESETS } from "./presets.js?v=20260827.3";
 
 const els = {
   fileInput: document.querySelector("#fileInput"),
@@ -8,6 +8,8 @@ const els = {
   stopBtn: document.querySelector("#stopBtn"),
   exportBtn: document.querySelector("#exportBtn"),
   loopToggle: document.querySelector("#loopToggle"),
+  triggerDamageBtn: document.querySelector("#triggerDamageBtn"),
+  triggerSkipBtn: document.querySelector("#triggerSkipBtn"),
 
   clarity: document.querySelector("#clarity"),
   damage: document.querySelector("#damage"),
@@ -18,11 +20,18 @@ const els = {
   softClip: document.querySelector("#softClip"),
 
   mode: document.querySelector("#mode"),
+  damageShape: document.querySelector("#damageShape"),
   errorRate: document.querySelector("#errorRate"),
   burstMs: document.querySelector("#burstMs"),
   repeatMs: document.querySelector("#repeatMs"),
   scratchRate: document.querySelector("#scratchRate"),
   scratchAmt: document.querySelector("#scratchAmt"),
+  correction: document.querySelector("#correction"),
+  interpolationMs: document.querySelector("#interpolationMs"),
+  rotationHz: document.querySelector("#rotationHz"),
+  trackingRate: document.querySelector("#trackingRate"),
+  trackingMs: document.querySelector("#trackingMs"),
+  servoHunt: document.querySelector("#servoHunt"),
   jitterMs: document.querySelector("#jitterMs"),
   jitterRate: document.querySelector("#jitterRate"),
   hfLoss: document.querySelector("#hfLoss"),
@@ -36,11 +45,18 @@ const els = {
   jitterVal: document.querySelector("#jitterVal"),
   carCompVal: document.querySelector("#carCompVal"),
   modeVal: document.querySelector("#modeVal"),
+  damageShapeVal: document.querySelector("#damageShapeVal"),
   errorRateVal: document.querySelector("#errorRateVal"),
   burstMsVal: document.querySelector("#burstMsVal"),
   repeatMsVal: document.querySelector("#repeatMsVal"),
   scratchRateVal: document.querySelector("#scratchRateVal"),
   scratchAmtVal: document.querySelector("#scratchAmtVal"),
+  correctionVal: document.querySelector("#correctionVal"),
+  interpolationMsVal: document.querySelector("#interpolationMsVal"),
+  rotationHzVal: document.querySelector("#rotationHzVal"),
+  trackingRateVal: document.querySelector("#trackingRateVal"),
+  trackingMsVal: document.querySelector("#trackingMsVal"),
+  servoHuntVal: document.querySelector("#servoHuntVal"),
   jitterMsVal: document.querySelector("#jitterMsVal"),
   jitterRateVal: document.querySelector("#jitterRateVal"),
   hfLossVal: document.querySelector("#hfLossVal"),
@@ -100,26 +116,26 @@ function computeMacroTargets(primary) {
   const t = Math.pow(tracking, 1.35);
   const j = Math.pow(jitter, 1.25);
 
-  const errorRate = clamp01(0.02 + c * 0.6 + t * 0.25);
-  const burstMs = Math.round(8 + (c * 60 + t * 120) * (0.35 + 0.65 * d));
-  const repeatMs = Math.round(18 + t * 120);
+  const errorRate = clamp01(0.006 + c * 0.18 + d * 0.62);
+  const burstMs = Math.round(4 + c * 38 + d * 112 + t * 68);
+  const repeatMs = Math.round(18 + t * 92 + d * 28);
+  const scratchRate = clamp01(0.008 + d * 0.96);
+  const scratchAmt = clamp01(0.04 + d * 0.9);
+  const correction = clamp01(0.995 - c * 0.42 - d * 0.66 - t * 0.16);
+  const interpolationMs = Math.round((3 + c * 9) * 10) / 10;
+  const rotationHz = Math.round((5.2 + j * 0.8) * 10) / 10;
+  const trackingRate = clamp01(0.004 + t * 0.92);
+  const trackingMs = Math.round(45 + t * 820);
+  const servoHunt = clamp01(0.03 + t * 0.78 + d * 0.24);
+  const jitterMs = Math.round((0.001 + j * 0.32) * 1000) / 1000;
+  const jitterRate = Math.round(24 + j * 90);
+  const hfLoss = clamp01(0.002 + c * 0.045 + d * 0.12);
+  const servoNoise = clamp01(0.015 + t * 0.18 + d * 0.12);
+  const mode = t > 0.62 ? "repeat" : correction < 0.36 ? "hold" : "interp";
+  const ceiling = Math.round((0.97 - d * 0.11) * 1000) / 1000;
+  const outGain = Math.round((0.98 - d * 0.06) * 100) / 100;
 
-  const scratchRate = clamp01(0.03 + d * 0.85);
-  const scratchAmt = clamp01(0.08 + d * 0.75);
-
-  const jitterMs = Math.round((0.02 + j * 0.75) * 100) / 100;
-  const jitterRate = Math.round(18 + j * 85);
-
-  const hfLoss = clamp01(0.02 + c * 0.12 + d * 0.22);
-  const servoNoise = clamp01(0.03 + t * 0.25 + d * 0.1);
-
-  const mode = errorRate > 0.52 ? "repeat" : errorRate > 0.25 ? "hold" : "interp";
-  const ceiling = 0.96 - d * 0.08;
-  const outGain = Math.round((0.98 + d * 0.12) * 100) / 100;
-
-  const carComp = clamp01(t * 0.65 + d * 0.2);
-
-  return { mode, errorRate, burstMs, repeatMs, scratchRate, scratchAmt, jitterMs, jitterRate, hfLoss, servoNoise, ceiling, outGain, carComp };
+  return { mode, errorRate, burstMs, repeatMs, scratchRate, scratchAmt, correction, interpolationMs, rotationHz, trackingRate, trackingMs, servoHunt, jitterMs, jitterRate, hfLoss, servoNoise, ceiling, outGain };
 }
 
 function readSettingsFromUI() {
@@ -132,11 +148,18 @@ function readSettingsFromUI() {
     softClip: Boolean(els.softClip.checked),
 
     mode: els.mode.value,
+    damageShape: els.damageShape.value,
     errorRate: parseFloat(els.errorRate.value),
     burstMs: parseFloat(els.burstMs.value),
     repeatMs: parseFloat(els.repeatMs.value),
     scratchRate: parseFloat(els.scratchRate.value),
     scratchAmt: parseFloat(els.scratchAmt.value),
+    correction: parseFloat(els.correction.value),
+    interpolationMs: parseFloat(els.interpolationMs.value),
+    rotationHz: parseFloat(els.rotationHz.value),
+    trackingRate: parseFloat(els.trackingRate.value),
+    trackingMs: parseFloat(els.trackingMs.value),
+    servoHunt: parseFloat(els.servoHunt.value),
     jitterMs: parseFloat(els.jitterMs.value),
     jitterRate: parseFloat(els.jitterRate.value),
     hfLoss: parseFloat(els.hfLoss.value),
@@ -152,18 +175,25 @@ function writeSettingsToUI(s) {
   els.tracking.value = s.tracking ?? 0.22;
   els.jitter.value = s.jitter ?? 0.18;
   els.carComp.value = s.carComp ?? 0;
-  els.softClip.checked = Boolean(s.softClip ?? true);
+  els.softClip.checked = Boolean(s.softClip ?? false);
 
-  els.mode.value = s.mode ?? "hold";
-  els.errorRate.value = s.errorRate ?? 0.18;
-  els.burstMs.value = s.burstMs ?? 24;
-  els.repeatMs.value = s.repeatMs ?? 42;
-  els.scratchRate.value = s.scratchRate ?? 0.25;
-  els.scratchAmt.value = s.scratchAmt ?? 0.35;
-  els.jitterMs.value = s.jitterMs ?? 0.18;
-  els.jitterRate.value = s.jitterRate ?? 38;
-  els.hfLoss.value = s.hfLoss ?? 0.1;
-  els.servoNoise.value = s.servoNoise ?? 0.12;
+  els.mode.value = s.mode ?? "interp";
+  els.damageShape.value = s.damageShape ?? "radial";
+  els.errorRate.value = s.errorRate ?? 0.12;
+  els.burstMs.value = s.burstMs ?? 18;
+  els.repeatMs.value = s.repeatMs ?? 36;
+  els.scratchRate.value = s.scratchRate ?? 0.14;
+  els.scratchAmt.value = s.scratchAmt ?? 0.2;
+  els.correction.value = s.correction ?? 0.88;
+  els.interpolationMs.value = s.interpolationMs ?? 5;
+  els.rotationHz.value = s.rotationHz ?? 5.2;
+  els.trackingRate.value = s.trackingRate ?? 0.08;
+  els.trackingMs.value = s.trackingMs ?? 140;
+  els.servoHunt.value = s.servoHunt ?? 0.18;
+  els.jitterMs.value = s.jitterMs ?? 0.025;
+  els.jitterRate.value = s.jitterRate ?? 34;
+  els.hfLoss.value = s.hfLoss ?? 0.025;
+  els.servoNoise.value = s.servoNoise ?? 0.08;
   els.ceiling.value = s.ceiling ?? 0.94;
   els.outGain.value = s.outGain ?? 0.98;
   refreshValueLabels();
@@ -177,12 +207,19 @@ function refreshValueLabels() {
   els.jitterVal.textContent = pct01(s.jitter);
   els.carCompVal.textContent = pct01(s.carComp);
   els.modeVal.textContent = s.mode;
+  els.damageShapeVal.textContent = s.damageShape;
   els.errorRateVal.textContent = pct01(s.errorRate);
   els.burstMsVal.textContent = `${Math.round(s.burstMs)} ms`;
   els.repeatMsVal.textContent = `${Math.round(s.repeatMs)} ms`;
   els.scratchRateVal.textContent = pct01(s.scratchRate);
   els.scratchAmtVal.textContent = pct01(s.scratchAmt);
-  els.jitterMsVal.textContent = `${Number(s.jitterMs).toFixed(2)} ms`;
+  els.correctionVal.textContent = pct01(s.correction);
+  els.interpolationMsVal.textContent = `${Number(s.interpolationMs).toFixed(2)} ms`;
+  els.rotationHzVal.textContent = `${Number(s.rotationHz).toFixed(1)} Hz`;
+  els.trackingRateVal.textContent = pct01(s.trackingRate);
+  els.trackingMsVal.textContent = `${Math.round(s.trackingMs)} ms`;
+  els.servoHuntVal.textContent = pct01(s.servoHunt);
+  els.jitterMsVal.textContent = `${Number(s.jitterMs).toFixed(3)} ms`;
   els.jitterRateVal.textContent = `${Math.round(s.jitterRate)} Hz`;
   els.hfLossVal.textContent = pct01(s.hfLoss);
   els.servoNoiseVal.textContent = pct01(s.servoNoise);
@@ -198,19 +235,23 @@ function applyMacrosFromPrimaryToAdvanced() {
     jitter: parseFloat(els.jitter.value),
   };
   const t = computeMacroTargets(primary);
-  els.mode.value = t.mode;
   els.errorRate.value = t.errorRate;
   els.burstMs.value = t.burstMs;
   els.repeatMs.value = t.repeatMs;
   els.scratchRate.value = t.scratchRate;
   els.scratchAmt.value = t.scratchAmt;
+  els.correction.value = t.correction;
+  els.interpolationMs.value = t.interpolationMs;
+  els.rotationHz.value = t.rotationHz;
+  els.trackingRate.value = t.trackingRate;
+  els.trackingMs.value = t.trackingMs;
+  els.servoHunt.value = t.servoHunt;
   els.jitterMs.value = t.jitterMs;
   els.jitterRate.value = t.jitterRate;
   els.hfLoss.value = t.hfLoss;
   els.servoNoise.value = t.servoNoise;
   els.ceiling.value = t.ceiling;
   els.outGain.value = t.outGain;
-  els.carComp.value = t.carComp;
   refreshValueLabels();
 }
 
@@ -321,11 +362,18 @@ function hookControls() {
     els.carComp,
     els.softClip,
     els.mode,
+    els.damageShape,
     els.errorRate,
     els.burstMs,
     els.repeatMs,
     els.scratchRate,
     els.scratchAmt,
+    els.correction,
+    els.interpolationMs,
+    els.rotationHz,
+    els.trackingRate,
+    els.trackingMs,
+    els.servoHunt,
     els.jitterMs,
     els.jitterRate,
     els.hfLoss,
@@ -349,11 +397,18 @@ function hookControls() {
       if (k === "softClip") els.softClip.checked = Boolean(preset[k]);
       else if (k === "carComp") els.carComp.value = preset[k];
       else if (k === "mode") els.mode.value = preset[k];
+      else if (k === "damageShape") els.damageShape.value = preset[k];
       else if (k === "errorRate") els.errorRate.value = preset[k];
       else if (k === "burstMs") els.burstMs.value = preset[k];
       else if (k === "repeatMs") els.repeatMs.value = preset[k];
       else if (k === "scratchRate") els.scratchRate.value = preset[k];
       else if (k === "scratchAmt") els.scratchAmt.value = preset[k];
+      else if (k === "correction") els.correction.value = preset[k];
+      else if (k === "interpolationMs") els.interpolationMs.value = preset[k];
+      else if (k === "rotationHz") els.rotationHz.value = preset[k];
+      else if (k === "trackingRate") els.trackingRate.value = preset[k];
+      else if (k === "trackingMs") els.trackingMs.value = preset[k];
+      else if (k === "servoHunt") els.servoHunt.value = preset[k];
       else if (k === "jitterMs") els.jitterMs.value = preset[k];
       else if (k === "jitterRate") els.jitterRate.value = preset[k];
       else if (k === "hfLoss") els.hfLoss.value = preset[k];
@@ -370,6 +425,22 @@ function wireButtons() {
   els.playBtn.addEventListener("click", () => startPlayback());
   els.stopBtn.addEventListener("click", () => stopPlayback());
   els.exportBtn.addEventListener("click", () => exportWav());
+  els.triggerDamageBtn.addEventListener("click", () => {
+    if (!realtime.src || !realtime.graph) {
+      setState("Play audio before triggering damage");
+      return;
+    }
+    realtime.graph.triggerDamage(1);
+    setState("Damage triggered");
+  });
+  els.triggerSkipBtn.addEventListener("click", () => {
+    if (!realtime.src || !realtime.graph) {
+      setState("Play audio before triggering a skip");
+      return;
+    }
+    realtime.graph.triggerSkip(1);
+    setState("Skip triggered");
+  });
   els.loopToggle.addEventListener("change", () => {
     if (!realtime.src || !audioBuffer) return;
     realtime.src.loop = Boolean(els.loopToggle.checked);

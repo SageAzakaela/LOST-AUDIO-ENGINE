@@ -128,12 +128,13 @@ class TapeProcessor extends AudioWorkletProcessor {
     const flutterDepthS = (flutterDepthMs / 1000) * (0.25 + 0.75 * wowAmount);
     const depthS = clamp(wowDepthS + flutterDepthS, 0, 0.03);
 
-    // AGC-ish compression
+    // Downward tape compression. Tape should soften material that pushes above
+    // its operating level; it must not behave like an AGC that drags quiet
+    // passages, transport beds, and the noise floor upward.
     const target = 0.2;
     const envAtk = Math.exp(-1 / (0.006 * sr));
     const envRel = Math.exp(-1 / (0.12 * sr));
-    const compPow = 1 + comp * 1.7;
-    const maxAgc = 5.5;
+    const compPow = comp * 0.72;
 
     // Dropouts scheduler
     const blockSamples = Math.max(8, Math.round((dropoutMs / 1000) * sr));
@@ -147,8 +148,10 @@ class TapeProcessor extends AudioWorkletProcessor {
     const hissDepth = hiss * hiss * 0.03;
 
     // Drive
-    const satAmt = 1 + drive * 12;
-    const asym = 0.04 + 0.09 * drive;
+    const satAmt = 1 + drive * 6;
+    const asym = drive * 0.045;
+    const satZero = Math.tanh(asym * satAmt);
+    const satSlope = Math.max(0.2, satAmt * (1 - satZero * satZero));
 
     // Limiter
     const limAtk = Math.exp(-1 / (0.002 * sr));
@@ -172,26 +175,26 @@ class TapeProcessor extends AudioWorkletProcessor {
 
       // Read modulated delay, advance phases.
       let y = this._readDelay(delaySamps);
-      this.wowPhase += wowHz / sr;
-      this.flutterPhase += flutterHz / sr;
+      this.wowPhase += (wowHz * speed) / sr;
+      this.flutterPhase += (flutterHz * speed) / sr;
       if (this.wowPhase >= 1) this.wowPhase -= 1;
       if (this.flutterPhase >= 1) this.flutterPhase -= 1;
 
-      // Simple speed control: resample-ish by nudging read delay (keeps real-time stable).
-      // For offline and realtime, this behaves deterministically, but is not perfect varispeed.
-      if (speed !== 1) y = y * (2 - speed);
-
-      // Compression (AGC-ish)
+      // Level-dependent tape compression. At zero the stage is unity instead of
+      // silently applying automatic gain to every preset.
       const a = Math.abs(y);
       const c = a > this.env ? envAtk : envRel;
       this.env = a + c * (this.env - a);
       const env = this.env + 1e-6;
-      const want = Math.pow(target / env, compPow * 0.35);
-      const agc = clamp(want, 0.3, maxAgc);
-      y *= agc;
+      const over = Math.max(1, env / target);
+      const compressionGain = comp > 0.0001 ? Math.pow(over, -compPow) : 1;
+      const makeupGain = 1 + comp * 0.12;
+      y *= Math.max(0.45, compressionGain) * makeupGain;
 
-      // Saturation with mild asymmetry.
-      y = softClip((y + asym) * satAmt) - asym * 0.75;
+      // Gain-compensated saturation with a zero-referenced bias. The previous
+      // bias subtraction left a large DC-like signal even when the input was silent.
+      const saturated = (softClip((y + asym) * satAmt) - satZero) / satSlope;
+      y = y * (1 - drive) + saturated * drive;
 
       // Dropouts in blocks.
       if (this.dropBlock <= 0) {

@@ -1,4 +1,5 @@
-const WORKLET_URL = new URL("./tape-processor.js", import.meta.url);
+const WORKLET_URL = new URL("./tape-processor.js?v=20260827.21", import.meta.url);
+const TAPE_LATENCY_SECONDS = 0.012;
 
 function now(ctx) {
   return ctx.currentTime;
@@ -16,7 +17,7 @@ export function defaultSettings() {
     age: 0.35,
     wow: 0.25,
     glitch: 0.18,
-    sfxEnable: false,
+    sfxEnable: true,
 
     hpHz: 35,
     lpHz: 11000,
@@ -34,8 +35,8 @@ export function defaultSettings() {
     ceiling: 0.92,
     outGain: 0.98,
 
-    sfxSource: "",
-    sfxLevel: 0.22,
+    sfxSource: "cassette",
+    sfxLevel: 0.46,
     sfxMode: "bed",
   };
 }
@@ -79,6 +80,10 @@ export async function buildTapeGraph(ctx, { seed, sfxBuffer = null } = {}) {
     const t1 = time + ramp;
     const s = { ...settings };
 
+    sfxGain.gain.cancelScheduledValues(time);
+    sfxGain.gain.setValueAtTime(sfxGain.gain.value, time);
+    sfxGain.gain.linearRampToValueAtTime(s.sfxEnable ? Math.max(0, Math.min(1, s.sfxLevel ?? 0.46)) : 0, t1);
+
     hp.frequency.cancelScheduledValues(time);
     hp.frequency.setValueAtTime(hp.frequency.value, time);
     hp.frequency.linearRampToValueAtTime(Math.max(10, Math.min(240, s.hpHz ?? 35)), t1);
@@ -115,6 +120,11 @@ export async function buildTapeGraph(ctx, { seed, sfxBuffer = null } = {}) {
     input,
     sfx: sfxGain,
     output: out,
+    // The variable delay is centred on 12 ms. Hosts that blend this graph with
+    // a dry path must delay the dry signal by the same amount or the blend
+    // becomes a severe fixed comb filter.
+    latencySeconds: TAPE_LATENCY_SECONDS,
+    mixLaw: "linear",
     nodes: { input, sfxGain, mix, processor, hp, bump, lp1, lp2, out },
     reset,
     applySettings,

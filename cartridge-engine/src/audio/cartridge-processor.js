@@ -42,10 +42,12 @@ class BleepSeqProcessor extends AudioWorkletProcessor {
   static get parameterDescriptors() {
     return [
       { name: "enable", defaultValue: 0, minValue: 0, maxValue: 1, automationRate: "k-rate" },
-      { name: "mix", defaultValue: 0.18, minValue: 0, maxValue: 1, automationRate: "k-rate" },
+      { name: "mix", defaultValue: 0.12, minValue: 0, maxValue: 1, automationRate: "k-rate" },
       { name: "rate", defaultValue: 3, minValue: 0, maxValue: 18, automationRate: "k-rate" },
-      { name: "wave", defaultValue: 0, minValue: 0, maxValue: 3, automationRate: "k-rate" }, // 0 random,1 pulse,2 saw,3 tri
-      { name: "vibrato", defaultValue: 0.35, minValue: 0, maxValue: 1, automationRate: "k-rate" },
+      { name: "wave", defaultValue: 1, minValue: 0, maxValue: 4, automationRate: "k-rate" }, // 0 alternating,1 pulse,2 saw,3 tri,4 noise
+      { name: "trigger", defaultValue: 0, minValue: 0, maxValue: 2, automationRate: "k-rate" }, // 0 transients,1 clock,2 hybrid
+      { name: "scale", defaultValue: 0, minValue: 0, maxValue: 3, automationRate: "k-rate" },
+      { name: "vibrato", defaultValue: 0.12, minValue: 0, maxValue: 1, automationRate: "k-rate" },
       { name: "pitch", defaultValue: 0.55, minValue: 0, maxValue: 1, automationRate: "k-rate" },
     ];
   }
@@ -53,23 +55,30 @@ class BleepSeqProcessor extends AudioWorkletProcessor {
     super();
     const seed = (options?.processorOptions?.seed ?? 0x0b1ee0f5) >>> 0;
     this.prng = new XorShift32(seed);
-    this.samplesToNext = 0;
+    this.inputEnv = 0;
+    this.cooldown = 0;
+    this.clockRemain = 0;
+    this.step = 0;
     this.phase = 0;
     this.vibPhase = 0;
     this.active = false;
     this.remain = 0;
     this.total = 0;
     this.freq = 440;
-    this.vibRate = 6;
+    this.vibRate = 5;
     this.vibDepth = 0;
     this.wave = 1;
-    this.duty = 0.5;
-    this.amp = 0.25;
+    this.duty = 0.25;
+    this.amp = 0.16;
+    this.lfsr = 0x7fff;
     this.port.onmessage = (ev) => {
       const msg = ev.data;
       if (msg?.type === "reset") {
         this.prng = new XorShift32((msg.seed ?? 0) >>> 0);
-        this.samplesToNext = 0;
+        this.inputEnv = 0;
+        this.cooldown = 0;
+        this.clockRemain = 0;
+        this.step = 0;
         this.phase = 0;
         this.vibPhase = 0;
         this.active = false;
@@ -77,34 +86,41 @@ class BleepSeqProcessor extends AudioWorkletProcessor {
       }
     };
   }
-  _trigger(pitch, vibrato, waveSel) {
-    const baseLo = 220 + pitch * 320;
-    const baseHi = 700 + pitch * 1800;
-    const f = baseLo + this.prng.nextFloat() * (baseHi - baseLo);
-    const durMs = 35 + this.prng.nextFloat() * (55 + pitch * 120);
+  _trigger(pitch, vibrato, waveSel, scaleSel, strength = 1) {
+    const scales = [
+      [0, 3, 5, 7, 10, 12],
+      [0, 2, 3, 5, 7, 8, 10, 12],
+      [0, 2, 4, 5, 7, 9, 11, 12],
+      [0, 1, 2, 3, 4, 5, 7, 9, 10, 12],
+    ];
+    const melody = [0, 4, 2, 5, 1, 3, 2, 0, 5, 3, 1, 4];
+    const scale = scales[Math.max(0, Math.min(scales.length - 1, scaleSel))];
+    const rootMidi = 36 + Math.round(pitch * 24);
+    const interval = scale[melody[this.step % melody.length] % scale.length];
+    const octave = (Math.floor(this.step / melody.length) & 1) * 12;
+    this.freq = 440 * Math.pow(2, (rootMidi + interval + octave - 69) / 12);
+    this.step++;
+
+    const durMs = 42 + (1 - pitch) * 72 + Math.min(1, strength) * 38;
     this.total = Math.max(8, Math.floor((durMs / 1000) * sampleRate));
     this.remain = this.total;
     this.active = true;
     this.phase = this.prng.nextFloat();
     this.vibPhase = this.prng.nextFloat();
-    this.freq = f;
-
-    const vibChance = Math.min(0.85, 0.15 + vibrato * 0.75);
-    const doVib = this.prng.nextFloat() < vibChance;
-    this.vibRate = 4 + this.prng.nextFloat() * 7;
-    this.vibDepth = doVib ? (0.003 + 0.02 * vibrato * vibrato) * (0.6 + 0.6 * this.prng.nextFloat()) : 0;
-    this.amp = (0.12 + 0.32 * this.prng.nextFloat()) * (0.55 + 0.6 * pitch);
+    this.vibRate = 4.5 + (this.step % 3) * 0.75;
+    this.vibDepth = 0.001 + vibrato * vibrato * 0.012;
+    this.amp = 0.09 + Math.min(1, strength) * 0.1;
 
     if (waveSel === 0) {
-      const r = this.prng.nextFloat();
-      this.wave = r < 0.45 ? 1 : r < 0.75 ? 3 : 2;
+      this.wave = this.step % 4 === 0 ? 3 : 1;
     } else this.wave = waveSel;
-    this.duty = 0.25 + this.prng.nextFloat() * 0.55;
+    const duties = [0.125, 0.25, 0.5];
+    this.duty = duties[this.step % duties.length];
   }
   _env(t) {
-    const a = Math.min(1, t / 0.12);
-    const b = Math.min(1, (1 - t) / 0.2);
-    return Math.sin(a * Math.PI * 0.5) * Math.sin(b * Math.PI * 0.5);
+    const attack = Math.min(1, t / 0.035);
+    const decay = Math.pow(Math.max(0, 1 - t), 1.65);
+    return attack * decay;
   }
   _osc(phase) {
     if (this.wave === 2) {
@@ -116,6 +132,11 @@ class BleepSeqProcessor extends AudioWorkletProcessor {
       const p = phase - Math.floor(phase);
       return 1 - 4 * Math.abs(p - 0.5);
     }
+    if (this.wave === 4) {
+      const bit = ((this.lfsr >> 0) ^ (this.lfsr >> 1)) & 1;
+      this.lfsr = (this.lfsr >> 1) | (bit << 14);
+      return (this.lfsr & 1) ? 1 : -1;
+    }
     // pulse
     return (phase - Math.floor(phase)) < this.duty ? 1 : -1;
   }
@@ -123,11 +144,15 @@ class BleepSeqProcessor extends AudioWorkletProcessor {
     const output = outputs[0];
     const out = output[0];
     if (!out) return true;
+    const in0 = inputs[0]?.[0];
+    const in1 = inputs[0]?.[1];
     const enable = (parameters.enable[0] ?? 0) >= 0.5;
-    const mix = clamp(parameters.mix[0] ?? 0.18, 0, 1);
+    const mix = clamp(parameters.mix[0] ?? 0.12, 0, 1);
     const rate = Math.max(0, parameters.rate[0] ?? 3);
     const waveSel = Math.round(parameters.wave[0] ?? 0);
-    const vibrato = clamp(parameters.vibrato[0] ?? 0.35, 0, 1);
+    const triggerMode = Math.round(clamp(parameters.trigger[0] ?? 0, 0, 2));
+    const scaleSel = Math.round(clamp(parameters.scale[0] ?? 0, 0, 3));
+    const vibrato = clamp(parameters.vibrato[0] ?? 0.12, 0, 1);
     const pitch = clamp(parameters.pitch[0] ?? 0.55, 0, 1);
 
     // Keep output silent when disabled.
@@ -136,10 +161,24 @@ class BleepSeqProcessor extends AudioWorkletProcessor {
       return true;
     }
 
-    const pPerSample = (0.15 + rate) / sampleRate;
+    const clockPeriod = Math.max(1, Math.round(sampleRate / Math.max(0.15, rate)));
+    const envAtk = 1 - Math.exp(-1 / (0.0025 * sampleRate));
+    const envRel = 1 - Math.exp(-1 / (0.055 * sampleRate));
     for (let i = 0; i < out.length; i++) {
-      if (!this.active) {
-        if (this.prng.nextFloat() < pPerSample) this._trigger(pitch, vibrato, waveSel);
+      const source = in0 ? (in1 ? 0.5 * (in0[i] + in1[i]) : in0[i]) : 0;
+      const a = Math.abs(source);
+      const previousEnv = this.inputEnv;
+      this.inputEnv += (a - this.inputEnv) * (a > this.inputEnv ? envAtk : envRel);
+      if (this.cooldown > 0) this.cooldown--;
+      if (this.clockRemain > 0) this.clockRemain--;
+
+      const transient = a > 0.018 && a > previousEnv * 1.85 && this.cooldown <= 0;
+      const clocked = this.clockRemain <= 0 && rate > 0.0001;
+      const shouldTrigger = triggerMode === 0 ? transient : triggerMode === 1 ? clocked : transient || clocked;
+      if (shouldTrigger) {
+        this._trigger(pitch, vibrato, waveSel, scaleSel, clamp(a * 4 + 0.25, 0.25, 1));
+        this.cooldown = Math.round(sampleRate / Math.max(1, rate * 1.5));
+        this.clockRemain = clockPeriod;
       }
 
       let y = 0;
@@ -151,13 +190,12 @@ class BleepSeqProcessor extends AudioWorkletProcessor {
         this.phase += f / sampleRate;
         this.vibPhase += this.vibRate / sampleRate;
         const osc = this._osc(this.phase);
-        const edge = (this.wave === 1 ? 0.85 : 0.65) + vibrato * 0.15;
-        y = softClip(osc * (this.amp * 2.6) * env * edge);
+        y = osc * this.amp * env;
         this.remain--;
         if (this.remain <= 0) this.active = false;
       }
 
-      out[i] = y * mix;
+      out[i] = clamp(y * mix, -0.22, 0.22);
     }
     return true;
   }
@@ -174,6 +212,7 @@ class CartridgeProcessor extends AudioWorkletProcessor {
 
       { name: "preEmph", defaultValue: 0.2, minValue: 0, maxValue: 1, automationRate: "k-rate" },
       { name: "mulaw", defaultValue: 0.25, minValue: 0, maxValue: 1, automationRate: "k-rate" },
+      { name: "codecMode", defaultValue: 2, minValue: 0, maxValue: 4, automationRate: "k-rate" },
       { name: "blockMs", defaultValue: 8, minValue: 0, maxValue: 60, automationRate: "k-rate" },
 
       { name: "sat", defaultValue: 0.25, minValue: 0, maxValue: 1, automationRate: "k-rate" },
@@ -211,6 +250,10 @@ class CartridgeProcessor extends AudioWorkletProcessor {
     this.blockTotal = 0;
 
     this.preEmphZ = 0;
+    this.deEmphZ = 0;
+    this.codecPrev1 = 0;
+    this.codecPrev2 = 0;
+    this.adpcmStep = 0.02;
 
     this.nsErr = 0;
     this.env = 0;
@@ -245,6 +288,10 @@ class CartridgeProcessor extends AudioWorkletProcessor {
         this.blockHold = 0;
         this.blockRemain = 0;
         this.preEmphZ = 0;
+        this.deEmphZ = 0;
+        this.codecPrev1 = 0;
+        this.codecPrev2 = 0;
+        this.adpcmStep = 0.02;
         this.nsErr = 0;
         this.env = 0;
         this.dc = 0;
@@ -300,6 +347,7 @@ class CartridgeProcessor extends AudioWorkletProcessor {
 
     const preEmph = clamp(parameters.preEmph[0] ?? 0.2, 0, 1);
     const mulaw = clamp(parameters.mulaw[0] ?? 0.25, 0, 1);
+    const codecMode = Math.round(clamp(parameters.codecMode[0] ?? 2, 0, 4));
     const blockMs = Math.max(0, parameters.blockMs[0] ?? 8);
 
     const sat = clamp(parameters.sat[0] ?? 0.25, 0, 1);
@@ -325,20 +373,24 @@ class CartridgeProcessor extends AudioWorkletProcessor {
 
     const blockSamples = blockMs <= 0 ? 0 : Math.max(1, Math.floor((blockMs / 1000) * sampleRate));
 
-    const satAmt = 1 + sat * 10;
-    const preEdge = 1 + edge * 18;
-    const edgeAsym = edge * 0.22;
-    const humHz = 50 + (this.prng.nextFloat() < 0.5 ? 10 : 0);
-    const whineHz = 900 + 600 * whine;
-    const humDepth = hum * 0.08;
-    const whineDepth = whine * 0.075;
-    const hissBase = noise * 0.03;
+    const satAmt = 1 + sat * 4.2;
+    const satRef = 0.2;
+    const satMatch = satRef / Math.max(1e-5, softClip(satRef * satAmt));
+    const preEdge = 1 + edge * 5;
+    const edgeAsym = edge * 0.035;
+    const edgeRef = 0.18;
+    const edgeMatch = edgeRef / Math.max(1e-5, softClip(edgeRef * preEdge));
+    const humHz = 60;
+    const whineHz = 780 + 1180 * whine;
+    const humDepth = hum * hum * 0.012;
+    const whineDepth = whine * whine * 0.009;
+    const hissBase = noise * noise * 0.012;
 
     const envAtk = Math.exp(-1 / (sampleRate * 0.004));
     const envRel = Math.exp(-1 / (sampleRate * 0.08));
     const limAtk = Math.exp(-1 / (sampleRate * 0.0015));
     const limRel = Math.exp(-1 / (sampleRate * 0.05));
-    const dcStep = (0.000002 + dcDrift * dcDrift * 0.00003);
+    const dcStep = dcDrift * dcDrift * 0.000003;
 
     const dSamps = Math.min(this.delayBuf.length - 1, Math.floor((microDelayMs / 1000) * sampleRate));
     const combBase = Math.floor((verbMs / 1000) * sampleRate);
@@ -362,26 +414,27 @@ class CartridgeProcessor extends AudioWorkletProcessor {
 
       // DC drift (random walk) + coupling bias.
       if (dcDrift > 0.0001) {
-        this.dc = clamp(this.dc + this.prng.nextSigned() * dcStep, -0.08, 0.08);
+        this.dc = clamp(this.dc * 0.999995 + this.prng.nextSigned() * dcStep, -0.018, 0.018);
         y = y + this.dc;
       }
 
-      // Optional block hold (fake ADPCM blockiness): hold signal constant for small blocks.
+      // Cartridge codecs reset predictors at small block boundaries. A block
+      // boundary should never freeze the waveform itself.
       if (blockSamples > 0) {
         if (this.blockRemain <= 0) {
           this.blockTotal = blockSamples;
           this.blockRemain = this.blockTotal;
-          this.blockHold = y;
+          this.codecPrev1 *= 0.2;
+          this.codecPrev2 *= 0.2;
+          this.adpcmStep = Math.max(0.004, Math.min(0.18, Math.abs(y) * 0.18 + 0.008));
         }
-        // Slight drift to avoid pure gating.
-        const t = 1 - this.blockRemain / this.blockTotal;
-        y = this.blockHold + (y - this.blockHold) * (0.25 + 0.75 * t);
         this.blockRemain--;
       }
 
       // Pre-edge nonlinearity BEFORE downsampling to get authentic aliasy grit.
       if (edge > 0.0001) {
-        y = softClip((y + edgeAsym) * preEdge) - edgeAsym * 0.6;
+        const center = softClip(edgeAsym * preEdge);
+        y = (softClip((y + edgeAsym) * preEdge) - center) * edgeMatch;
       }
 
       // Sample-rate reduction with jitter.
@@ -395,18 +448,51 @@ class CartridgeProcessor extends AudioWorkletProcessor {
       this.holdCount--;
 
       // μ-law companding (encode/decode), blended.
-      if (mulaw > 0.0001) {
+      if (mulaw > 0.0001 && codecMode === 4) {
         const enc = mulawEncode(y);
-        const dec = mulawDecode(enc);
+        // A bare encode/decode round trip is reversible. Quantize the encoded
+        // value as an 8-bit companded signal so this control has a real effect.
+        // Increase companded-domain damage with the amount control so the top
+        // of the range reaches an intentionally exaggerated 6-bit code path.
+        const encodedLevels = Math.max(31, Math.round(127 - mulaw * 96));
+        const encodedQuantized = Math.round(enc * encodedLevels) / encodedLevels;
+        const dec = mulawDecode(encodedQuantized);
         y = y * (1 - mulaw) + dec * mulaw;
+      } else if (mulaw > 0.0001 && codecMode > 0) {
+        let decoded = y;
+        if (codecMode === 1) {
+          const predictor = this.codecPrev1 * 0.86;
+          const levels = Math.max(7, Math.round(63 - mulaw * 48));
+          const residual = clamp(y - predictor, -1, 1);
+          decoded = clamp(predictor + Math.round(residual * levels) / levels, -1, 1);
+        } else {
+          const predictor = codecMode === 3
+            ? 1.48 * this.codecPrev1 - 0.52 * this.codecPrev2
+            : this.codecPrev1 * 0.92;
+          const residual = y - predictor;
+          const code = clamp(Math.round(residual / Math.max(0.003, this.adpcmStep)), -7, 7);
+          decoded = clamp(predictor + code * this.adpcmStep, -1, 1);
+          const magnitude = Math.abs(code) / 7;
+          const targetStep = 0.0035 + magnitude * magnitude * (codecMode === 3 ? 0.12 : 0.085);
+          this.adpcmStep += (targetStep - this.adpcmStep) * (code === 0 ? 0.035 : 0.16);
+        }
+        this.codecPrev2 = this.codecPrev1;
+        this.codecPrev1 = decoded;
+        y = y * (1 - mulaw) + decoded * mulaw;
       }
 
       // Quantization with optional dither + simple noise shaping.
       if (noiseShaping) y += this.nsErr * 0.85;
       if (dither) y += this.prng.nextSigned() * (qStep * 0.65);
-      const q = Math.round(y * qLevels) / qLevels;
+      const q = bits <= 3
+        ? Math.sign(y) * (Math.floor(Math.abs(y) * qLevels) + 0.5) / qLevels
+        : Math.round(y * qLevels) / qLevels;
       if (noiseShaping) this.nsErr = y - q;
       y = q;
+
+      const deCoeff = 0.08 + (1 - preEmph) * 0.34;
+      this.deEmphZ += (y - this.deEmphZ) * deCoeff;
+      y = y * (1 - preEmph * 0.52) + this.deEmphZ * (preEmph * 0.52);
 
       // Track amplitude for bus-noise behavior.
       const a = Math.abs(y);
@@ -420,14 +506,14 @@ class CartridgeProcessor extends AudioWorkletProcessor {
       if (this.humPhase > Math.PI * 2) this.humPhase -= Math.PI * 2;
       this.whinePhase += (2 * Math.PI * whineHz) / sampleRate;
       if (this.whinePhase > Math.PI * 2) this.whinePhase -= Math.PI * 2;
-      const humSig = Math.sin(this.humPhase) * humDepth;
-      const whineSig = Math.sin(this.whinePhase) * whineDepth;
+      const humSig = (Math.sin(this.humPhase) + Math.sin(this.humPhase * 2) * 0.28) * humDepth;
+      const whineSig = (Math.sin(this.whinePhase) + Math.sin(this.whinePhase * 0.503) * 0.18) * whineDepth;
       const hissSig = this.prng.nextSigned() * hiss;
 
       y = y + humSig + whineSig + hissSig;
 
       // DAC saturation.
-      y = softClip(y * satAmt) / softClip(satAmt);
+      y = softClip(y * satAmt) * satMatch;
 
       // Microdelay (tiny smear).
       if (dSamps > 0 && microDelayMix > 0.0001) {

@@ -1,6 +1,6 @@
-import { buildCartridgeGraph, defaultSettings } from "./audio/graph.js";
+import { buildCartridgeGraph, defaultSettings } from "./audio/graph.js?v=20260827.26";
 import { encodeWavMono16 } from "./audio/wav.js";
-import { PRESETS } from "./presets.js";
+import { PRESETS } from "./presets.js?v=20260827.26";
 
 const els = {
   fileInput: document.querySelector("#fileInput"),
@@ -24,12 +24,14 @@ const els = {
   hpHz: document.querySelector("#hpHz"),
   preEmph: document.querySelector("#preEmph"),
   mulaw: document.querySelector("#mulaw"),
+  codecMode: document.querySelector("#codecMode"),
   blockMs: document.querySelector("#blockMs"),
   sat: document.querySelector("#sat"),
   edge: document.querySelector("#edge"),
   noiseTrack: document.querySelector("#noiseTrack"),
   dcDrift: document.querySelector("#dcDrift"),
   speaker: document.querySelector("#speaker"),
+  speakerModel: document.querySelector("#speakerModel"),
   hum: document.querySelector("#hum"),
   whine: document.querySelector("#whine"),
   outGain: document.querySelector("#outGain"),
@@ -41,6 +43,8 @@ const els = {
   bleepsMix: document.querySelector("#bleepsMix"),
   bleepsRate: document.querySelector("#bleepsRate"),
   bleepsWave: document.querySelector("#bleepsWave"),
+  bleepsTrigger: document.querySelector("#bleepsTrigger"),
+  bleepsScale: document.querySelector("#bleepsScale"),
   bleepsVibrato: document.querySelector("#bleepsVibrato"),
   bleepsPitch: document.querySelector("#bleepsPitch"),
   microDelayMs: document.querySelector("#microDelayMs"),
@@ -60,12 +64,14 @@ const els = {
   hpHzVal: document.querySelector("#hpHzVal"),
   preEmphVal: document.querySelector("#preEmphVal"),
   mulawVal: document.querySelector("#mulawVal"),
+  codecModeVal: document.querySelector("#codecModeVal"),
   blockMsVal: document.querySelector("#blockMsVal"),
   satVal: document.querySelector("#satVal"),
   edgeVal: document.querySelector("#edgeVal"),
   noiseTrackVal: document.querySelector("#noiseTrackVal"),
   dcDriftVal: document.querySelector("#dcDriftVal"),
   speakerVal: document.querySelector("#speakerVal"),
+  speakerModelVal: document.querySelector("#speakerModelVal"),
   humVal: document.querySelector("#humVal"),
   whineVal: document.querySelector("#whineVal"),
   outGainVal: document.querySelector("#outGainVal"),
@@ -77,6 +83,8 @@ const els = {
   bleepsMixVal: document.querySelector("#bleepsMixVal"),
   bleepsRateVal: document.querySelector("#bleepsRateVal"),
   bleepsWaveVal: document.querySelector("#bleepsWaveVal"),
+  bleepsTriggerVal: document.querySelector("#bleepsTriggerVal"),
+  bleepsScaleVal: document.querySelector("#bleepsScaleVal"),
   bleepsVibratoVal: document.querySelector("#bleepsVibratoVal"),
   bleepsPitchVal: document.querySelector("#bleepsPitchVal"),
   microDelayMsVal: document.querySelector("#microDelayMsVal"),
@@ -112,22 +120,24 @@ function computeMacroTargets(primary) {
   const grit = clamp01(primary.grit ?? 0.25);
   const noise = clamp01(primary.noise ?? 0.15);
 
-  const qCurve = Math.pow(1 - quality, 1.6);
-  const bits = Math.round(14 - qCurve * 10); // 14 -> 4
-  const rate = Math.round(42000 - qCurve * 34000); // 42k -> 8k
-  const lpHz = Math.round(16000 - qCurve * 13500); // 16k -> 2.5k
-  const jitter = clamp01(0.02 + qCurve * 0.45);
+  const qCurve = Math.pow(1 - quality, 1.35);
+  const bits = Math.round(16 - qCurve * 10);
+  const rate = Math.round(48000 - qCurve * 40000);
+  const lpHz = Math.round(18000 - qCurve * 15000);
+  const jitter = clamp01(0.01 + qCurve * 0.16);
 
   const cCurve = Math.pow(codec, 1.15);
-  const mulaw = clamp01(cCurve * 0.95);
-  const blockMs = Math.round(cCurve * cCurve * 42); // 0..~42ms
-  const preEmph = clamp01(0.08 + cCurve * 0.7);
+  const mulaw = clamp01(cCurve * 0.86);
+  const blockMs = Math.round(2 + cCurve * cCurve * 18);
+  const preEmph = clamp01(0.05 + cCurve * 0.38);
 
   const gCurve = Math.pow(grit, 1.25);
-  const sat = clamp01(0.12 + gCurve * 0.88);
-  const hum = clamp01(gCurve * 0.25);
-  const whine = clamp01(0.08 + gCurve * 0.7);
-  const outGain = 0.98 - gCurve * 0.18;
+  const sat = clamp01(0.04 + gCurve * 0.58);
+  const edge = clamp01(0.03 + gCurve * 0.5);
+  const dcDrift = clamp01(0.01 + gCurve * 0.16);
+  const hum = clamp01(gCurve * 0.12);
+  const whine = clamp01(0.025 + gCurve * 0.2);
+  const outGain = 0.98 - gCurve * 0.08;
 
   return {
     bits,
@@ -138,6 +148,8 @@ function computeMacroTargets(primary) {
     blockMs,
     preEmph,
     sat,
+    edge,
+    dcDrift,
     hum,
     whine,
     noise,
@@ -155,6 +167,8 @@ function applyMacrosFromPrimaryToAdvanced() {
   els.blockMs.value = String(targets.blockMs);
   els.preEmph.value = String(targets.preEmph);
   els.sat.value = String(targets.sat);
+  els.edge.value = String(targets.edge);
+  els.dcDrift.value = String(targets.dcDrift);
   els.hum.value = String(targets.hum);
   els.whine.value = String(targets.whine);
   els.outGain.value = String(targets.outGain);
@@ -203,12 +217,14 @@ function readSettingsFromUI() {
     hpHz: Number(els.hpHz.value),
     preEmph: clamp01(Number(els.preEmph.value)),
     mulaw: clamp01(Number(els.mulaw.value)),
+    codecMode: els.codecMode.value || "adpcm",
     blockMs: Number(els.blockMs.value),
     sat: clamp01(Number(els.sat.value)),
     edge: clamp01(Number(els.edge.value)),
     noiseTrack: clamp01(Number(els.noiseTrack.value)),
     dcDrift: clamp01(Number(els.dcDrift.value)),
     speaker: clamp01(Number(els.speaker.value)),
+    speakerModel: els.speakerModel.value || "handheld",
     hum: clamp01(Number(els.hum.value)),
     whine: clamp01(Number(els.whine.value)),
     outGain: Number(els.outGain.value),
@@ -220,6 +236,8 @@ function readSettingsFromUI() {
     bleepsMix: clamp01(Number(els.bleepsMix.value)),
     bleepsRate: Number(els.bleepsRate.value),
     bleepsWave: els.bleepsWave.value || "random",
+    bleepsTrigger: els.bleepsTrigger.value || "transient",
+    bleepsScale: els.bleepsScale.value || "minor",
     bleepsVibrato: clamp01(Number(els.bleepsVibrato.value)),
     bleepsPitch: clamp01(Number(els.bleepsPitch.value)),
     microDelayMs: Number(els.microDelayMs.value),
@@ -245,12 +263,14 @@ function writeSettingsToUI(next) {
   els.hpHz.value = String(next.hpHz ?? 70);
   els.preEmph.value = String(next.preEmph ?? 0.2);
   els.mulaw.value = String(next.mulaw ?? 0.25);
+  els.codecMode.value = next.codecMode ?? "adpcm";
   els.blockMs.value = String(next.blockMs ?? 8);
   els.sat.value = String(next.sat ?? 0.25);
   els.edge.value = String(next.edge ?? 0.25);
   els.noiseTrack.value = String(next.noiseTrack ?? 0.6);
   els.dcDrift.value = String(next.dcDrift ?? 0.15);
   els.speaker.value = String(next.speaker ?? 0.45);
+  els.speakerModel.value = next.speakerModel ?? "handheld";
   els.hum.value = String(next.hum ?? 0.08);
   els.whine.value = String(next.whine ?? 0.15);
   els.outGain.value = String(next.outGain ?? 0.95);
@@ -259,14 +279,16 @@ function writeSettingsToUI(next) {
   els.limiter.value = String(next.limiter ?? 0.35);
 
   els.bleepsEnable.checked = Boolean(next.bleepsEnable ?? false);
-  els.bleepsMix.value = String(next.bleepsMix ?? 0.18);
+  els.bleepsMix.value = String(next.bleepsMix ?? 0.12);
   els.bleepsRate.value = String(next.bleepsRate ?? 3);
-  els.bleepsWave.value = next.bleepsWave ?? "random";
-  els.bleepsVibrato.value = String(next.bleepsVibrato ?? 0.35);
+  els.bleepsWave.value = next.bleepsWave ?? "pulse";
+  els.bleepsTrigger.value = next.bleepsTrigger ?? "transient";
+  els.bleepsScale.value = next.bleepsScale ?? "minor";
+  els.bleepsVibrato.value = String(next.bleepsVibrato ?? 0.12);
   els.bleepsPitch.value = String(next.bleepsPitch ?? 0.55);
   els.microDelayMs.value = String(next.microDelayMs ?? 8);
-  els.microDelayMix.value = String(next.microDelayMix ?? 0.18);
-  els.verb.value = String(next.verb ?? 0.22);
+  els.microDelayMix.value = String(next.microDelayMix ?? 0.06);
+  els.verb.value = String(next.verb ?? 0.08);
   els.verbMs.value = String(next.verbMs ?? 45);
 
   refreshValueLabels();
@@ -277,9 +299,9 @@ function refreshValueLabels() {
   const m = computeMacroTargets(s);
 
   els.qualityVal.textContent = `${m.bits}b @ ${Math.round(m.rate / 100) / 10}kHz`;
-  els.codecVal.textContent = `μ-law ${pct01(m.mulaw)} | block ${Math.round(m.blockMs)}ms`;
+  els.codecVal.textContent = `${els.codecMode.value.toUpperCase()} ${pct01(m.mulaw)} | ${Math.round(m.blockMs)}ms blocks`;
   els.gritVal.textContent = `sat ${pct01(m.sat)} | jitter ${pct01(m.jitter)}`;
-  els.noiseVal.textContent = `hiss ${pct01(s.noise)} | whine ${pct01(Number(els.whine.value))}`;
+  els.noiseVal.textContent = `bed ${pct01(s.noise)} | whine ${pct01(Number(els.whine.value))}`;
 
   els.bitsVal.textContent = `${Math.round(Number(els.bits.value))}b`;
   els.rateVal.textContent = `${Math.round(Number(els.rate.value) / 100) / 10}kHz`;
@@ -288,12 +310,14 @@ function refreshValueLabels() {
   els.hpHzVal.textContent = `${Math.round(Number(els.hpHz.value))}Hz`;
   els.preEmphVal.textContent = pct01(Number(els.preEmph.value));
   els.mulawVal.textContent = pct01(Number(els.mulaw.value));
+  els.codecModeVal.textContent = els.codecMode.value.toUpperCase();
   els.blockMsVal.textContent = `${Math.round(Number(els.blockMs.value))}ms`;
   els.satVal.textContent = pct01(Number(els.sat.value));
   els.edgeVal.textContent = pct01(Number(els.edge.value));
   els.noiseTrackVal.textContent = pct01(Number(els.noiseTrack.value));
   els.dcDriftVal.textContent = pct01(Number(els.dcDrift.value));
   els.speakerVal.textContent = pct01(Number(els.speaker.value));
+  els.speakerModelVal.textContent = els.speakerModel.options[els.speakerModel.selectedIndex]?.textContent ?? els.speakerModel.value;
   els.humVal.textContent = pct01(Number(els.hum.value));
   els.whineVal.textContent = pct01(Number(els.whine.value));
   els.outGainVal.textContent = `${round1(Number(els.outGain.value))}x`;
@@ -305,6 +329,8 @@ function refreshValueLabels() {
   els.bleepsMixVal.textContent = pct01(Number(els.bleepsMix.value));
   els.bleepsRateVal.textContent = `${round1(Number(els.bleepsRate.value))}/s`;
   els.bleepsWaveVal.textContent = els.bleepsWave.value || "random";
+  els.bleepsTriggerVal.textContent = els.bleepsTrigger.value;
+  els.bleepsScaleVal.textContent = els.bleepsScale.value;
   els.bleepsVibratoVal.textContent = pct01(Number(els.bleepsVibrato.value));
   els.bleepsPitchVal.textContent = pct01(Number(els.bleepsPitch.value));
   els.microDelayMsVal.textContent = `${round1(Number(els.microDelayMs.value))}ms`;
@@ -432,12 +458,14 @@ function hookControls() {
     els.hpHz,
     els.preEmph,
     els.mulaw,
+    els.codecMode,
     els.blockMs,
     els.sat,
     els.edge,
     els.noiseTrack,
     els.dcDrift,
     els.speaker,
+    els.speakerModel,
     els.hum,
     els.whine,
     els.outGain,
@@ -448,6 +476,8 @@ function hookControls() {
     els.bleepsMix,
     els.bleepsRate,
     els.bleepsWave,
+    els.bleepsTrigger,
+    els.bleepsScale,
     els.bleepsVibrato,
     els.bleepsPitch,
     els.microDelayMs,
@@ -467,6 +497,13 @@ function hookControls() {
     if (!preset) return;
     writeSettingsToUI({ ...defaultSettings(), ...preset });
     applyMacrosFromPrimaryToAdvanced();
+    for (const [key, value] of Object.entries(preset)) {
+      const control = els[key];
+      if (!control || ["quality", "codec", "grit", "noise"].includes(key)) continue;
+      if (control.type === "checkbox") control.checked = Boolean(value);
+      else control.value = String(value);
+    }
+    refreshValueLabels();
     if (realtime.graph && realtime.ctx) realtime.graph.applySettings(readSettingsFromUI(), { ramp: 0.03 });
   });
 }

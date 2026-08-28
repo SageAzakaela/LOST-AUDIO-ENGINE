@@ -1,12 +1,23 @@
-import { buildTransmissionGraph } from "../../../src/audio/graph.js";
-import { buildOcclusionGraph } from "../../../occlusion-engine/src/audio/graph.js";
-import { buildTapeGraph } from "../../../tape-engine/src/audio/graph.js";
+import { buildTransmissionGraph } from "../../../src/audio/graph.js?v=20260827.4";
+import { buildOcclusionGraph } from "../../../occlusion-engine/src/audio/graph.js?v=20260827.19";
+import { buildTapeGraph } from "../../../tape-engine/src/audio/graph.js?v=20260827.21";
 import { buildTelevisionGraph } from "../../../television-engine/src/audio/graph.js";
-import { buildCartridgeGraph } from "../../../cartridge-engine/src/audio/graph.js";
-import { buildCommsGraph } from "../../../comms-engine/src/audio/graph.js";
-import { buildConferenceGraph } from "../../../conference-engine/src/audio/graph.js";
-import { buildCdGraph } from "../../../cd-engine/src/audio/graph.js";
-import { buildCamcorderGraph } from "../../../camcorder-engine/src/audio/graph.js";
+import { buildCartridgeGraph } from "../../../cartridge-engine/src/audio/graph.js?v=20260827.26";
+import { buildCommsGraph } from "../../../comms-engine/src/audio/graph.js?v=20260827.26";
+import { buildConferenceGraph } from "../../../conference-engine/src/audio/graph.js?v=20260827.24";
+import { buildCdGraph } from "../../../cd-engine/src/audio/graph.js?v=20260827.6";
+import { buildCamcorderGraph } from "../../../camcorder-engine/src/audio/graph.js?v=20260827.27";
+
+const MASTER_NOISE_WORKLET_URL = new URL("./master-noise-reducer-processor.js", import.meta.url);
+const MASTER_WORKLET_CONTEXTS = new WeakSet();
+export const MASTER_EQ_FREQUENCIES = [31, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+
+export async function ensureMasterWorklets(ctx) {
+  if (MASTER_WORKLET_CONTEXTS.has(ctx)) return;
+  if (!ctx?.audioWorklet) throw new Error("This browser does not support the mastering noise-reduction worklet.");
+  await ctx.audioWorklet.addModule(MASTER_NOISE_WORKLET_URL.href);
+  MASTER_WORKLET_CONTEXTS.add(ctx);
+}
 
 function now(ctx) {
   return ctx.currentTime;
@@ -73,94 +84,158 @@ function wrapWetDry(ctx, laneInput, moduleGraph) {
   const dryGain = new GainNode(ctx, { gain: 1 });
   const wetGain = new GainNode(ctx, { gain: 0 });
   const sum = new GainNode(ctx, { gain: 1 });
+  const latencySeconds = Math.max(0, Number(moduleGraph.latencySeconds) || 0);
+  const dryDelay = latencySeconds > 0
+    ? new DelayNode(ctx, { maxDelayTime: Math.max(0.05, latencySeconds), delayTime: latencySeconds })
+    : null;
 
-  laneInput.connect(dryGain);
+  if (dryDelay) {
+    laneInput.connect(dryDelay);
+    dryDelay.connect(dryGain);
+  } else {
+    laneInput.connect(dryGain);
+  }
   dryGain.connect(sum);
 
   laneInput.connect(moduleGraph.input);
   moduleGraph.output.connect(wetGain);
   wetGain.connect(sum);
 
-  return { input: laneInput, output: sum, dryGain, wetGain };
+  return { input: laneInput, output: sum, dryGain, wetGain, dryDelay, mixLaw: moduleGraph.mixLaw || "equal-power" };
 }
 
 export function buildMasterLane(ctx) {
   const input = new GainNode(ctx, { gain: 1 });
   const masterGain = new GainNode(ctx, { gain: 1 });
-
-  // Master EQ (stacked for a steeper slope).
   const hp1 = new BiquadFilterNode(ctx, { type: "highpass", frequency: 20, Q: 0.707 });
   const hp2 = new BiquadFilterNode(ctx, { type: "highpass", frequency: 20, Q: 0.707 });
   const lp1 = new BiquadFilterNode(ctx, { type: "lowpass", frequency: 20000, Q: 0.707 });
   const lp2 = new BiquadFilterNode(ctx, { type: "lowpass", frequency: 20000, Q: 0.707 });
+  const graphicEqNodes = MASTER_EQ_FREQUENCIES.map((frequency, index) => new BiquadFilterNode(ctx, {
+    type: index === 0 ? "lowshelf" : index === MASTER_EQ_FREQUENCIES.length - 1 ? "highshelf" : "peaking",
+    frequency,
+    Q: index === 0 || index === MASTER_EQ_FREQUENCIES.length - 1 ? 0.707 : 1.35,
+    gain: 0,
+  }));
+  const noiseReducer = new AudioWorkletNode(ctx, "master-noise-reducer", { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] });
 
-  // Master compression (serial). NOTE: avoid parallel mixing with a dry path here, because
-  // DynamicsCompressorNode may introduce internal latency/lookahead; mixing can cause comb filtering.
-  const compNode = new DynamicsCompressorNode(ctx, {
-    threshold: -16,
-    knee: 24,
-    ratio: 3,
-    attack: 0.01,
-    release: 0.16,
-  });
-
-  const limiterNode = new DynamicsCompressorNode(ctx, {
-    threshold: -1.2,
-    knee: 0,
-    ratio: 20,
-    attack: 0.003,
-    release: 0.09,
-  });
-
+  const compNode = new DynamicsCompressorNode(ctx, { threshold: -16, knee: 24, ratio: 3, attack: 0.01, release: 0.16 });
+  const limiterNode = new DynamicsCompressorNode(ctx, { threshold: -1.2, knee: 0, ratio: 20, attack: 0.003, release: 0.09 });
+  const colorShaper = new WaveShaperNode(ctx, { curve: IDENTITY_CURVE, oversample: "4x" });
+  const colorGain = new GainNode(ctx, { gain: 1 });
+  const spaceDry = new GainNode(ctx, { gain: 1 });
+  const delayNode = new DelayNode(ctx, { maxDelayTime: 1, delayTime: 0.18 });
+  const delayDamping = new BiquadFilterNode(ctx, { type: "lowpass", frequency: 8000, Q: 0.707 });
+  const delayFeedback = new GainNode(ctx, { gain: 0.18 });
+  const delayWet = new GainNode(ctx, { gain: 0 });
+  const reverbPreDelay = new DelayNode(ctx, { maxDelayTime: 0.25, delayTime: 0.018 });
+  const reverbNode = new ConvolverNode(ctx);
+  const reverbDamping = new BiquadFilterNode(ctx, { type: "lowpass", frequency: 6500, Q: 0.707 });
+  const reverbWet = new GainNode(ctx, { gain: 0 });
+  const spaceSum = new GainNode(ctx, { gain: 1 });
   const shaper = new WaveShaperNode(ctx, { curve: makeSoftClipCurve(2.7), oversample: "4x" });
   const ceilingGain = new GainNode(ctx, { gain: 1 });
   const output = new GainNode(ctx, { gain: 1 });
 
-  input.connect(masterGain);
+  const makeImpulse = (seconds) => {
+    const duration = Math.max(0.3, Math.min(8, seconds));
+    const rate = ctx.sampleRate || 48000;
+    const impulse = ctx.createBuffer(1, Math.max(1, Math.floor(rate * duration)), rate);
+    const data = impulse.getChannelData(0);
+    let seed = 0x5eeda11;
+    for (let i = 0; i < data.length; i++) {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      const noise = (seed / 0xffffffff) * 2 - 1;
+      data[i] = noise * Math.pow(1 - i / data.length, 3.2);
+    }
+    return impulse;
+  };
+  let currentDecay = 1.35;
+  reverbNode.buffer = makeImpulse(currentDecay);
 
+  input.connect(masterGain);
   masterGain.connect(hp1);
   hp1.connect(hp2);
-  hp2.connect(lp1);
+  let eqHead = hp2;
+  for (const node of graphicEqNodes) { eqHead.connect(node); eqHead = node; }
+  eqHead.connect(lp1);
   lp1.connect(lp2);
-  lp2.connect(compNode);
-  compNode.connect(limiterNode);
+  lp2.connect(noiseReducer);
+  noiseReducer.connect(compNode);
+  compNode.connect(colorShaper);
+  colorShaper.connect(colorGain);
+  colorGain.connect(spaceDry);
+  spaceDry.connect(spaceSum);
+  colorGain.connect(delayNode);
+  delayNode.connect(delayDamping);
+  delayDamping.connect(delayWet);
+  delayWet.connect(spaceSum);
+  delayDamping.connect(delayFeedback);
+  delayFeedback.connect(delayNode);
+  colorGain.connect(reverbPreDelay);
+  reverbPreDelay.connect(reverbNode);
+  reverbNode.connect(reverbDamping);
+  reverbDamping.connect(reverbWet);
+  reverbWet.connect(spaceSum);
+  spaceSum.connect(limiterNode);
   limiterNode.connect(shaper);
   shaper.connect(ceilingGain);
   ceilingGain.connect(output);
 
   function applySettings(s, { time = now(ctx), ramp = 0.02 } = {}) {
     const t1 = time + ramp;
-    const gain = Math.max(0, Math.min(2.5, s.masterGain ?? 1));
-    masterGain.gain.cancelScheduledValues(time);
-    masterGain.gain.setValueAtTime(masterGain.gain.value, time);
-    masterGain.gain.linearRampToValueAtTime(gain, t1);
+    const lerp = (a, b, t) => a + (b - a) * t;
+    const rampParam = (param, value) => {
+      param.cancelScheduledValues(time);
+      param.setValueAtTime(param.value, time);
+      param.linearRampToValueAtTime(value, t1);
+    };
+    rampParam(masterGain.gain, Math.max(0, Math.min(2.5, s.masterGain ?? 1)));
 
     const nyq = (ctx.sampleRate || 48000) * 0.5;
     const clampHz = (hz, lo, hi) => Math.max(lo, Math.min(hi, Number.isFinite(hz) ? hz : lo));
     const hpHz = clampHz(s.masterHpHz ?? 20, 10, nyq * 0.95);
-    const lpHz0 = clampHz(s.masterLpHz ?? 20000, 40, nyq * 0.95);
-    const lpHz = clampHz(Math.max(lpHz0, hpHz + 30), 40, nyq * 0.95);
+    const lpHz = clampHz(Math.max(s.masterLpHz ?? 20000, hpHz + 30), 40, nyq * 0.95);
+    for (const node of [hp1, hp2]) rampParam(node.frequency, hpHz);
+    for (const node of [lp1, lp2]) rampParam(node.frequency, lpHz);
+    graphicEqNodes.forEach((node, index) => rampParam(node.gain, Math.max(-12, Math.min(12, Number(s.masterEqBands?.[String(MASTER_EQ_FREQUENCIES[index])] || 0)))));
 
-    for (const n of [hp1, hp2]) {
-      n.frequency.cancelScheduledValues(time);
-      n.frequency.setValueAtTime(n.frequency.value, time);
-      n.frequency.linearRampToValueAtTime(hpHz, t1);
-    }
-    for (const n of [lp1, lp2]) {
-      n.frequency.cancelScheduledValues(time);
-      n.frequency.setValueAtTime(n.frequency.value, time);
-      n.frequency.linearRampToValueAtTime(lpHz, t1);
-    }
+    const noiseSettings = [
+      ["thresholdDb", Math.max(-90, Math.min(-10, s.masterNoiseThreshold ?? -55))],
+      ["reductionDb", Math.max(0, Math.min(48, s.masterNoiseReductionDb ?? 12))],
+      ["attackMs", Math.max(1, Math.min(200, s.masterNoiseAttack ?? 12))],
+      ["releaseMs", Math.max(10, Math.min(2000, s.masterNoiseRelease ?? 220))],
+      ["mix", Math.max(0, Math.min(1, s.masterNoiseMix ?? 0))],
+      ["learn", s.masterNoiseLearn ? 1 : 0],
+    ];
+    for (const [name, value] of noiseSettings) rampParam(noiseReducer.parameters.get(name), value);
 
     const compAmt = Math.max(0, Math.min(1, s.masterComp ?? 0));
-    // Map 0..1 -> gentle to firm bus compression.
-    const lerp = (a, b, t) => a + (b - a) * t;
     const compEnabled = compAmt > 0.0001;
     compNode.threshold.setValueAtTime(compEnabled ? lerp(-10, -34, compAmt) : 0, time);
     compNode.ratio.setValueAtTime(compEnabled ? lerp(2, 9, compAmt) : 1, time);
     compNode.knee.setValueAtTime(compEnabled ? lerp(18, 34, compAmt) : 0, time);
     compNode.attack.setValueAtTime(compEnabled ? lerp(0.03, 0.006, compAmt) : 0.003, time);
     compNode.release.setValueAtTime(compEnabled ? lerp(0.26, 0.09, compAmt) : 0.05, time);
+
+    const saturation = Math.max(0, Math.min(1, s.masterSaturation ?? 0));
+    colorShaper.curve = saturation > 0.0001 ? makeSoftClipCurve(1.25 + saturation * 4.2) : IDENTITY_CURVE;
+    rampParam(colorGain.gain, 1 - saturation * 0.14);
+    const delayMix = Math.max(0, Math.min(1, s.masterDelayMix ?? 0));
+    const reverbMix = Math.max(0, Math.min(1, s.masterReverbMix ?? 0));
+    rampParam(delayNode.delayTime, Math.max(0.01, Math.min(1, (s.masterDelayTime ?? 180) / 1000)));
+    rampParam(delayFeedback.gain, Math.max(0, Math.min(0.85, s.masterDelayFeedback ?? 0.18)));
+    rampParam(delayDamping.frequency, clampHz(s.masterDelayDamping ?? 8000, 200, nyq * 0.95));
+    rampParam(delayWet.gain, delayMix * 0.65);
+    rampParam(reverbPreDelay.delayTime, Math.max(0, Math.min(0.2, (s.masterReverbPreDelay ?? 18) / 1000)));
+    rampParam(reverbDamping.frequency, clampHz(s.masterReverbDamping ?? 6500, 200, nyq * 0.95));
+    rampParam(reverbWet.gain, reverbMix * 0.58);
+    rampParam(spaceDry.gain, Math.max(0.62, 1 - delayMix * 0.2 - reverbMix * 0.16));
+    const nextDecay = Math.max(0.3, Math.min(8, s.masterReverbDecay ?? 1.35));
+    if (Math.abs(nextDecay - currentDecay) >= 0.075) {
+      currentDecay = nextDecay;
+      reverbNode.buffer = makeImpulse(currentDecay);
+    }
 
     const ceiling = Math.max(0.05, Math.min(1, s.ceiling ?? 0.92));
     const limAmt = Math.max(0, Math.min(1, s.limiter ?? 0.6));
@@ -170,7 +245,6 @@ export function buildMasterLane(ctx) {
     limiterNode.knee.setValueAtTime(limEnabled ? lerp(18, 0, limAmt) : 0, time);
     limiterNode.attack.setValueAtTime(limEnabled ? lerp(0.02, 0.003, limAmt) : 0.003, time);
     limiterNode.release.setValueAtTime(limEnabled ? lerp(0.18, 0.09, limAmt) : 0.05, time);
-
     const soft = Boolean(s.softClip);
     shaper.curve = soft ? makeSoftClipCurve(2.7 + limAmt * 1.2) : IDENTITY_CURVE;
     ceilingGain.gain.setValueAtTime(soft ? ceiling : 1, time);
@@ -180,23 +254,17 @@ export function buildMasterLane(ctx) {
     input,
     output,
     applySettings,
-    nodes: {
-      input,
-      masterGain,
-      hp1,
-      hp2,
-      lp1,
-      lp2,
-      compNode,
-      limiterNode,
-      shaper,
-      ceilingGain,
-      output,
+    setNoiseFloorListener(listener) {
+      noiseReducer.port.onmessage = (event) => {
+        if (event.data?.type === "noiseFloor" && typeof listener === "function") listener(event.data.value);
+      };
     },
+    nodes: { input, masterGain, hp1, hp2, lp1, lp2, graphicEqNodes, noiseReducer, compNode, colorShaper, delayNode, delayDamping, reverbPreDelay, reverbNode, reverbDamping, limiterNode, shaper, ceilingGain, output },
   };
 }
 
 export async function buildLameGraph(ctx, { seed, modules, stereo = false, tuningEdges = null, tuningSample = null, withMaster = true } = {}) {
+  if (withMaster) await ensureMasterWorklets(ctx);
   const chanCount = stereo ? 2 : 1;
   const input = new GainNode(ctx, { gain: 1, channelCount: chanCount });
 
@@ -239,7 +307,10 @@ export async function buildLameGraph(ctx, { seed, modules, stereo = false, tunin
     const laneWraps = [];
 
     for (let lane = 0; lane < lanes.length; lane++) {
-      const laneSeed = mixSeed(seed >>> 0, typeSalt ^ Math.imul(instanceId + 1, 0x9e3779b9) ^ (lane * 0x51ed270b));
+      // Optical failures belong to one disc/read head, so keep CD event timing
+      // and Random conceal choices coherent across stereo lanes.
+      const laneSalt = m.type === "cd" ? 0 : lane * 0x51ed270b;
+      const laneSeed = mixSeed(seed >>> 0, typeSalt ^ Math.imul(instanceId + 1, 0x9e3779b9) ^ laneSalt);
       const g = await buildModuleLane(ctx, m, { seed: laneSeed, tuningEdges, tuningSample });
       const w = wrapWetDry(ctx, lanes[lane].head, g);
       lanes[lane].head = w.output;
@@ -253,9 +324,9 @@ export async function buildLameGraph(ctx, { seed, modules, stereo = false, tunin
       laneWraps,
       setWetEnabled({ wet = 1, enabled = true }, { time = now(ctx), ramp = 0.02 } = {}) {
         const v = enabled ? Math.max(0, Math.min(1, wet)) : 0;
-        const mix = eqPowGains(v);
         const t1 = time + ramp;
         for (const w of laneWraps) {
+          const mix = w.mixLaw === "linear" ? { dry: 1 - v, wet: v } : eqPowGains(v);
           w.dryGain.gain.cancelScheduledValues(time);
           w.dryGain.gain.setValueAtTime(w.dryGain.gain.value, time);
           w.dryGain.gain.linearRampToValueAtTime(mix.dry, t1);
@@ -269,6 +340,12 @@ export async function buildLameGraph(ctx, { seed, modules, stereo = false, tunin
       },
       reset() {
         for (const lg of laneGraphs) lg.graph.reset(lg.seed >>> 0);
+      },
+      triggerDamage(strength = 1) {
+        for (const lg of laneGraphs) lg.graph.triggerDamage?.(strength);
+      },
+      triggerSkip(strength = 1) {
+        for (const lg of laneGraphs) lg.graph.triggerSkip?.(strength);
       },
       setTuningSample(sample) {
         for (const lg of laneGraphs) {

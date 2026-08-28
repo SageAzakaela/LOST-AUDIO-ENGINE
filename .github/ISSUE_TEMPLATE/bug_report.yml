@@ -1,0 +1,78 @@
+name: Bug report
+description: Report a reproducible web, plugin, installation, sound, or project-recall problem.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: dropdown
+    id: product
+    attributes:
+      label: Product
+      options:
+        - Web workstation
+        - Transmission Engine
+        - Tape Engine
+        - Television Engine
+        - CD Engine
+        - Comms Engine
+        - Conference Engine
+        - Camcorder Engine
+        - Cartridge Engine
+        - Occlusion Engine
+        - Open Mic Night
+        - Installation or release package
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or download date
+      description: Use the plugin version, commit, or approximate date you downloaded it.
+      placeholder: "0.1.0, commit SHA, or YYYY-MM-DD"
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe the audible or functional result and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. Load...
+        2. Choose preset...
+        3. Change...
+        4. Hear or see...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include OS, DAW/browser, plugin format, sample rate, buffer size, mono/stereo input, and CPU architecture where relevant.
+      placeholder: "Windows 11; REAPER 7; VST3; 48 kHz; 256 samples; stereo; x64"
+    validations:
+      required: true
+  - type: input
+    id: preset
+    attributes:
+      label: Preset and important settings
+  - type: textarea
+    id: media
+    attributes:
+      label: Supporting material
+      description: Link a short, non-confidential audio example, screenshot, crash log, or minimal project if it is safe to share.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues for the same problem.
+          required: true
+        - label: I can reproduce this with the steps above.
+          required: false

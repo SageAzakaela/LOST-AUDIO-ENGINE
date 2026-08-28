@@ -2,10 +2,14 @@
 
 Device simulator for consumer camera recording artifacts:
 
+- Format-specific VHS-C, Video8/Hi8, MiniDV, digicam, and action-camera behavior
+- Built-in electret, cheap mono, stereo camera, waterproof, and shotgun microphone responses
 - Small mic muffling/coverage
-- Auto gain control (AGC) pumping
+- Auto gain control (AGC), recovery timing, and noise-floor pumping
+- Analog transport flutter versus digital converter/block corruption
 - Handling thumps + cloth/rub noise
-- Early-digital corruption (dropouts/holds/repeats + chirps)
+- Format-aware dropouts/holds/repeats, analog tracking buzz, and digital chirps
+- Filtered wind-pressure overload and camera motor bleed
 
 ## Run locally
 

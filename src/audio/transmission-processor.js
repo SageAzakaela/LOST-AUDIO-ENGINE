@@ -47,11 +47,16 @@ class TransmissionSatProcessor extends AudioWorkletProcessor {
     const mix = parameters.mix[0] ?? 1;
     const pre = 1 + drive * 10.5;
     const bias = asym * 0.18;
+    const center = softClipTanh(bias * pre);
+    const reference = 0.18;
+    const levelMatch = reference / Math.max(1e-6, softClipTanh(reference * pre));
     const dryMix = 1 - clamp(mix, 0, 1);
     const wetMix = clamp(mix, 0, 1);
     for (let i = 0; i < out.length; i++) {
       const x = in0 ? in0[i] : 0;
-      const y = softClipTanh((x + bias) * pre) - bias * 0.45;
+      // Reference-level compensation keeps Drive focused on density and
+      // asymmetry instead of behaving like a hidden gain control.
+      const y = (softClipTanh((x + bias) * pre) - center) * levelMatch;
       out[i] = clamp(x * dryMix + y * wetMix, -1, 1);
     }
     return true;
@@ -433,6 +438,9 @@ class TransmissionPostProcessor extends AudioWorkletProcessor {
     this.prevNoise = 0;
     this.crushHold = 0;
     this.crushPhase = 0;
+    this.driftBuffer = new Float32Array(Math.max(512, Math.ceil(sampleRate * 0.012)));
+    this.driftIndex = 0;
+    this.driftNoise = 0;
     this.port.onmessage = (ev) => {
       const msg = ev.data;
       if (msg?.type === "reset") {
@@ -445,6 +453,9 @@ class TransmissionPostProcessor extends AudioWorkletProcessor {
         this.prevNoise = 0;
         this.crushHold = 0;
         this.crushPhase = 0;
+        this.driftBuffer.fill(0);
+        this.driftIndex = 0;
+        this.driftNoise = 0;
       }
     };
   }
@@ -505,11 +516,13 @@ class TransmissionPostProcessor extends AudioWorkletProcessor {
     const outGain = parameters.outGain[0] ?? 0.9;
     const pre = 1 + drive * 12;
     const bias = asym * 0.22;
+    const reference = 0.2;
+    const levelMatch = reference / Math.max(1e-6, softClipTanh(reference * pre));
     const compAmt = comp * 0.75;
     const thr = 0.18 + (1 - drive) * 0.16;
     const attack = Math.exp(-1 / (sampleRate * (0.003 + 0.01 * (1 - drive))));
     const release = Math.exp(-1 / (sampleRate * (0.06 + 0.16 * (1 - drive))));
-    const wowDepth = clamp(wowCtrl, 0, 1) * 0.45;
+    const wowDepth = clamp(wowCtrl, 0, 1);
     const dropRate = clamp(dropRateCtrl, 0, 1);
     const dropDepth = clamp(dropDepthCtrl, 0, 1);
     const crackleAmount = clamp(crackleCtrl, 0, 1);
@@ -518,9 +531,9 @@ class TransmissionPostProcessor extends AudioWorkletProcessor {
     const bits = Math.round(16 - crushAmt * 12);
     const quant = Math.pow(2, Math.max(1, bits - 1));
     const downsample = Math.max(1, Math.round(1 + crushAmt * 15));
-    const noiseLevel = noise * 0.12;
+    const noiseLevel = Math.pow(clamp(noise, 0, 1), 1.2) * 0.055;
     const pinkMix = clamp(noiseColor, 0, 1);
-    const hissAmt = hiss * 0.6;
+    const hissAmt = hiss * 0.45;
     for (let i = 0; i < out.length; i++) {
       const xIn = in0 ? in0[i] : 0;
       let x = (xIn + bias) * pre;
@@ -529,7 +542,8 @@ class TransmissionPostProcessor extends AudioWorkletProcessor {
       this.env = a + coeff * (this.env - a);
       let g = 1;
       if (this.env > thr) g = 1 / (1 + compAmt * (this.env - thr) * 4.2);
-      x = softClipTanh(x * g) - bias * 0.5;
+      const center = softClipTanh(bias * pre * g);
+      x = (softClipTanh(x * g) - center) * levelMatch;
 
       if (crushAmt > 0.0001) {
         if (this.crushPhase === 0) {
@@ -546,7 +560,21 @@ class TransmissionPostProcessor extends AudioWorkletProcessor {
       this._maybeTriggerCrackle(crackleAmount);
       this.lfoPhase += (2 * Math.PI * lfoRate) / sampleRate;
       if (this.lfoPhase > Math.PI * 2) this.lfoPhase -= Math.PI * 2;
-      const wow = 1 - wowDepth * (0.5 + 0.5 * Math.sin(this.lfoPhase));
+      // Model tuning/carrier instability as time displacement, not tremolo.
+      // A fixed 6 ms base delay keeps the modulation causal and is reported by
+      // the graph so partial wet mixes can latency-align their dry branch.
+      this.driftNoise = this.driftNoise * 0.9992 + this.prng.nextSigned() * 0.0008;
+      this.driftBuffer[this.driftIndex] = x;
+      const driftSeconds = wowDepth * (Math.sin(this.lfoPhase) * 0.0018 + this.driftNoise * 0.0012);
+      const delaySamples = clamp((0.006 + driftSeconds) * sampleRate, 1, this.driftBuffer.length - 2);
+      let read = this.driftIndex - delaySamples;
+      while (read < 0) read += this.driftBuffer.length;
+      const i0 = Math.floor(read) % this.driftBuffer.length;
+      const i1 = (i0 + 1) % this.driftBuffer.length;
+      const frac = read - Math.floor(read);
+      x = this.driftBuffer[i0] * (1 - frac) + this.driftBuffer[i1] * frac;
+      this.driftIndex = (this.driftIndex + 1) % this.driftBuffer.length;
+      const carrierFade = 1 - wowDepth * 0.08 * (0.5 + 0.5 * Math.sin(this.lfoPhase));
       let drop = 1;
       if (this.dropoutRemaining > 0) {
         const t = 1 - this.dropoutRemaining / this.dropoutTotal;
@@ -558,7 +586,7 @@ class TransmissionPostProcessor extends AudioWorkletProcessor {
       if (this.crackleRemaining > 0) {
         const t = 1 - this.crackleRemaining / this.crackleTotal;
         const env = (t < 0.15 ? t / 0.15 : 1) * (t > 0.7 ? (1 - t) / 0.3 : 1);
-        crackle = this.prng.nextSigned() * (0.10 + 0.30 * crackleAmount) * env;
+        crackle = this.prng.nextSigned() * (0.06 + 0.24 * crackleAmount) * env;
         this.crackleRemaining--;
       }
       const wn = this.prng.nextSigned();
@@ -567,7 +595,7 @@ class TransmissionPostProcessor extends AudioWorkletProcessor {
       const hissHp = n - this.prevNoise;
       this.prevNoise = n;
       const noiseOut = n * noiseLevel + hissHp * (noiseLevel * hissAmt);
-      let y = x * wow * drop + crackle + noiseOut;
+      let y = x * carrierFade * drop + crackle + noiseOut;
       y *= outGain;
       out[i] = clamp(y, -1, 1);
     }

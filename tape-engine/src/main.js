@@ -1,6 +1,6 @@
-import { buildTapeGraph, defaultSettings } from "./audio/graph.js";
+import { buildTapeGraph, defaultSettings } from "./audio/graph.js?v=20260827.21";
 import { encodeWavMono16 } from "./audio/wav.js";
-import { PRESETS } from "./presets.js";
+import { PRESETS } from "./presets.js?v=20260827.21";
 
 const MANIFEST_URL = new URL("../audio/manifest.json", import.meta.url);
 
@@ -101,7 +101,7 @@ function fnv1a32Sampled(bytes) {
 const realtime = { ctx: null, graph: null, src: null, seed: 0 };
 let audioBuffer = null;
 let audioDataSeed = 0;
-let sfxBankId = "";
+let sfxBankId = "cassette";
 let sfxBanks = [];
 const sfxCache = new Map(); // filename -> AudioBuffer
 let activeSfxSources = [];
@@ -217,7 +217,7 @@ function writeSettingsToUI(s) {
   els.outGain.value = s.outGain ?? 0.98;
 
   if (typeof s.sfxSource === "string") els.sfxSource.value = s.sfxSource;
-  els.sfxLevel.value = s.sfxLevel ?? 0.22;
+  els.sfxLevel.value = s.sfxLevel ?? 0.46;
   els.sfxMode.value = s.sfxMode ?? "bed";
   refreshValueLabels();
 }

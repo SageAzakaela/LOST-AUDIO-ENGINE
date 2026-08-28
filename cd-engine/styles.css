@@ -109,6 +109,20 @@ input[type="range"]{
   gap:10px;
   flex-wrap:wrap;
 }
+.triggerRow{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+}
+.triggerRow p{
+  margin:4px 0 0;
+  color:var(--muted);
+  font-size:12px;
+}
+.triggerButtons{ display:flex; gap:8px; flex-wrap:wrap; }
+.triggerButtons button:first-child{ border-color:rgba(255,180,84,.55); }
+.triggerButtons button:last-child{ border-color:rgba(85,214,255,.55); }
 .toggle{
   display:inline-flex;
   align-items:center;
