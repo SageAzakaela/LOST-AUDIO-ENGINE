@@ -17,6 +17,7 @@
     <header><strong id="label"></strong><span>responsive QA viewport</span></header>
     <iframe id="preview" title="LOST responsive preview"></iframe>
     <div id="metrics">waiting for workstation…</div>
+    <pre id="results" hidden>RUNNING</pre>
     <script>
       const params = new URLSearchParams(location.search);
       const width = Math.max(320, Math.min(1920, Number(params.get("width")) || 1366));
@@ -31,6 +32,15 @@
         const root = doc.documentElement;
         const workstationVisible = getComputedStyle(doc.querySelector(".workstation-shell")).display !== "none";
         const mobileVisible = getComputedStyle(doc.querySelector(".mobile-gate")).display !== "none";
+        const results = {
+          width,
+          height,
+          clientWidth: root.clientWidth,
+          scrollWidth: root.scrollWidth,
+          horizontalOverflow: root.scrollWidth > root.clientWidth,
+          workstationVisible,
+          mobileVisible,
+        };
         document.getElementById("metrics").textContent = [
           `client ${root.clientWidth}px`,
           `scroll ${root.scrollWidth}px`,
@@ -38,6 +48,8 @@
           `workstation ${workstationVisible ? "visible" : "hidden"}`,
           `mobile handoff ${mobileVisible ? "visible" : "hidden"}`,
         ].join("  /  ");
+        document.getElementById("results").textContent = JSON.stringify(results, null, 2);
+        document.body.dataset.complete = "true";
       });
     </script>
   </body>

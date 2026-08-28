@@ -182,9 +182,14 @@ export async function buildTelevisionGraph(ctx, { seed } = {}) {
     const t1 = time + ramp;
     const s = { ...defaultSettings(), ...(settings || {}) };
     const macro = computeMacroTargets(s);
+    const macroBaseline = computeMacroTargets(defaultSettings());
 
-    const hpHz = Math.max(20, Math.min(1200, Number(s.hpHz ?? macro.hpHz)));
-    const lpHz = Math.max(800, Math.min(18000, Number(s.lpHz ?? macro.lpHz)));
+    // Precision controls define the neutral cabinet, while Vibe and Speaker
+    // move that surface relative to their factory positions. Previously the
+    // default precision values always won the nullish-coalescing check, which
+    // left both macros visible in the UI but sonically inert.
+    const hpHz = Math.max(20, Math.min(1200, Number(s.hpHz) + macro.hpHz - macroBaseline.hpHz));
+    const lpHz = Math.max(800, Math.min(18000, Number(s.lpHz) + macro.lpHz - macroBaseline.lpHz));
     for (const h of [hp1, hp2]) {
       h.frequency.cancelScheduledValues(time);
       h.frequency.setValueAtTime(h.frequency.value, time);
@@ -196,8 +201,8 @@ export async function buildTelevisionGraph(ctx, { seed } = {}) {
       l.frequency.linearRampToValueAtTime(lpHz, t1);
     }
 
-    const midDb = Math.max(-6, Math.min(10, Number(s.midHumpDb ?? macro.midHumpDb)));
-    const midF = Math.max(600, Math.min(5000, Number(s.midFreq ?? macro.midFreq)));
+    const midDb = Math.max(-6, Math.min(10, Number(s.midHumpDb) + macro.midHumpDb - macroBaseline.midHumpDb));
+    const midF = Math.max(600, Math.min(5000, Number(s.midFreq) + macro.midFreq - macroBaseline.midFreq));
     hump.frequency.setValueAtTime(midF, time);
     hump.gain.setValueAtTime(midDb, time);
     dip.gain.setValueAtTime(-0.35 * midDb, time);
@@ -214,8 +219,8 @@ export async function buildTelevisionGraph(ctx, { seed } = {}) {
 
     const staticAmt = clamp01(s.static ?? 0.12);
     noise.parameters.get("level")?.setValueAtTime(Math.pow(staticAmt, 0.72), time);
-    noise.parameters.get("hiss")?.setValueAtTime(clamp01(s.noiseHiss ?? macro.noiseHiss), time);
-    noise.parameters.get("crackle")?.setValueAtTime(clamp01(s.noiseCrackle ?? macro.noiseCrackle), time);
+    noise.parameters.get("hiss")?.setValueAtTime(clamp01(Number(s.noiseHiss) + macro.noiseHiss - macroBaseline.noiseHiss), time);
+    noise.parameters.get("crackle")?.setValueAtTime(clamp01(Number(s.noiseCrackle) + macro.noiseCrackle - macroBaseline.noiseCrackle), time);
     noise.parameters.get("seed")?.setValueAtTime(((seed ?? 1) ^ 0x6d2b79f5) >>> 0, time);
 
     noiseGain.gain.cancelScheduledValues(time);

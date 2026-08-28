@@ -92,11 +92,12 @@ The baseline validation has no package installation step:
 
 ```powershell
 node scripts/validate-repository.mjs
+node tests/platform-capabilities.test.mjs
 node tests/obfuscation-body-harness.mjs
 python tests/parity/parity.py generate --out tests/parity/fixtures
 ```
 
-Browser DSP harnesses and the manual listening matrix are documented in [docs/testing.md](docs/testing.md). Numerical tests protect wiring, determinism, safety, and parameter influence; they do not replace level-matched listening.
+Run the cross-platform Chromium gate with `node scripts/run-browser-harnesses.mjs --full`; it requires no package installation and writes evidence under `.artifacts/`. Browser DSP harnesses and the manual listening matrix are documented in [docs/testing.md](docs/testing.md). Numerical tests protect wiring, determinism, safety, and parameter influence; they do not replace level-matched listening.
 
 ## Build the existing native plugins
 

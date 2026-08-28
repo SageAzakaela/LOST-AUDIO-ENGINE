@@ -10,7 +10,7 @@ permissions:
 jobs:
   source-and-dsp:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -21,7 +21,18 @@ jobs:
           python-version: "3.12"
       - name: Validate repository structure and source
         run: node scripts/validate-repository.mjs
+      - name: Test platform capability detection
+        run: node tests/platform-capabilities.test.mjs
       - name: Run deterministic Obfuscation worklet test
         run: node tests/obfuscation-body-harness.mjs
+      - name: Run browser DSP and responsive harnesses
+        run: node scripts/run-browser-harnesses.mjs --ci
       - name: Generate deterministic parity fixtures
         run: python tests/parity/parity.py generate --out tests/parity/fixtures
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ubuntu-chromium-browser-evidence
+          path: .artifacts/platform-browser-results.json
+          if-no-files-found: warn

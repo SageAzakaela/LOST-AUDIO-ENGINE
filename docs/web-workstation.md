@@ -63,6 +63,7 @@ Audio decoding and processing occur locally in the browser. The B&E Digital edit
 | Symptom | Check |
 | --- | --- |
 | Workstation never appears | Confirm desktop width and that JavaScript is enabled |
+| Compatibility screen appears | Open technical details and use the named missing capability; use a current desktop Chrome/Chromium build over HTTPS or localhost |
 | AudioWorklet error | Serve through HTTP(S), then check the browser console for a missing relative module |
 | Playback is silent | Confirm a file is decoded, monitor volume is up, and the active output is not muted |
 | Sudden harsh output | Reduce source trim, device damage/noise, master makeup, and wet mix; check the ceiling |

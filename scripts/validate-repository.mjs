@@ -36,6 +36,8 @@ function checkRelativeReference(sourceFile, reference, label) {
 const required = [
   "README.md", "CONTRIBUTING.md", "CMakeLists.txt", "index.html", "lame/src/main.js", "lame/src/audio/graph.js",
   "docs/architecture.md", "docs/testing.md", "docs/platform-integration.md", "docs/vst3.md", "docs/roadmap.md",
+  "lame/src/platform.js", "scripts/run-browser-harnesses.mjs", "tests/platform-capabilities.test.mjs",
+  "tests/platform-browser-harness.html", "tests/platform-browser-harness.js",
   "tests/obfuscation-body-harness.mjs", "tests/parity/parity.py", ".github/workflows/validate.yml",
 ];
 for (const path of required) if (!existsSync(join(root, path))) fail(`required path is missing: ${path}`);

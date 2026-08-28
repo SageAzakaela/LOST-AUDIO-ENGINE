@@ -8,11 +8,12 @@ Requirements: Node.js 20+ and Python 3.10+.
 
 ```powershell
 node scripts/validate-repository.mjs
+node tests/platform-capabilities.test.mjs
 node tests/obfuscation-body-harness.mjs
 python tests/parity/parity.py generate --out tests/parity/fixtures
 ```
 
-The repository validator checks required paths, JavaScript module syntax, JSON manifests, local module/worklet references, Markdown links, unique plugin identities, and the absence of committed root release ZIPs.
+The repository validator checks required paths, JavaScript module syntax, JSON manifests, local module/worklet references, Markdown links, unique plugin identities, and the absence of committed root release ZIPs. The platform unit test exercises supported, insecure, prefixed, and incomplete browser capability surfaces without launching a browser.
 
 The Node obfuscation harness verifies deterministic rattle/body behavior, finite output, an exact disabled branch, and bounded safety behavior without requiring a browser.
 
@@ -20,7 +21,16 @@ The parity generator creates deterministic PCM16 fixtures at 44.1, 48, and 96 kH
 
 ## Browser DSP harnesses
 
-Serve the repository first:
+The repeatable automated route is:
+
+```powershell
+$env:LAE_BROWSER = "C:\Program Files\Google\Chrome\Application\chrome.exe"
+node scripts/run-browser-harnesses.mjs --full
+```
+
+Omit `LAE_BROWSER` when Chrome, Chromium, or Edge is in a standard installation location. The runner uses an isolated headless profile, a loopback-only server, and the browser debugging protocol; it does not reuse or focus the user's normal browser. Results are written to `.artifacts/platform-browser-results.json`. The full run fails on missing presets, non-finite samples, ceiling violations, dead/too-subtle parameter comparisons, laptop overflow, or an incorrect mobile handoff.
+
+For manual investigation, serve the repository first:
 
 ```powershell
 python -m http.server 5173
@@ -39,6 +49,7 @@ Then open the relevant route:
 | Camcorder | `/tests/camcorder-browser-harness.html` | Format/mic preset safety and wind/corruption isolation |
 | Responsive | `/tests/responsive-browser-harness.html?width=1366&height=768` | Laptop composition and horizontal-overflow check |
 | Responsive | `/tests/responsive-browser-harness.html?width=390&height=844` | Deliberate mobile handoff |
+| Platform | `/tests/platform-browser-harness.html` | Startup API/capability surface in the actual browser |
 
 A browser harness is complete when `document.body.dataset.complete` becomes `"true"`. Save the JSON output with the commit, browser version, operating system, and sample rate when using it as release evidence.
 

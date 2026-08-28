@@ -16,7 +16,7 @@
     <meta name="twitter:title" content="Lost Audio Engine | B&E Digital" />
     <meta name="twitter:description" content="A modular browser workstation for making audio sound old, strange, distant, damaged, or unreliable." />
     <title>Lost Audio Engine — Modular Device Workstation</title>
-    <link rel="stylesheet" href="./lame/styles.css?v=20260827.25" />
+    <link rel="stylesheet" href="./lame/styles.css?v=20260827.26" />
   </head>
   <body>
     <section class="mobile-gate" aria-labelledby="mobile-gate-title">
@@ -26,6 +26,19 @@
       <p>Lost Audio Engine is a live modular audio rack with precision controls, waveform editing, drag-and-drop hardware, and realtime monitoring. A phone-sized version would hide the instrument instead of preserving it.</p>
       <strong>This tool is available only on desktop devices. Open this page on a laptop or desktop browser at least 1024px wide.</strong>
       <small>Your audio is processed locally in the browser.</small>
+    </section>
+    <section id="compatibilityGate" class="compatibility-gate" role="alert" aria-labelledby="compatibilityTitle" hidden>
+      <div class="compatibility-gate__signal" aria-hidden="true"><i></i><b>PLATFORM CHECK</b><i></i></div>
+      <span>LOST AUDIO ENGINE / SAFE START</span>
+      <h1 id="compatibilityTitle">This browser is missing part of the rack.</h1>
+      <p id="compatibilitySummary">Lost Audio Engine needs a complete desktop Web Audio implementation.</p>
+      <ul id="compatibilityMissing"></ul>
+      <details><summary>TECHNICAL DETAILS</summary><pre id="compatibilityDetails"></pre></details>
+      <nav aria-label="Compatibility help">
+        <a href="https://github.com/SageAzakaela/LOST-AUDIO-ENGINE/blob/main/docs/platform-integration.md" target="_blank" rel="noreferrer">PLATFORM NOTES ↗</a>
+        <a href="https://github.com/SageAzakaela/LOST-AUDIO-ENGINE/issues/new?template=bug_report.yml" target="_blank" rel="noreferrer">REPORT A PROBLEM ↗</a>
+      </nav>
+      <small>Your audio stays on this device. Compatibility checks do not load or transmit a file.</small>
     </section>
     <main class="workstation-shell">
       <header class="workstation-header">
@@ -219,6 +232,6 @@
       </footer>
     </aside>
 
-    <script type="module" src="./lame/src/main.js?v=20260827.51"></script>
+    <script type="module" src="./lame/src/main.js?v=20260827.52"></script>
   </body>
 </html>

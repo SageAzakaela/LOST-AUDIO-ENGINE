@@ -1,8 +1,39 @@
 # Platform and device integration
 
-Status: next implementation phase after repository preservation and documentation.
+Status: active implementation phase after repository preservation and documentation.
 
 The immediate goal is to make the web reference dependable beyond the current Windows development environment before rebuilding the VST3 fleet. This phase is about verified compatibility, not merely opening the page on another machine.
+
+## Automated browser gate
+
+`scripts/run-browser-harnesses.mjs` starts a loopback-only static server, launches Chrome/Chromium/Edge in an isolated headless profile, waits for each harness's explicit completion signal through the browser debugging protocol, and writes machine-readable evidence to `.artifacts/platform-browser-results.json`.
+
+The full gate covers:
+
+- the actual browser capability surface required by startup;
+- all protected rack presets and their finite/ceiling-safe output;
+- focused Tape, Obfuscation, Conference, and Camcorder safety suites;
+- every exposed parameter across all nine engines, rejecting dead, too-subtle, or non-finite results;
+- the 1366 x 768 laptop layout contract;
+- the deliberate 390-pixel mobile handoff.
+
+Run the same gate locally with `node scripts/run-browser-harnesses.mjs --full`. Set `LAE_BROWSER` to an executable when automatic browser discovery is not sufficient. GitHub Actions runs the full gate on `ubuntu-latest` and uploads the JSON evidence for every run.
+
+## Current evidence
+
+| Environment | Evidence | Status |
+| --- | --- | --- |
+| Windows 11 x86_64, Headless Chrome 151 | Ten browser harnesses; Web Audio/Worklet capability surface; protected presets; all 213 exposed parameter comparisons; responsive contracts | Automated pass on 2026-08-27 |
+| Ubuntu x86_64, GitHub-hosted Chrome/Chromium | The same ten-harness gate in `.github/workflows/validate.yml` | Required CI gate; preserve the uploaded artifact with release evidence |
+| Linux desktop with PipeWire and physical output | Playback, device switching, long-session behavior, and listening matrix | Not yet verified |
+| Firefox on Linux | Browser boot, AudioWorklet behavior, DSP/export, and listening matrix | Not yet verified |
+| Linux ARM64 | Browser, architecture, performance, and physical-device matrix | Not yet verified |
+
+Headless Chromium proves browser execution, DSP wiring, deterministic offline rendering, finite output, and responsive CSS behavior. It does not prove physical-device playback, PipeWire behavior, subjective sound, realtime latency, file-picker interaction, or downloaded-file playback. Those remain deliberate manual gates.
+
+## Safe-start fallback
+
+The workstation now checks secure-context, realtime/offline Web Audio, AudioWorklet, File/Blob/download, Canvas, Pointer Events, and animation-frame support before initialization. Unsupported browsers receive a legible diagnostic surface with missing capabilities and technical details instead of a half-started or silently broken rack. Localhost is accepted as a secure development origin; `file://` is not.
 
 ## Ordered targets
 

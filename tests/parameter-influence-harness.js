@@ -1,5 +1,5 @@
 import { buildTapeGraph, defaultSettings as tapeDefaults } from "../tape-engine/src/audio/graph.js?v=20260827.21";
-import { buildTelevisionGraph, defaultSettings as televisionDefaults } from "../television-engine/src/audio/graph.js?v=20260827.1";
+import { buildTelevisionGraph, defaultSettings as televisionDefaults } from "../television-engine/src/audio/graph.js?v=20260827.2";
 import { buildOcclusionGraph, defaultSettings as occlusionDefaults } from "../occlusion-engine/src/audio/graph.js?v=20260827.19";
 import { buildTransmissionGraph, defaultSettings as transmissionDefaults } from "../src/audio/graph.js?v=20260827.4";
 import { buildCommsGraph, defaultSettings as commsDefaults } from "../comms-engine/src/audio/graph.js?v=20260827.26";

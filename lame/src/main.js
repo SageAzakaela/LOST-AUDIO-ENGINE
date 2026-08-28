@@ -2,11 +2,14 @@ import { buildLameGraph, buildMasterLane, ensureMasterWorklets } from "./audio/g
 import { encodeWavPcm16 } from "./audio/wav.js";
 import { mapBandwidth } from "../../src/audio/graph.js?v=20260827.4";
 import { ENGINE_PRESETS, MASTER_PRESETS } from "./presets.js?v=20260827.33";
+import { detectPlatformCapabilities, formatPlatformReport, getAudioContextConstructor, getOfflineAudioContextConstructor } from "./platform.js?v=20260827.1";
 
 const TUNING_MANIFEST_URL = new URL("../../audio/manifest.json", import.meta.url);
 const TAPE_SFX_MANIFEST_URL = new URL("../../tape-engine/audio/manifest.json", import.meta.url);
 const CAMCORDER_SFX_MANIFEST_URL = new URL("../../camcorder-engine/audio/manifest.json", import.meta.url);
 const TV_SFX_MANIFEST_URL = new URL("../../television-engine/audio/manifest.json", import.meta.url);
+const AudioContextConstructor = getAudioContextConstructor(window);
+const OfflineAudioContextConstructor = getOfflineAudioContextConstructor(window);
 
 const els = {
   fileInput: document.querySelector("#fileInput"),
@@ -39,6 +42,11 @@ const els = {
   accessEmail: document.querySelector("#accessEmail"),
   accessStatus: document.querySelector("#accessStatus"),
   accessState: document.querySelector("#accessState"),
+  compatibilityGate: document.querySelector("#compatibilityGate"),
+  compatibilityTitle: document.querySelector("#compatibilityTitle"),
+  compatibilitySummary: document.querySelector("#compatibilitySummary"),
+  compatibilityMissing: document.querySelector("#compatibilityMissing"),
+  compatibilityDetails: document.querySelector("#compatibilityDetails"),
 
   inputTrim: document.querySelector("#inputTrim"),
   monitorVolume: document.querySelector("#monitorVolume"),
@@ -642,7 +650,7 @@ async function loadTuningSample(sourceValue) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to fetch tuning sample: ${file}`);
   const ab = await res.arrayBuffer();
-  const decodeCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const decodeCtx = new AudioContextConstructor();
   try {
     const decoded = await decodeCtx.decodeAudioData(ab.slice(0));
     const mono = new Float32Array(decoded.length);
@@ -699,7 +707,7 @@ async function decodeUrlToMonoAudioBuffer(url) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to fetch ${url}`);
   const ab = await res.arrayBuffer();
-  const decodeCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const decodeCtx = new AudioContextConstructor();
   try {
     const decoded = await decodeCtx.decodeAudioData(ab.slice(0));
     const mono = new AudioBuffer({ length: decoded.length, sampleRate: decoded.sampleRate, numberOfChannels: 1 });
@@ -4440,7 +4448,7 @@ async function ensureRealtimeGraph() {
   await teardownRealtime();
   realtime.stereo = wantStereo;
 
-  realtime.ctx = new (window.AudioContext || window.webkitAudioContext)({
+  realtime.ctx = new AudioContextConstructor({
     latencyHint: "interactive",
     sampleRate: audioBuffer.sampleRate,
   });
@@ -4561,7 +4569,7 @@ async function ensureAutomationRealtimeGraph() {
   await teardownAutomationRealtime();
   automationRt.stereo = wantStereo;
   automationRt.sampleRate = sr;
-  automationRt.ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: "interactive", sampleRate: sr });
+  automationRt.ctx = new AudioContextConstructor({ latencyHint: "interactive", sampleRate: sr });
 
   const ctx = automationRt.ctx;
   await ensureMasterWorklets(ctx);
@@ -4700,7 +4708,7 @@ async function exportAutomationWav() {
     const sr = getAutomationSampleRate();
     const dur = getAutomationLengthSec();
     const frames = Math.max(1, Math.ceil(dur * sr));
-    const offline = new OfflineAudioContext(ch, frames, sr);
+    const offline = new OfflineAudioContextConstructor(ch, frames, sr);
 
     await ensureMasterWorklets(offline);
     const sum = new GainNode(offline, { gain: 1, channelCount: wantStereo ? 2 : 1 });
@@ -5045,7 +5053,7 @@ async function exportWav() {
 
     const totalDur = tapeStartDur + audioBuffer.duration + tapeEndDur;
     const frames = Math.max(1, Math.ceil(totalDur * sr));
-    const offline = new OfflineAudioContext(ch, frames, sr);
+    const offline = new OfflineAudioContextConstructor(ch, frames, sr);
 
     let sample = null;
     const trans = modules.find((m) => m.type === "transmission");
@@ -5181,7 +5189,7 @@ function ensureAutomationLayers() {
 async function decodeAudioFile(file) {
   const ab = await file.arrayBuffer();
   const seed = fnv1a32Sampled(new Uint8Array(ab));
-  const decodeCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const decodeCtx = new AudioContextConstructor();
   try {
     const decoded = await decodeCtx.decodeAudioData(ab.slice(0));
     return { decoded, seed };
@@ -5936,7 +5944,7 @@ async function loadFile(file) {
   const ab = await file.arrayBuffer();
   audioDataSeed = fnv1a32Sampled(new Uint8Array(ab));
 
-  const decodeCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const decodeCtx = new AudioContextConstructor();
   try {
     sourceBuffer = await decodeCtx.decodeAudioData(ab.slice(0));
   } finally {
@@ -6429,7 +6437,33 @@ els.deleteMasterPresetBtn?.addEventListener("click", () => {
   updateMasterPresetButtons();
 });
 
+function showCompatibilityGate(report, runtimeError = null) {
+  document.body.classList.add("compatibility-blocked");
+  if (!els.compatibilityGate) return;
+  els.compatibilityGate.hidden = false;
+  if (els.compatibilityTitle) els.compatibilityTitle.textContent = runtimeError ? "The audio rack could not start." : "This browser is missing part of the rack.";
+  if (els.compatibilitySummary) {
+    els.compatibilitySummary.textContent = runtimeError
+      ? "Lost Audio Engine stopped before loading audio. Your files were not uploaded or changed."
+      : "Lost Audio Engine needs the complete desktop Web Audio toolset below. Try a current Chrome, Edge, or Firefox build over HTTPS or localhost.";
+  }
+  if (els.compatibilityMissing) {
+    const items = runtimeError ? [`Initialization error: ${runtimeError?.message || runtimeError}`] : report.missing.map((check) => check.label);
+    els.compatibilityMissing.replaceChildren(...items.map((label) => {
+      const item = document.createElement("li");
+      item.textContent = label;
+      return item;
+    }));
+  }
+  if (els.compatibilityDetails) els.compatibilityDetails.textContent = formatPlatformReport(report);
+}
+
 async function init() {
+  const platformReport = detectPlatformCapabilities(window);
+  if (!platformReport.supported) {
+    showCompatibilityGate(platformReport);
+    return;
+  }
   await initAccessGate();
   try {
     const savedMonitorRaw = localStorage.getItem(LS_MONITOR_VOLUME);
@@ -6491,4 +6525,8 @@ async function init() {
   setState("Idle");
 }
 
-init();
+const startupReport = detectPlatformCapabilities(window);
+init().catch((error) => {
+  console.error(error);
+  showCompatibilityGate(startupReport, error);
+});

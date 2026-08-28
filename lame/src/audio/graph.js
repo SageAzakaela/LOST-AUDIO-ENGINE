@@ -1,7 +1,7 @@
 import { buildTransmissionGraph } from "../../../src/audio/graph.js?v=20260827.4";
 import { buildOcclusionGraph } from "../../../occlusion-engine/src/audio/graph.js?v=20260827.19";
 import { buildTapeGraph } from "../../../tape-engine/src/audio/graph.js?v=20260827.21";
-import { buildTelevisionGraph } from "../../../television-engine/src/audio/graph.js";
+import { buildTelevisionGraph } from "../../../television-engine/src/audio/graph.js?v=20260827.2";
 import { buildCartridgeGraph } from "../../../cartridge-engine/src/audio/graph.js?v=20260827.26";
 import { buildCommsGraph } from "../../../comms-engine/src/audio/graph.js?v=20260827.26";
 import { buildConferenceGraph } from "../../../conference-engine/src/audio/graph.js?v=20260827.24";
