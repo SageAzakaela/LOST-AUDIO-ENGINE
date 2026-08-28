@@ -50,7 +50,7 @@ jobs:
           path: .artifacts/platform-browser-results.json
           if-no-files-found: warn
 
-  tape-v2-windows:
+  tape-v2-windows-dev:
     needs: source-and-dsp
     runs-on: windows-latest
     timeout-minutes: 30
@@ -67,22 +67,33 @@ jobs:
           if (-not (Test-Path -LiteralPath $bundle)) {
             throw "Tape V2 bundle was not produced at $bundle"
           }
-      - name: Acquire pinned installer compiler
+      - name: Stage unsigned developer bundle
         shell: pwsh
         run: |
-          $package = ".tools/Tools.InnoSetup.6.4.3.nupkg"
-          $compilerRoot = ".tools/Tools.InnoSetup.6.4.3"
-          New-Item -ItemType Directory -Path $compilerRoot -Force | Out-Null
-          Invoke-WebRequest -UseBasicParsing -Uri "https://api.nuget.org/v3-flatcontainer/tools.innosetup/6.4.3/tools.innosetup.6.4.3.nupkg" -OutFile $package
-          tar -xf $package -C $compilerRoot
-      - name: Package Windows installer
-        shell: pwsh
-        run: ./scripts/build-tape-windows-installer.ps1 -BuildDirectory ./build-tape -OutputDirectory ./dist/windows -IsccPath ./.tools/Tools.InnoSetup.6.4.3/tools/ISCC.exe
-      - name: Upload Windows Tape V2 installer
+          $bundle = "build-tape/tape-vst3/TapeEngine_artefacts/Release/VST3/Tape Engine.vst3"
+          $processor = "$bundle/Contents/x86_64-win/Tape Engine.vst3"
+          $stage = "dist/dev/tape-v2-windows-x64"
+          New-Item -ItemType Directory -Path $stage -Force | Out-Null
+          Copy-Item -LiteralPath $bundle -Destination $stage -Recurse
+          $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $processor
+          "$($hash.Hash.ToLowerInvariant())  Tape Engine.vst3/Contents/x86_64-win/Tape Engine.vst3" |
+            Set-Content -LiteralPath "$stage/SHA256SUMS.txt" -Encoding ascii
+          @"
+          LOST AUDIO ENGINE - UNSIGNED DEVELOPER BUILD
+
+          Commit: $env:GITHUB_SHA
+          Platform: Windows x64
+          Format: VST3
+
+          This artifact is for local development and QA only. It is not a signed
+          public installer or production release. Windows Smart App Control may
+          reject downloaded unsigned binaries. Prefer a build made locally from
+          this commit for testing on a development machine.
+          "@ | Set-Content -LiteralPath "$stage/DEV-BUILD.txt" -Encoding ascii
+      - name: Upload Windows Tape V2 developer bundle
         uses: actions/upload-artifact@v7
         with:
-          name: lost-audio-tape-v2-windows-installer
+          name: lost-audio-tape-v2-windows-dev-vst3
           path: |
-            dist/windows/*.exe
-            dist/windows/*.sha256
+            dist/dev/tape-v2-windows-x64/
           if-no-files-found: error

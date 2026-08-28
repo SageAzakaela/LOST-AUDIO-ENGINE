@@ -110,6 +110,11 @@ cmake --build build --config Release
 
 JUCE is external and not yet pinned. Record the exact JUCE commit for diagnostic builds. See [docs/vst3.md](docs/vst3.md) before treating any native build as a release.
 
+Native V2 testing currently uses local developer builds. Windows installers and
+public native packages are deliberately deferred until the individual plugin
+fleet is complete and the binaries, installers, and uninstallers can all be
+signed through one automated B&E Digital release pipeline.
+
 ## Current direction
 
 The release order is deliberate:

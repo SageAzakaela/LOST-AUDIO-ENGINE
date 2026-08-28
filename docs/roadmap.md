@@ -268,6 +268,14 @@ Port and validate in families:
 
 Exit: every individual plugin meets V2 standard and can be hosted in the Suite.
 
+### Distribution checkpoint — signed installers (deferred)
+
+Do not spend active V2 development time producing unsigned Windows installers.
+Use local developer builds while the individual plugin fleet is being completed.
+After the fleet passes its DSP, UX, preset, state, automation, and DAW gates,
+establish one verified B&E Digital publisher identity and automate signing for
+every VST3 binary, installer, and uninstaller before public native distribution.
+
 ### Phase 4 — Lost Audio Suite V1
 
 Build the all-in-one native plugin from the validated shared engines: reorderable slots, fast serial routing, useful factory chains, session/preset interchange, and a cross-platform release pipeline. Parallel routing can follow after the serial workflow is stable.

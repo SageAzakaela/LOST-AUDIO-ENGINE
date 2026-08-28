@@ -30,6 +30,11 @@ The package is the standalone web edition. The B&E Digital deployment also needs
 
 ## Native packages
 
+Native distribution is currently paused while the individual VST3 fleet is
+rebuilt. CI artifacts are unsigned developer evidence, not public downloads.
+Installers resume only after the fleet is complete enough to justify automated
+publisher signing of every plugin binary, installer, and uninstaller.
+
 Native releases must come from clean builds and include:
 
 - product and semantic version;
