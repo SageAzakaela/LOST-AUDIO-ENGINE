@@ -73,6 +73,7 @@ private:
         int dropoutRemaining = 0;
         int dropoutBlock = 0;
         float dropoutGain = 1.0f;
+        bool dropoutInitialized = false;
     };
 
     [[nodiscard]] static std::uint32_t nextU32(std::uint32_t& state) noexcept;

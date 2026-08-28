@@ -76,6 +76,7 @@ void TapeProcessor::reset(std::uint32_t seed) noexcept
         channel.dropoutRemaining = 0;
         channel.dropoutBlock = 0;
         channel.dropoutGain = 1.0f;
+        channel.dropoutInitialized = false;
     }
 }
 
@@ -165,8 +166,14 @@ void TapeProcessor::process(float* const* channels, std::size_t channelCount, st
         if (samples == nullptr)
             continue;
         auto& state = channels_[channelIndex];
-        if (state.dropoutBlock <= 0)
+        // Prime the first window once. Re-priming whenever a host block begins
+        // at zero would skip a stochastic decision and make damage depend on
+        // the DAW buffer size.
+        if (!state.dropoutInitialized)
+        {
             state.dropoutBlock = dropoutBlockSamples;
+            state.dropoutInitialized = true;
+        }
 
         for (std::size_t sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex)
         {
