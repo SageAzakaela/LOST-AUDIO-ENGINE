@@ -14,7 +14,7 @@ function fail(message) {
 
 function walk(directory, files = []) {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    if (entry.isDirectory() && (ignoredDirectories.has(entry.name) || entry.name.startsWith("cmake-build-") || entry.name.endsWith("_artefacts"))) continue;
+    if (entry.isDirectory() && (ignoredDirectories.has(entry.name) || entry.name.startsWith("build-") || entry.name.startsWith("cmake-build-") || entry.name.endsWith("_artefacts"))) continue;
     const absolute = join(directory, entry.name);
     if (entry.isDirectory()) walk(absolute, files);
     else if (entry.isFile()) files.push(absolute);
