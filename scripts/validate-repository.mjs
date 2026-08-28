@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const failures = [];
 const counts = { javascript: 0, json: 0, markdown: 0, references: 0, plugins: 0 };
-const ignoredDirectories = new Set([".git", ".artifacts", "build", "build-validation", "dist", "node_modules", "CMakeFiles"]);
+const ignoredDirectories = new Set([".git", ".artifacts", "build", "build-core", "build-validation", "dist", "node_modules", "CMakeFiles"]);
 
 function fail(message) {
   failures.push(message);
@@ -38,6 +38,8 @@ const required = [
   "docs/architecture.md", "docs/testing.md", "docs/platform-integration.md", "docs/vst3.md", "docs/roadmap.md",
   "lame/src/platform.js", "scripts/run-browser-harnesses.mjs", "tests/platform-capabilities.test.mjs",
   "tests/platform-browser-harness.html", "tests/platform-browser-harness.js",
+  "native/core/CMakeLists.txt", "native/core/include/lost_audio/core/TapeProcessor.h",
+  "native/core/src/TapeProcessor.cpp", "native/core/tests/TapeProcessorTests.cpp",
   "tests/obfuscation-body-harness.mjs", "tests/parity/parity.py", ".github/workflows/validate.yml",
 ];
 for (const path of required) if (!existsSync(join(root, path))) fail(`required path is missing: ${path}`);

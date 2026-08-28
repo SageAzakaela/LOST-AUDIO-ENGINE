@@ -18,12 +18,49 @@ public:
 private:
     using APVTS = juce::AudioProcessorValueTreeState;
 
+    class TapeLookAndFeel final : public juce::LookAndFeel_V4
+    {
+    public:
+        void drawRotarySlider(juce::Graphics&, int, int, int, int, float,
+                              float, float, juce::Slider&) override;
+        void drawButtonBackground(juce::Graphics&, juce::Button&, const juce::Colour&,
+                                  bool, bool) override;
+        void drawToggleButton(juce::Graphics&, juce::ToggleButton&, bool, bool) override;
+        void drawComboBox(juce::Graphics&, int, int, bool, int, int, int, int,
+                          juce::ComboBox&) override;
+        juce::Font getComboBoxFont(juce::ComboBox&) override;
+    };
+
+    class Panel final : public juce::Component
+    {
+    public:
+        explicit Panel(juce::String titleText) : title(std::move(titleText)) {}
+        void paint(juce::Graphics&) override;
+        juce::Rectangle<int> contentBounds() const;
+
+    private:
+        juce::String title;
+    };
+
+    class DeckDisplay final : public juce::Component
+    {
+    public:
+        void paint(juce::Graphics&) override;
+        void setMotion(float newMotion);
+        void setOutputLevel(float newLevel);
+
+    private:
+        float phase = 0.0f;
+        float motion = 0.25f;
+        float outputLevel = 0.0f;
+    };
+
     class Knob final : public juce::Component
     {
     public:
         Knob(APVTS& state, const juce::String& paramID, const juce::String& text);
         void resized() override;
-        void setHint(const juce::String& hint) { slider.setTooltip(hint); label.setTooltip(hint); }
+        void setHint(const juce::String& hint);
 
     private:
         juce::Label label;
@@ -36,7 +73,7 @@ private:
     public:
         Switch(APVTS& state, const juce::String& paramID, const juce::String& text);
         void resized() override;
-        void setHint(const juce::String& hint) { button.setTooltip(hint); }
+        void setHint(const juce::String& hint);
 
     private:
         juce::ToggleButton button;
@@ -48,7 +85,7 @@ private:
     public:
         Choice(APVTS& state, const juce::String& paramID, const juce::String& text);
         void resized() override;
-        void setHint(const juce::String& hint) { combo.setTooltip(hint); label.setTooltip(hint); }
+        void setHint(const juce::String& hint);
 
     private:
         juce::Label label;
@@ -56,10 +93,11 @@ private:
         std::unique_ptr<APVTS::ComboBoxAttachment> attachment;
     };
 
-    void addKnob(juce::Component& page, const juce::String& id, const juce::String& text, const juce::String& hint);
-    void addSwitch(juce::Component& page, const juce::String& id, const juce::String& text, const juce::String& hint);
-    void addChoice(juce::Component& page, const juce::String& id, const juce::String& text, const juce::String& hint);
-    void layoutPage(juce::Component& page, int columns);
+    void addKnob(Panel&, const juce::String& id, const juce::String& text, const juce::String& hint);
+    void addSwitch(Panel&, const juce::String& id, const juce::String& text, const juce::String& hint);
+    void addChoice(Panel&, const juce::String& id, const juce::String& text, const juce::String& hint);
+    void layoutPanel(Panel&, int columns);
+    void showAdvanced(bool shouldShowAdvanced);
 
     void setParamValue(const juce::String& id, float plainValue);
     float getParamValue(const juce::String& id) const;
@@ -72,25 +110,36 @@ private:
 
     TapeEngineAudioProcessor& processor;
     APVTS& apvts;
+    TapeLookAndFeel lookAndFeel;
 
+    juce::Label brand;
     juce::Label title;
     juce::Label subtitle;
     juce::Label presetLabel;
     juce::ComboBox presetBox;
-    juce::TabbedComponent tabs { juce::TabbedButtonBar::TabsAtTop };
-    juce::TooltipWindow tooltipWindow { this, 900 };
+    juce::TextButton surfaceButton { "SURFACE" };
+    juce::TextButton advancedButton { "ADVANCED" };
+    juce::Label statusLabel;
+    juce::TooltipWindow tooltipWindow { this, 850 };
 
-    juce::Component macroPage;
-    juce::Component tonePage;
-    juce::Component mechanicsPage;
-    juce::Component sfxPage;
+    juce::Component surfacePage;
+    juce::Component advancedPage;
+    DeckDisplay deckDisplay;
+    Panel macroPanel { "CHARACTER" };
+    Panel surfaceOutputPanel { "DECK OUTPUT" };
+    Panel tonePanel { "01 / HEAD + BANDWIDTH" };
+    Panel transportPanel { "02 / TRANSPORT" };
+    Panel texturePanel { "03 / TAPE BODY" };
+    Panel deckPanel { "04 / MECHANISM" };
 
     std::vector<std::unique_ptr<Knob>> knobs;
     std::vector<std::unique_ptr<Switch>> switches;
     std::vector<std::unique_ptr<Choice>> choices;
-    std::unordered_map<juce::Component*, std::vector<juce::Component*>> pageItems;
+    std::unordered_map<Panel*, std::vector<juce::Component*>> panelItems;
 
     bool suppressMacros = false;
+    bool showingAdvanced = false;
+    float displayLevel = 0.0f;
     float lastQuality = 0.55f;
     float lastAge = 0.35f;
     float lastWow = 0.25f;

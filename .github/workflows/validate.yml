@@ -25,6 +25,19 @@ jobs:
         run: node tests/platform-capabilities.test.mjs
       - name: Run deterministic Obfuscation worklet test
         run: node tests/obfuscation-body-harness.mjs
+      - name: Build and test portable native DSP core
+        run: |
+          cmake -S . -B build-core -DLAE_BUILD_PLUGINS=OFF -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-core --config Release --parallel
+          ctest --test-dir build-core -C Release --output-on-failure
+      - name: Install JUCE compile prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libfreetype-dev libfontconfig1-dev libx11-dev libxcomposite-dev libxcursor-dev libxext-dev libxinerama-dev libxrandr-dev libxrender-dev
+      - name: Compile the Tape V2 plugin and editor
+        run: |
+          cmake -S . -B build-tape -DLAE_BUILD_PLUGINS=ON -DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-tape --target TapeEngine_VST3 --parallel 2
       - name: Run browser DSP and responsive harnesses
         run: node scripts/run-browser-harnesses.mjs --ci
       - name: Generate deterministic parity fixtures

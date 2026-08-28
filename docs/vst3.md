@@ -4,7 +4,23 @@
 
 The repository contains ten JUCE projects. They build VST3 and Standalone targets, preserve existing plugin identities, and contain useful MVP DSP/UI work. They are not currently the sonic authority and must not be described as equivalent to the current web workstation.
 
-Native V2 work begins after the Linux and broader platform/device validation phase.
+Native V2 work is active. Broader Linux/browser/device validation remains documented backlog rather than a blocker. Tape is the proving engine for the portable core because it exercises deterministic modulation, stochastic damage, noise, nonlinear color, latency, safety, presets, and embedded mechanical media.
+
+## Native V2 foundation
+
+`native/core` is a C++20 library with no JUCE dependency. Its first processor ports the approved browser Tape worklet equations and deterministic xorshift state. It owns transport delay, wow/flutter/drift, downward compression, gain-compensated saturation, dropout scheduling, hiss/hum, output gain, limiting, and reported latency. The Tape JUCE adapter retains host parameters, state, embedded transport SFX, and post-core cabinet filters.
+
+The Tape adapter now:
+
+- reports the web graph's 12 ms transport latency to the host;
+- uses the shared core instead of its divergent duplicated processor loop;
+- uses shared macro mapping for UI and factory presets;
+- writes `engineId=tape` and `schemaVersion=2` while accepting unversioned V1 APVTS states;
+- preserves the existing `TpEg` plugin identity and parameter identifiers.
+
+Its former fixed 860 x 540 stock-tab editor has been retired. Tape V2 now uses a resizable, device-specific cassette surface with animated reels, live output metering, four readable character macros, and a deliberate Surface/Advanced split. Advanced keeps the entire signal path visible in four named sections without scrolling. The minimum 820 x 560 layout is intended for laptop hosts; the editor scales to 1600 x 1000.
+
+The dependency-free native test checks reported/actual latency, seed determinism, host-block-size invariance, finite output, ceiling safety, and macro influence. CI additionally compiles the Tape VST3 target and its editor against the pinned JUCE revision. Audible parity, smoothing under automation, complete preset parity, DAW scanning, and hands-on plugin UI approval remain open gates.
 
 ## Plugin identities
 
@@ -29,10 +45,18 @@ Camcorder’s `CcEg` identity is evidence-backed; see the [published release aud
 
 - CMake 3.22+
 - a C++20 compiler
-- a JUCE source checkout
+- network access for the pinned JUCE checkout, or an existing JUCE source checkout
 - platform plugin-development prerequisites required by JUCE
 
-JUCE is external and not pinned yet. Record its exact commit in every diagnostic build report.
+The root build pins JUCE 9.0.1 at commit `e18f7f506c0b96f2c738a0bcd7fe6467a5005ad8`. Pass `JUCE_DIR` to use an audited local checkout instead of the pinned fetch.
+
+To build only the portable core and its tests:
+
+```powershell
+cmake -S . -B build-core -DLAE_BUILD_PLUGINS=OFF -DBUILD_TESTING=ON
+cmake --build build-core --config Release --parallel
+ctest --test-dir build-core -C Release --output-on-failure
+```
 
 ## Configure all plugins
 
@@ -85,4 +109,4 @@ The current projects duplicate DSP, parameters, preset definitions, and UI behav
 6. a common QA matrix;
 7. reuse by individual plugins, Lost Audio Suite slots, and Lost Audio Sequencer lanes.
 
-Transmission should be the first vertical slice only after platform validation. Do not multiply a new architecture across ten plugins until its sound, automation, recall, UI, and host behavior are approved.
+Tape is the first vertical slice. Do not multiply the architecture across ten plugins until its sound, automation, recall, UI, and host behavior are approved. Transmission follows after the Tape slice proves the reusable boundary.

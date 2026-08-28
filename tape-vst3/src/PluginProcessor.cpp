@@ -10,11 +10,6 @@ float clampf(float x, float lo, float hi)
     return juce::jlimit(lo, hi, x);
 }
 
-float softClip(float x)
-{
-    return std::tanh(x);
-}
-
 std::vector<float> resampleLinear(const std::vector<float>& in, double srcRate, double dstRate)
 {
     if (in.empty() || srcRate <= 1000.0 || dstRate <= 1000.0)
@@ -93,11 +88,6 @@ int TapeEngineAudioProcessor::getCurrentProgram() { return 0; }
 void TapeEngineAudioProcessor::setCurrentProgram(int) {}
 const juce::String TapeEngineAudioProcessor::getProgramName(int) { return {}; }
 void TapeEngineAudioProcessor::changeProgramName(int, const juce::String&) {}
-
-float TapeEngineAudioProcessor::nextWhite()
-{
-    return unif(rng) * 2.0f - 1.0f;
-}
 
 std::vector<float> TapeEngineAudioProcessor::decodeWavToMono(const void* data, size_t bytes, double targetSampleRate) const
 {
@@ -281,41 +271,18 @@ float TapeEngineAudioProcessor::processSfxSample(float signalAbs, float sampleRa
     return clampf(y, -1.0f, 1.0f);
 }
 
-float TapeEngineAudioProcessor::readDelay(const ChannelState& st, float delaySamps) const
-{
-    const auto len = (int) st.delay.size();
-    if (len < 2)
-        return 0.0f;
-
-    const auto read = (float) st.di - delaySamps;
-    auto r0 = (int) std::floor(read);
-    while (r0 < 0)
-        r0 += len;
-    r0 %= len;
-    const auto r1 = (r0 + 1) % len;
-    const auto frac = read - std::floor(read);
-    return st.delay[(size_t) r0] * (1.0f - frac) + st.delay[(size_t) r1] * frac;
-}
-
 void TapeEngineAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
     juce::ignoreUnused(samplesPerBlock);
-    const auto len = juce::jmax(128, (int) std::ceil(sampleRate * 0.06));
-    for (auto& ch : chans)
+    tapeCore.prepare(sampleRate, (std::size_t) juce::jlimit(1, 2, getTotalNumInputChannels()));
+    tapeCore.reset(0x74617065u);
+    setLatencySamples(tapeCore.latencySamples());
+    for (auto& filters : tone)
     {
-        ch.delay.assign((size_t) len, 0.0f);
-        ch.di = 0;
-        ch.wowPhase = unif(rng);
-        ch.flutterPhase = unif(rng);
-        ch.drift = 0.0f;
-        ch.env = 0.0f;
-        ch.limEnv = 0.0f;
-        ch.humPhase = 0.0f;
-        ch.hissZ = 0.0f;
-        ch.dropRemain = 0;
-        ch.dropBlock = 0;
-        ch.dropGain = 1.0f;
-        ch.dropTarget = 1.0f;
+        filters.hp.reset();
+        filters.bump.reset();
+        filters.lp1.reset();
+        filters.lp2.reset();
     }
     initSfx(sampleRate);
     updateToneFilters();
@@ -369,54 +336,20 @@ void TapeEngineAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     updateToneFilters();
 
     const auto sr = (float) getSampleRate();
-    const auto speed = clampf(apvts.getRawParameterValue("speed")->load(), 0.5f, 2.0f);
-    const auto wowDepthMs = clampf(apvts.getRawParameterValue("wowDepthMs")->load(), 0.0f, 20.0f);
-    const auto flutterDepthMs = clampf(apvts.getRawParameterValue("flutterDepthMs")->load(), 0.0f, 10.0f);
-    const auto wowAmount = clampf(apvts.getRawParameterValue("wow")->load(), 0.0f, 1.0f);
     const auto glitch = clampf(apvts.getRawParameterValue("glitch")->load(), 0.0f, 1.0f);
-    const auto drive = clampf(apvts.getRawParameterValue("drive")->load(), 0.0f, 1.0f);
-    const auto comp = clampf(apvts.getRawParameterValue("comp")->load(), 0.0f, 1.0f);
-    const auto hiss = clampf(apvts.getRawParameterValue("hiss")->load(), 0.0f, 1.0f);
-    const auto hum = clampf(apvts.getRawParameterValue("hum")->load(), 0.0f, 1.0f);
-    const auto dropout = clampf(apvts.getRawParameterValue("dropout")->load(), 0.0f, 1.0f);
-    const auto dropoutMs = clampf(apvts.getRawParameterValue("dropoutMs")->load(), 1.0f, 400.0f);
-    const auto ceiling = clampf(apvts.getRawParameterValue("ceiling")->load(), 0.2f, 1.0f);
-    const auto outGain = clampf(apvts.getRawParameterValue("outGain")->load(), 0.0f, 1.5f);
 
     const auto sfxEnable = apvts.getRawParameterValue("sfxEnable")->load() > 0.5f;
     const auto sfxBank = juce::jlimit(0, 1, (int) apvts.getRawParameterValue("sfxBank")->load());
     const auto sfxMode = (SfxMode) juce::jlimit(0, 2, (int) apvts.getRawParameterValue("sfxMode")->load());
     const auto sfxLevel = clampf(apvts.getRawParameterValue("sfxLevel")->load(), 0.0f, 1.0f);
 
-    const auto wowHz = 0.22f + wowAmount * 0.55f;
-    const auto flutterHz = 4.8f + wowAmount * 6.5f;
-    const auto baseDelayS = 0.012f;
-    const auto wowDepthS = (wowDepthMs / 1000.0f) * (0.25f + 0.75f * wowAmount);
-    const auto flutterDepthS = (flutterDepthMs / 1000.0f) * (0.25f + 0.75f * wowAmount);
-    const auto depthS = clampf(wowDepthS + flutterDepthS, 0.0f, 0.03f);
-
-    const auto target = 0.2f;
-    const auto envAtk = std::exp(-1.0f / (0.006f * sr));
-    const auto envRel = std::exp(-1.0f / (0.12f * sr));
-    const auto compPow = 1.0f + comp * 1.7f;
-
-    const auto blockSamples = juce::jmax(8, (int) std::round((dropoutMs / 1000.0f) * sr));
-    const auto slew = 1.0f / 48.0f;
-
-    const auto humHz = 60.0f;
-    const auto humDepth = hum * hum * 0.02f;
-    const auto hissDepth = hiss * hiss * 0.03f;
-
-    const auto satAmt = 1.0f + drive * 12.0f;
-    const auto asym = 0.04f + 0.09f * drive;
-
-    const auto limAtk = std::exp(-1.0f / (0.002f * sr));
-    const auto limRel = std::exp(-1.0f / (0.06f * sr));
-
     std::array<float*, 2> writePtrs { nullptr, nullptr };
     for (int ch = 0; ch < inCh && ch < 2; ++ch)
         writePtrs[(size_t) ch] = buffer.getWritePointer(ch);
 
+    // Mechanical beds and edge events are decoded by the JUCE adapter, then
+    // enter the same point as the browser graph's SFX input: immediately
+    // before the portable transport/nonlinear processor.
     for (int i = 0; i < buffer.getNumSamples(); ++i)
     {
         float inAbs = 0.0f;
@@ -425,84 +358,44 @@ void TapeEngineAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
         inAbs /= juce::jmax(1, juce::jmin(inCh, 2));
 
         const auto sfx = processSfxSample(inAbs, sr, glitch, sfxEnable, sfxBank, sfxMode, sfxLevel);
-
         for (int ch = 0; ch < inCh && ch < 2; ++ch)
+            writePtrs[(size_t) ch][i] += sfx;
+    }
+
+    lost_audio::core::TapeParameters parameters;
+    parameters.speed = apvts.getRawParameterValue("speed")->load();
+    parameters.wowDepthMs = apvts.getRawParameterValue("wowDepthMs")->load();
+    parameters.flutterDepthMs = apvts.getRawParameterValue("flutterDepthMs")->load();
+    parameters.wowAmount = apvts.getRawParameterValue("wow")->load();
+    parameters.drive = apvts.getRawParameterValue("drive")->load();
+    parameters.compression = apvts.getRawParameterValue("comp")->load();
+    parameters.hiss = apvts.getRawParameterValue("hiss")->load();
+    parameters.hum = apvts.getRawParameterValue("hum")->load();
+    parameters.dropout = apvts.getRawParameterValue("dropout")->load();
+    parameters.dropoutMs = apvts.getRawParameterValue("dropoutMs")->load();
+    parameters.ceiling = apvts.getRawParameterValue("ceiling")->load();
+    parameters.outputGain = apvts.getRawParameterValue("outGain")->load();
+    tapeCore.process(writePtrs.data(), (std::size_t) juce::jlimit(0, 2, inCh), (std::size_t) buffer.getNumSamples(), parameters);
+
+    // Web Audio places the cabinet filters after the worklet. Retaining JUCE's
+    // filters here keeps the adapter thin while matching that topology.
+    for (int ch = 0; ch < inCh && ch < 2; ++ch)
+    {
+        auto& filters = tone[(size_t) ch];
+        auto* samples = writePtrs[(size_t) ch];
+        for (int i = 0; i < buffer.getNumSamples(); ++i)
         {
-            auto x = writePtrs[(size_t) ch][i] + sfx;
-            auto& st = chans[(size_t) ch];
-            auto& tf = tone[(size_t) ch];
-
-            st.delay[(size_t) st.di] = x;
-
-            const auto driftStep = (wowAmount * wowAmount) * 2.2e-6f;
-            st.drift = clampf(st.drift + nextWhite() * driftStep, -0.0018f, 0.0018f);
-
-            const auto w = std::sin(st.wowPhase * juce::MathConstants<float>::twoPi);
-            const auto f = std::sin(st.flutterPhase * juce::MathConstants<float>::twoPi);
-            const auto modS = (w * wowDepthS + f * flutterDepthS + st.drift) * (0.6f + 0.4f * wowAmount);
-            const auto delayS = clampf(baseDelayS + modS, 0.001f, baseDelayS + depthS + 0.01f);
-            auto y = readDelay(st, delayS * sr);
-
-            st.wowPhase += wowHz / sr;
-            st.flutterPhase += flutterHz / sr;
-            if (st.wowPhase >= 1.0f)
-                st.wowPhase -= 1.0f;
-            if (st.flutterPhase >= 1.0f)
-                st.flutterPhase -= 1.0f;
-
-            if (speed != 1.0f)
-                y *= (2.0f - speed);
-
-            const auto a = std::abs(y);
-            const auto c = a > st.env ? envAtk : envRel;
-            st.env = a + c * (st.env - a);
-            const auto want = std::pow(target / (st.env + 1e-6f), compPow * 0.35f);
-            y *= clampf(want, 0.3f, 5.5f);
-
-            y = softClip((y + asym) * satAmt) - asym * 0.75f;
-
-            if (st.dropBlock <= 0)
-                st.dropBlock = blockSamples;
-            if (st.dropBlock == blockSamples)
-            {
-                const auto doDrop = unif(rng) < (dropout * dropout);
-                st.dropRemain = doDrop ? blockSamples : 0;
-            }
-            st.dropBlock--;
-            st.dropTarget = st.dropRemain > 0 ? 0.0f : 1.0f;
-            st.dropGain = clampf(st.dropGain + (st.dropTarget - st.dropGain) * slew, 0.0f, 1.0f);
-            if (st.dropRemain > 0)
-                st.dropRemain--;
-            y *= st.dropGain;
-
-            st.humPhase += (juce::MathConstants<float>::twoPi * humHz) / sr;
-            if (st.humPhase > juce::MathConstants<float>::twoPi)
-                st.humPhase -= juce::MathConstants<float>::twoPi;
-            const auto humSig = std::sin(st.humPhase) * humDepth;
-            const auto wn = nextWhite();
-            const auto hp = wn - st.hissZ;
-            st.hissZ = wn;
-            y += humSig + hp * hissDepth;
-
-            y = tf.hp.processSample(y);
-            y = tf.bump.processSample(y);
-            y = tf.lp1.processSample(y);
-            y = tf.lp2.processSample(y);
-
-            auto post = y * outGain;
-            const auto aa = std::abs(post);
-            const auto lc = aa > st.limEnv ? limAtk : limRel;
-            st.limEnv = aa + lc * (st.limEnv - aa);
-            const auto g = st.limEnv > ceiling ? ceiling / (st.limEnv + 1e-6f) : 1.0f;
-            post *= g;
-
-            writePtrs[(size_t) ch][i] = clampf(post, -ceiling, ceiling);
-
-            st.di++;
-            if (st.di >= (int) st.delay.size())
-                st.di = 0;
+            auto value = filters.hp.processSample(samples[i]);
+            value = filters.bump.processSample(value);
+            value = filters.lp1.processSample(value);
+            samples[i] = filters.lp2.processSample(value);
         }
     }
+
+    float blockPeak = 0.0f;
+    for (int ch = 0; ch < inCh && ch < 2; ++ch)
+        blockPeak = juce::jmax(blockPeak, buffer.getMagnitude(ch, 0, buffer.getNumSamples()));
+    outputPeak.store(juce::jlimit(0.0f, 1.0f, blockPeak), std::memory_order_relaxed);
 }
 
 bool TapeEngineAudioProcessor::hasEditor() const { return true; }
@@ -514,7 +407,10 @@ juce::AudioProcessorEditor* TapeEngineAudioProcessor::createEditor()
 
 void TapeEngineAudioProcessor::getStateInformation(juce::MemoryBlock& dest)
 {
-    if (auto xml = apvts.copyState().createXml())
+    auto state = apvts.copyState();
+    state.setProperty("engineId", "tape", nullptr);
+    state.setProperty("schemaVersion", 2, nullptr);
+    if (auto xml = state.createXml())
         copyXmlToBinary(*xml, dest);
 }
 
@@ -522,7 +418,13 @@ void TapeEngineAudioProcessor::setStateInformation(const void* data, int size)
 {
     if (auto xml = getXmlFromBinary(data, size))
         if (xml->hasTagName(apvts.state.getType()))
+        {
+            // V1 states had no schema marker. Parameter identifiers remain
+            // stable, so they migrate losslessly into the shared-core adapter.
             apvts.replaceState(juce::ValueTree::fromXml(*xml));
+            apvts.state.setProperty("engineId", "tape", nullptr);
+            apvts.state.setProperty("schemaVersion", 2, nullptr);
+        }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()

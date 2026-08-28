@@ -1,7 +1,9 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include <lost_audio/core/TapeProcessor.h>
 #include <array>
+#include <atomic>
 #include <random>
 #include <string>
 #include <vector>
@@ -35,6 +37,7 @@ public:
     void getStateInformation(juce::MemoryBlock&) override;
     void setStateInformation(const void*, int) override;
     juce::AudioProcessorValueTreeState& getAPVTS() { return apvts; }
+    float getOutputPeak() const noexcept { return outputPeak.load(std::memory_order_relaxed); }
 
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
@@ -55,23 +58,6 @@ private:
         bool active = false;
     };
 
-    struct ChannelState
-    {
-        std::vector<float> delay;
-        int di = 0;
-        float wowPhase = 0.0f;
-        float flutterPhase = 0.0f;
-        float drift = 0.0f;
-        float env = 0.0f;
-        float limEnv = 0.0f;
-        float humPhase = 0.0f;
-        float hissZ = 0.0f;
-        int dropRemain = 0;
-        int dropBlock = 0;
-        float dropGain = 1.0f;
-        float dropTarget = 1.0f;
-    };
-
     struct ToneState
     {
         juce::dsp::IIR::Filter<float> hp;
@@ -80,8 +66,6 @@ private:
         juce::dsp::IIR::Filter<float> lp2;
     };
 
-    float nextWhite();
-    float readDelay(const ChannelState& st, float delaySamps) const;
     void updateToneFilters();
     std::vector<float> decodeWavToMono(const void* data, size_t bytes, double targetSampleRate) const;
     void initSfx(double sampleRate);
@@ -91,8 +75,9 @@ private:
 
     juce::AudioProcessorValueTreeState apvts;
 
-    std::array<ChannelState, 2> chans{};
     std::array<ToneState, 2> tone{};
+    lost_audio::core::TapeProcessor tapeCore;
+    std::atomic<float> outputPeak { 0.0f };
 
     std::minstd_rand rng;
     std::uniform_real_distribution<float> unif { 0.0f, 1.0f };

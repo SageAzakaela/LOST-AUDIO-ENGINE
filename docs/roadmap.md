@@ -232,7 +232,9 @@ Numerical similarity is not enough. Every port needs level-matched blind compari
 
 Exit: the current web reference is understandable, reproducible, and ready to be exercised on additional platforms without losing its lineage.
 
-### Phase 1 — Linux and broader platform/device integration
+### Phase 1 — Linux and broader platform/device integration (deferred backlog)
+
+Automated Linux Chromium DSP execution is established. The remaining browser, physical-device, and long-session matrix was explicitly deferred on 2026-08-27 so it does not block native product development. Preserve the tasks and their honest unverified labels.
 
 1. Validate Chromium/Chrome on Linux x86_64, then Firefox and Linux ARM64 where hardware is available.
 2. Exercise PipeWire, PulseAudio compatibility, built-in output, USB interfaces, device changes, and common sample rates.
@@ -242,12 +244,12 @@ Exit: the current web reference is understandable, reproducible, and ready to be
 
 Exit: the web reference has evidence-backed Windows/Linux support, platform failures are reproducible, and the next native architecture is not being designed around one machine.
 
-### Phase 2 — Native foundation and Transmission vertical slice
+### Phase 2 — Native foundation and Tape vertical slice (active)
 
 1. Pin JUCE and establish clean cross-platform CMake/CI builds.
 2. Build the shared parameter/preset schema and migration system.
 3. Implement a portable realtime-safe DSP core plus JUCE and WebAssembly/AudioWorklet adapters.
-4. Port the complete web Transmission graph, including richer walkie/tuning behavior.
+4. Port the complete web Tape graph first, including deterministic transport behavior, then use the proven boundary for Transmission.
 5. Create reusable Surface/Advanced UI components while retaining distinct device art direction.
 6. Run parity, plugin validation, DAW recall/automation smoke tests, and level-matched listening.
 
@@ -291,8 +293,8 @@ Exit: deterministic, host-synced patterns survive save/reopen and pass the DAW m
 ## Immediate implementation order
 
 1. Publish the organized web reference, documentation, tests, issue forms, and CI.
-2. Complete Linux and broader platform/device integration using the matrix in [platform-integration.md](platform-integration.md).
-3. Freeze deterministic web reference renders and approve the source/JUCE/audio-asset licensing path.
-4. Pin JUCE and build Transmission V2 as the shared-core vertical slice.
+2. Preserve the remaining Linux/browser/device matrix as deferred release backlog in [platform-integration.md](platform-integration.md).
+3. Build Tape V2 as the shared-core vertical slice while retaining the web implementation as the sonic reference.
+4. Freeze deterministic Tape reference renders and approve the source/JUCE/audio-asset licensing path before distribution.
 5. Approve sound, UX, automation, and recall before multiplying the pattern across the fleet.
 6. Build the Suite from validated engines; build Sequencer behavior only on the same validated core.

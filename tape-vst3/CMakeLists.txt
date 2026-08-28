@@ -12,6 +12,11 @@ if(NOT TARGET juce::juce_audio_utils)
   add_subdirectory(${JUCE_DIR} JUCE)
 endif()
 
+if(NOT TARGET lost_audio_core)
+  include(CTest)
+  add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../native/core ${CMAKE_CURRENT_BINARY_DIR}/lost-audio-core)
+endif()
+
 juce_add_plugin(TapeEngine
   COMPANY_NAME "LostAudio"
   BUNDLE_ID "com.lostaudio.tapeengine"
@@ -62,6 +67,7 @@ target_compile_definitions(TapeEngine
 target_link_libraries(TapeEngine
   PRIVATE
     TapeEngineAssets
+    LostAudio::Core
     juce::juce_dsp
     juce::juce_audio_utils
   PUBLIC

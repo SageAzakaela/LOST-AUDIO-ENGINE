@@ -115,8 +115,8 @@ JUCE is external and not yet pinned. Record the exact JUCE commit for diagnostic
 The release order is deliberate:
 
 1. preserve, organize, document, and validate the web reference;
-2. complete Linux and broader desktop/device integration work;
-3. rebuild the individual VST3s against the approved reference;
+2. retain broader Linux/browser/device integration as explicit release backlog;
+3. rebuild the individual VST3s against the approved reference, beginning with the shared Tape core;
 4. create the all-in-one Lost Audio Suite;
 5. create the host-synced Lost Audio Sequencer.
 

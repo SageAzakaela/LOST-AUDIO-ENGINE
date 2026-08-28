@@ -1,7 +1,21 @@
 #include "PluginEditor.h"
 
+#include <cmath>
+
 namespace
 {
+constexpr auto ink = 0xff171512;
+constexpr auto deepInk = 0xff090b0b;
+constexpr auto panel = 0xff211f1b;
+constexpr auto panelLift = 0xff2b2822;
+constexpr auto bone = 0xffe8ddc8;
+constexpr auto dimBone = 0xffa89f8f;
+constexpr auto amber = 0xffffad32;
+constexpr auto hotAmber = 0xffffcf65;
+constexpr auto cyan = 0xff55e8ee;
+constexpr auto magenta = 0xffff4ecb;
+constexpr auto oxblood = 0xff521f25;
+
 struct PresetDef
 {
     const char* name;
@@ -30,195 +44,458 @@ static const PresetDef kPresets[] = {
         { "speed", 0.93f }, { "sfxEnable", 1.0f }, { "sfxBank", 0.0f }, { "sfxMode", 2.0f }, { "sfxLevel", 0.35f }
     } },
 };
+
+juce::Font labelFont(float size, bool bold = false)
+{
+    return juce::Font(juce::FontOptions(size, bold ? juce::Font::bold : juce::Font::plain));
+}
+}
+
+void TapeEngineAudioProcessorEditor::TapeLookAndFeel::drawRotarySlider(
+    juce::Graphics& g, int x, int y, int width, int height, float position,
+    float startAngle, float endAngle, juce::Slider& slider)
+{
+    const auto bounds = juce::Rectangle<float>((float) x, (float) y, (float) width, (float) height).reduced(7.0f);
+    const auto radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) * 0.5f;
+    const auto centre = bounds.getCentre();
+    const auto angle = startAngle + position * (endAngle - startAngle);
+    const auto lineWidth = juce::jmax(2.0f, radius * 0.105f);
+
+    juce::Path track;
+    track.addCentredArc(centre.x, centre.y, radius - lineWidth, radius - lineWidth, 0.0f,
+                        startAngle, endAngle, true);
+    g.setColour(juce::Colour(0xff504b42));
+    g.strokePath(track, juce::PathStrokeType(lineWidth, juce::PathStrokeType::curved,
+                                              juce::PathStrokeType::rounded));
+
+    juce::Path value;
+    value.addCentredArc(centre.x, centre.y, radius - lineWidth, radius - lineWidth, 0.0f,
+                        startAngle, angle, true);
+    g.setColour(slider.findColour(juce::Slider::rotarySliderFillColourId));
+    g.strokePath(value, juce::PathStrokeType(lineWidth, juce::PathStrokeType::curved,
+                                              juce::PathStrokeType::rounded));
+
+    const auto capRadius = radius * 0.66f;
+    juce::ColourGradient cap(juce::Colour(0xff403c35), centre.x - capRadius, centre.y - capRadius,
+                             juce::Colour(0xff151514), centre.x + capRadius, centre.y + capRadius, false);
+    g.setGradientFill(cap);
+    g.fillEllipse(centre.x - capRadius, centre.y - capRadius, capRadius * 2.0f, capRadius * 2.0f);
+    g.setColour(juce::Colour(0xff6d6659));
+    g.drawEllipse(centre.x - capRadius, centre.y - capRadius, capRadius * 2.0f, capRadius * 2.0f, 1.0f);
+
+    juce::Path pointer;
+    const auto pointerLength = capRadius * 0.74f;
+    const auto pointerWidth = juce::jmax(2.0f, radius * 0.07f);
+    pointer.addRoundedRectangle(-pointerWidth * 0.5f, -pointerLength, pointerWidth, pointerLength, pointerWidth * 0.5f);
+    g.setColour(bone);
+    g.fillPath(pointer, juce::AffineTransform::rotation(angle).translated(centre.x, centre.y));
+}
+
+void TapeEngineAudioProcessorEditor::TapeLookAndFeel::drawButtonBackground(
+    juce::Graphics& g, juce::Button& button, const juce::Colour&, bool highlighted, bool down)
+{
+    auto bounds = button.getLocalBounds().toFloat().reduced(0.5f);
+    const auto active = button.getToggleState();
+    g.setColour(active ? juce::Colour(cyan).withAlpha(down ? 0.62f : 0.30f)
+                       : juce::Colour(highlighted ? panelLift : panel));
+    g.fillRoundedRectangle(bounds, 4.0f);
+    g.setColour(active ? juce::Colour(cyan) : juce::Colour(0xff5b554a));
+    g.drawRoundedRectangle(bounds, 4.0f, active ? 1.5f : 1.0f);
+}
+
+void TapeEngineAudioProcessorEditor::TapeLookAndFeel::drawToggleButton(
+    juce::Graphics& g, juce::ToggleButton& button, bool highlighted, bool)
+{
+    auto bounds = button.getLocalBounds().toFloat();
+    const auto switchArea = bounds.removeFromLeft(42.0f).reduced(2.0f, 7.0f);
+    g.setColour(button.getToggleState() ? juce::Colour(cyan).withAlpha(0.34f)
+                                        : juce::Colour(highlighted ? panelLift : deepInk));
+    g.fillRoundedRectangle(switchArea, switchArea.getHeight() * 0.5f);
+    g.setColour(button.getToggleState() ? juce::Colour(cyan) : juce::Colour(0xff6b655b));
+    g.drawRoundedRectangle(switchArea, switchArea.getHeight() * 0.5f, 1.0f);
+    const auto dot = switchArea.getHeight() - 6.0f;
+    const auto dotX = button.getToggleState() ? switchArea.getRight() - dot - 3.0f : switchArea.getX() + 3.0f;
+    g.setColour(button.getToggleState() ? juce::Colour(cyan) : juce::Colour(dimBone));
+    g.fillEllipse(dotX, switchArea.getY() + 3.0f, dot, dot);
+    g.setColour(bone);
+    g.setFont(labelFont(12.0f, true));
+    g.drawFittedText(button.getButtonText(), bounds.toNearestInt().withTrimmedLeft(8),
+                     juce::Justification::centredLeft, 1);
+}
+
+void TapeEngineAudioProcessorEditor::TapeLookAndFeel::drawComboBox(
+    juce::Graphics& g, int width, int height, bool, int, int, int, int, juce::ComboBox&)
+{
+    auto bounds = juce::Rectangle<float>(0.0f, 0.0f, (float) width, (float) height).reduced(0.5f);
+    g.setColour(deepInk);
+    g.fillRoundedRectangle(bounds, 3.0f);
+    g.setColour(juce::Colour(0xff625b4e));
+    g.drawRoundedRectangle(bounds, 3.0f, 1.0f);
+    juce::Path arrow;
+    const auto cx = (float) width - 15.0f;
+    const auto cy = (float) height * 0.52f;
+    arrow.addTriangle(cx - 4.0f, cy - 2.0f, cx + 4.0f, cy - 2.0f, cx, cy + 3.0f);
+    g.setColour(cyan);
+    g.fillPath(arrow);
+}
+
+juce::Font TapeEngineAudioProcessorEditor::TapeLookAndFeel::getComboBoxFont(juce::ComboBox&)
+{
+    return labelFont(13.0f, true);
+}
+
+void TapeEngineAudioProcessorEditor::Panel::paint(juce::Graphics& g)
+{
+    auto bounds = getLocalBounds().toFloat().reduced(0.5f);
+    g.setColour(juce::Colour(panel).withAlpha(0.96f));
+    g.fillRoundedRectangle(bounds, 8.0f);
+    g.setColour(juce::Colour(0xff524c42));
+    g.drawRoundedRectangle(bounds, 8.0f, 1.0f);
+    g.setColour(cyan);
+    g.fillRect(juce::Rectangle<float>(14.0f, 13.0f, 20.0f, 2.0f));
+    g.setColour(dimBone);
+    g.setFont(labelFont(11.0f, true));
+    g.drawText(title, 42, 5, getWidth() - 54, 22, juce::Justification::centredLeft);
+}
+
+juce::Rectangle<int> TapeEngineAudioProcessorEditor::Panel::contentBounds() const
+{
+    return getLocalBounds().withTrimmedTop(31).reduced(8, 6);
+}
+
+void TapeEngineAudioProcessorEditor::DeckDisplay::setMotion(float newMotion)
+{
+    motion = juce::jlimit(0.0f, 1.0f, newMotion);
+    phase = std::fmod(phase + 0.018f + motion * 0.055f, juce::MathConstants<float>::twoPi);
+    repaint();
+}
+
+void TapeEngineAudioProcessorEditor::DeckDisplay::setOutputLevel(float newLevel)
+{
+    outputLevel = juce::jlimit(0.0f, 1.0f, newLevel);
+    repaint();
+}
+
+void TapeEngineAudioProcessorEditor::DeckDisplay::paint(juce::Graphics& g)
+{
+    auto outer = getLocalBounds().toFloat().reduced(1.0f);
+    juce::ColourGradient shell(juce::Colour(0xffd8ccb6), outer.getX(), outer.getY(),
+                               juce::Colour(0xff9f9584), outer.getRight(), outer.getBottom(), false);
+    g.setGradientFill(shell);
+    g.fillRoundedRectangle(outer, 10.0f);
+    g.setColour(juce::Colour(ink));
+    g.drawRoundedRectangle(outer, 10.0f, 2.0f);
+
+    auto plate = outer.reduced(15.0f, 14.0f);
+    g.setColour(juce::Colour(0xffbdb29f));
+    for (float x = plate.getX(); x < plate.getRight(); x += 5.0f)
+        g.drawVerticalLine((int) x, plate.getY(), plate.getBottom());
+
+    g.setColour(ink);
+    g.setFont(labelFont(12.0f, true));
+    g.drawText("LOST AUDIO // TYPE II", plate.removeFromTop(24.0f), juce::Justification::centredLeft);
+
+    auto cassette = juce::Rectangle<float>(outer.getX() + outer.getWidth() * 0.12f,
+                                            outer.getY() + outer.getHeight() * 0.25f,
+                                            outer.getWidth() * 0.76f,
+                                            outer.getHeight() * 0.53f);
+    g.setColour(juce::Colour(oxblood));
+    g.fillRoundedRectangle(cassette, 8.0f);
+    g.setColour(juce::Colour(ink));
+    g.drawRoundedRectangle(cassette, 8.0f, 2.0f);
+
+    auto window = cassette.reduced(cassette.getWidth() * 0.12f, cassette.getHeight() * 0.18f);
+    g.setColour(deepInk);
+    g.fillRoundedRectangle(window, 5.0f);
+    g.setColour(juce::Colour(0xff69434a));
+    g.drawRoundedRectangle(window, 5.0f, 1.0f);
+
+    const auto reelRadius = juce::jmin(window.getHeight() * 0.34f, window.getWidth() * 0.11f);
+    const auto left = juce::Point<float>(window.getX() + window.getWidth() * 0.25f, window.getCentreY());
+    const auto right = juce::Point<float>(window.getRight() - window.getWidth() * 0.25f, window.getCentreY());
+    g.setColour(juce::Colour(0xff25211e));
+    g.drawLine(left.x, left.y + reelRadius, right.x, right.y + reelRadius, 3.0f);
+
+    const auto drawReel = [&g, this, reelRadius](juce::Point<float> centre, float offset) {
+        g.setColour(bone);
+        g.fillEllipse(centre.x - reelRadius, centre.y - reelRadius, reelRadius * 2.0f, reelRadius * 2.0f);
+        g.setColour(juce::Colour(ink));
+        g.drawEllipse(centre.x - reelRadius, centre.y - reelRadius, reelRadius * 2.0f, reelRadius * 2.0f, 2.0f);
+        for (int spoke = 0; spoke < 6; ++spoke)
+        {
+            const auto a = phase + offset + (float) spoke * juce::MathConstants<float>::twoPi / 6.0f;
+            const auto p1 = centre + juce::Point<float>(std::cos(a), std::sin(a)) * (reelRadius * 0.34f);
+            const auto p2 = centre + juce::Point<float>(std::cos(a), std::sin(a)) * (reelRadius * 0.78f);
+            g.drawLine(p1.x, p1.y, p2.x, p2.y, 2.0f);
+        }
+        g.fillEllipse(centre.x - 3.0f, centre.y - 3.0f, 6.0f, 6.0f);
+    };
+    drawReel(left, 0.0f);
+    drawReel(right, 0.8f);
+
+    auto meter = juce::Rectangle<float>(cassette.getX() + 14.0f, cassette.getBottom() + 9.0f,
+                                        cassette.getWidth() - 28.0f, 8.0f);
+    g.setColour(juce::Colour(ink));
+    g.fillRoundedRectangle(meter, 4.0f);
+    auto lit = meter.reduced(1.0f);
+    lit.setWidth(lit.getWidth() * outputLevel);
+    juce::ColourGradient levelGradient(juce::Colour(cyan), lit.getX(), lit.getY(),
+                                       juce::Colour(magenta), meter.getRight(), meter.getY(), false);
+    g.setGradientFill(levelGradient);
+    g.fillRoundedRectangle(lit, 3.0f);
+
+    g.setColour(juce::Colour(ink).withAlpha(0.74f));
+    g.setFont(labelFont(10.0f, true));
+    g.drawText("CAPSTAN LOCK", (int) cassette.getX(), (int) meter.getBottom() + 2,
+               (int) cassette.getWidth(), 16, juce::Justification::centredRight);
 }
 
 TapeEngineAudioProcessorEditor::Knob::Knob(APVTS& state, const juce::String& paramID, const juce::String& text)
 {
-    label.setText(text, juce::dontSendNotification);
+    label.setText(text.toUpperCase(), juce::dontSendNotification);
     label.setJustificationType(juce::Justification::centred);
-    label.setColour(juce::Label::textColourId, juce::Colour(0xff98ffb4));
+    label.setFont(labelFont(11.5f, true));
+    label.setColour(juce::Label::textColourId, juce::Colour(bone));
     addAndMakeVisible(label);
 
     slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 66, 18);
-    slider.setColour(juce::Slider::thumbColourId, juce::Colour(0xff90f3a0));
-    slider.setColour(juce::Slider::rotarySliderFillColourId, juce::Colour(0xff4ab36b));
-    slider.setColour(juce::Slider::rotarySliderOutlineColourId, juce::Colour(0xff2b3238));
-    slider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
-    slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colour(0xff3a3f45));
+    slider.setRotaryParameters(juce::MathConstants<float>::pi * 1.22f,
+                               juce::MathConstants<float>::pi * 2.78f, true);
+    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 72, 20);
+    slider.setColour(juce::Slider::rotarySliderFillColourId, juce::Colour(amber));
+    slider.setColour(juce::Slider::textBoxBackgroundColourId, juce::Colour(deepInk));
+    slider.setColour(juce::Slider::textBoxTextColourId, juce::Colour(hotAmber));
+    slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colour(0xff5a544a));
     addAndMakeVisible(slider);
-
     attachment = std::make_unique<APVTS::SliderAttachment>(state, paramID, slider);
 }
 
 void TapeEngineAudioProcessorEditor::Knob::resized()
 {
     auto area = getLocalBounds();
-    label.setBounds(area.removeFromTop(20));
-    slider.setBounds(area.reduced(2));
+    label.setBounds(area.removeFromTop(21));
+    slider.setBounds(area.reduced(2, 0));
+}
+
+void TapeEngineAudioProcessorEditor::Knob::setHint(const juce::String& hint)
+{
+    slider.setTooltip(hint);
+    label.setTooltip(hint);
 }
 
 TapeEngineAudioProcessorEditor::Switch::Switch(APVTS& state, const juce::String& paramID, const juce::String& text)
 {
-    button.setButtonText(text);
-    button.setColour(juce::ToggleButton::textColourId, juce::Colour(0xffd2d7dc));
-    button.setColour(juce::ToggleButton::tickColourId, juce::Colour(0xff90f3a0));
+    button.setButtonText(text.toUpperCase());
     addAndMakeVisible(button);
     attachment = std::make_unique<APVTS::ButtonAttachment>(state, paramID, button);
 }
 
-void TapeEngineAudioProcessorEditor::Switch::resized()
-{
-    button.setBounds(getLocalBounds());
-}
+void TapeEngineAudioProcessorEditor::Switch::resized() { button.setBounds(getLocalBounds().reduced(4)); }
+void TapeEngineAudioProcessorEditor::Switch::setHint(const juce::String& hint) { button.setTooltip(hint); }
 
 TapeEngineAudioProcessorEditor::Choice::Choice(APVTS& state, const juce::String& paramID, const juce::String& text)
 {
-    label.setText(text, juce::dontSendNotification);
-    label.setColour(juce::Label::textColourId, juce::Colour(0xff98ffb4));
+    label.setText(text.toUpperCase(), juce::dontSendNotification);
+    label.setFont(labelFont(11.0f, true));
+    label.setColour(juce::Label::textColourId, juce::Colour(bone));
     addAndMakeVisible(label);
-
     if (auto* p = dynamic_cast<juce::AudioParameterChoice*>(state.getParameter(paramID)))
         for (int i = 0; i < p->choices.size(); ++i)
             combo.addItem(p->choices[i], i + 1);
-
-    combo.setColour(juce::ComboBox::backgroundColourId, juce::Colour(0xff1f2326));
-    combo.setColour(juce::ComboBox::textColourId, juce::Colours::white);
-    combo.setColour(juce::ComboBox::outlineColourId, juce::Colour(0xff3a3f45));
+    combo.setColour(juce::ComboBox::textColourId, juce::Colour(bone));
+    combo.setColour(juce::ComboBox::backgroundColourId, juce::Colour(deepInk));
     addAndMakeVisible(combo);
     attachment = std::make_unique<APVTS::ComboBoxAttachment>(state, paramID, combo);
 }
 
 void TapeEngineAudioProcessorEditor::Choice::resized()
 {
-    auto area = getLocalBounds();
-    label.setBounds(area.removeFromTop(18));
-    combo.setBounds(area.reduced(1));
+    auto area = getLocalBounds().reduced(3);
+    label.setBounds(area.removeFromTop(20));
+    combo.setBounds(area.removeFromTop(30));
+}
+
+void TapeEngineAudioProcessorEditor::Choice::setHint(const juce::String& hint)
+{
+    combo.setTooltip(hint);
+    label.setTooltip(hint);
 }
 
 TapeEngineAudioProcessorEditor::TapeEngineAudioProcessorEditor(TapeEngineAudioProcessor& p)
     : AudioProcessorEditor(&p), processor(p), apvts(p.getAPVTS())
 {
-    title.setText("Tape Engine", juce::dontSendNotification);
-    title.setFont(juce::Font(juce::FontOptions(30.0f, juce::Font::bold)));
-    title.setColour(juce::Label::textColourId, juce::Colour(0xffdfffe4));
+    setLookAndFeel(&lookAndFeel);
+    setOpaque(true);
+
+    brand.setText("B&E DIGITAL / LOST AUDIO", juce::dontSendNotification);
+    brand.setFont(labelFont(11.0f, true));
+    brand.setColour(juce::Label::textColourId, juce::Colour(cyan));
+    addAndMakeVisible(brand);
+
+    title.setText("TAPE ENGINE", juce::dontSendNotification);
+    title.setFont(labelFont(28.0f, true));
+    title.setColour(juce::Label::textColourId, juce::Colour(bone));
     addAndMakeVisible(title);
 
-    subtitle.setText("Compact Deck Console", juce::dontSendNotification);
-    subtitle.setColour(juce::Label::textColourId, juce::Colour(0xff8aa79a));
+    subtitle.setText("MAGNETIC SIGNAL WEATHERING / V2", juce::dontSendNotification);
+    subtitle.setFont(labelFont(10.5f, true));
+    subtitle.setColour(juce::Label::textColourId, juce::Colour(dimBone));
     addAndMakeVisible(subtitle);
 
-    presetLabel.setText("Preset", juce::dontSendNotification);
-    presetLabel.setColour(juce::Label::textColourId, juce::Colour(0xff98ffb4));
+    presetLabel.setText("PROFILE", juce::dontSendNotification);
+    presetLabel.setFont(labelFont(10.5f, true));
+    presetLabel.setColour(juce::Label::textColourId, juce::Colour(dimBone));
     addAndMakeVisible(presetLabel);
 
     presetBox.addItem("Custom", 1);
     for (int i = 0; i < (int) std::size(kPresets); ++i)
         presetBox.addItem(kPresets[i].name, i + 2);
     presetBox.onChange = [this]() {
-        const auto id = presetBox.getSelectedId();
-        if (id >= 2)
+        if (const auto id = presetBox.getSelectedId(); id >= 2)
             applyPreset(id - 2);
     };
     presetBox.setSelectedId(1, juce::dontSendNotification);
-    presetBox.setTooltip("Factory tape profiles for quick starting points.");
+    presetBox.setTooltip("Factory tape profiles; character-macro edits return the profile to Custom.");
     addAndMakeVisible(presetBox);
 
-    tabs.setOutline(0);
-    tabs.setTabBarDepth(34);
-    tabs.addTab("Macro", juce::Colour(0xff2c3640), &macroPage, true);
-    tabs.addTab("Tone", juce::Colour(0xff2c3640), &tonePage, true);
-    tabs.addTab("Mechanics", juce::Colour(0xff2c3640), &mechanicsPage, true);
-    tabs.addTab("SFX", juce::Colour(0xff2c3640), &sfxPage, true);
-    addAndMakeVisible(tabs);
+    constexpr int viewGroup = 0x4c4145;
+    for (auto* button : { &surfaceButton, &advancedButton })
+    {
+        button->setClickingTogglesState(true);
+        button->setRadioGroupId(viewGroup);
+        button->setColour(juce::TextButton::textColourOnId, juce::Colour(deepInk));
+        button->setColour(juce::TextButton::textColourOffId, juce::Colour(dimBone));
+        addAndMakeVisible(*button);
+    }
+    surfaceButton.onClick = [this]() { showAdvanced(false); };
+    advancedButton.onClick = [this]() { showAdvanced(true); };
+    surfaceButton.setToggleState(true, juce::dontSendNotification);
 
-    addKnob(macroPage, "quality", "Quality", "Higher quality keeps bandwidth and lowers noise/hum.");
-    addKnob(macroPage, "age", "Age", "Older tape adds saturation, compression and head bump.");
-    addKnob(macroPage, "wow", "Wow", "Slower pitch wobble and flutter movement depth.");
-    addKnob(macroPage, "glitch", "Glitch", "Controls dropout amount and mechanical instability.");
+    statusLabel.setText("12 MS ANALOG PATH  /  SAFE OUTPUT", juce::dontSendNotification);
+    statusLabel.setFont(labelFont(10.0f, true));
+    statusLabel.setColour(juce::Label::textColourId, juce::Colour(dimBone));
+    statusLabel.setJustificationType(juce::Justification::centredRight);
+    addAndMakeVisible(statusLabel);
 
-    addKnob(tonePage, "hpHz", "HP", "Cuts low-end rumble from motor/mechanism build-up.");
-    addKnob(tonePage, "lpHz", "LP", "Rolls off highs like tape head bandwidth limits.");
-    addKnob(tonePage, "headBumpDb", "Head Bump", "Low-frequency resonance from tape head coupling.");
-    addKnob(tonePage, "headBumpHz", "Bump Hz", "Center frequency for tape low-end bloom.");
-    addKnob(tonePage, "outGain", "Out Gain", "Final level trim after coloration.");
+    addAndMakeVisible(surfacePage);
+    addChildComponent(advancedPage);
+    surfacePage.addAndMakeVisible(deckDisplay);
+    surfacePage.addAndMakeVisible(macroPanel);
+    surfacePage.addAndMakeVisible(surfaceOutputPanel);
 
-    addKnob(mechanicsPage, "speed", "Speed", "Varispeed-style playback tilt.");
-    addKnob(mechanicsPage, "wowDepthMs", "Wow Depth", "Slow capstan wow depth in ms.");
-    addKnob(mechanicsPage, "flutterDepthMs", "Flutter", "Fast modulation from transport flutter.");
-    addKnob(mechanicsPage, "drive", "Drive", "Tape saturation amount before limiting.");
-    addKnob(mechanicsPage, "comp", "Comp", "AGC style leveling/compression.");
-    addKnob(mechanicsPage, "dropout", "Dropout", "How often tape level dropouts occur.");
-    addKnob(mechanicsPage, "dropoutMs", "Drop Len", "Duration of each dropout event.");
-    addKnob(mechanicsPage, "hiss", "Hiss", "Wideband tape hiss level.");
-    addKnob(mechanicsPage, "hum", "Hum", "Power hum and low tone leakage.");
-    addKnob(mechanicsPage, "ceiling", "Ceiling", "Output limiter threshold.");
+    addKnob(macroPanel, "quality", "Fidelity", "Preserves bandwidth while reducing hiss and hum.");
+    addKnob(macroPanel, "age", "Oxide Age", "Adds head bump, compression, saturation and age-related dropout.");
+    addKnob(macroPanel, "wow", "Transport", "Sets the combined wow, flutter and speed instability.");
+    addKnob(macroPanel, "glitch", "Damage", "Controls physical dropout frequency and duration.");
+    addKnob(surfaceOutputPanel, "outGain", "Output", "Final output level after tape coloration.");
+    addKnob(surfaceOutputPanel, "sfxLevel", "Mechanism", "Level of cassette or VHS mechanism recordings.");
+    addSwitch(surfaceOutputPanel, "sfxEnable", "Deck sound", "Enable the recorded mechanism layer.");
 
-    addSwitch(sfxPage, "sfxEnable", "Enable Deck SFX", "Mix in authentic cassette/VHS transport noises.");
-    addChoice(sfxPage, "sfxBank", "Deck", "Select cassette or VHS mechanism noise set.");
-    addChoice(sfxPage, "sfxMode", "Mode", "Bed = looped mechanism, Edges = trigger on gate open/close, Sequence = random actions.");
-    addKnob(sfxPage, "sfxLevel", "SFX Level", "How loud the transport effects sit under program audio.");
+    advancedPage.addAndMakeVisible(tonePanel);
+    advancedPage.addAndMakeVisible(transportPanel);
+    advancedPage.addAndMakeVisible(texturePanel);
+    advancedPage.addAndMakeVisible(deckPanel);
 
-    setResizable(false, false);
-    setSize(860, 540);
+    addKnob(tonePanel, "hpHz", "Rumble Cut", "Cuts low-frequency motor and mechanism build-up.");
+    addKnob(tonePanel, "lpHz", "Head Limit", "Sets the tape head high-frequency bandwidth.");
+    addKnob(tonePanel, "headBumpDb", "Head Bump", "Low-frequency bloom from tape head coupling.");
+    addKnob(tonePanel, "headBumpHz", "Bump Tune", "Tunes the head-bump resonant frequency.");
+    addKnob(tonePanel, "outGain", "Output", "Final output level after tape coloration.");
+
+    addKnob(transportPanel, "speed", "Tape Speed", "Varispeed-style playback tilt.");
+    addKnob(transportPanel, "wowDepthMs", "Wow Depth", "Slow capstan modulation depth in milliseconds.");
+    addKnob(transportPanel, "flutterDepthMs", "Flutter", "Fast transport modulation depth.");
+    addKnob(transportPanel, "dropout", "Dropout", "Frequency and depth of physical signal losses.");
+    addKnob(transportPanel, "dropoutMs", "Drop Length", "Duration of each dropout event.");
+
+    addKnob(texturePanel, "drive", "Oxide Drive", "Gain-compensated tape saturation.");
+    addKnob(texturePanel, "comp", "Leveler", "Tape-style downward compression and density.");
+    addKnob(texturePanel, "hiss", "Hiss", "Wideband magnetic tape hiss.");
+    addKnob(texturePanel, "hum", "Motor Hum", "Power and transport tone leakage.");
+    addKnob(texturePanel, "ceiling", "Safety", "Protected output ceiling before head filtering.");
+
+    addSwitch(deckPanel, "sfxEnable", "Deck sound", "Enable authentic cassette or VHS transport recordings.");
+    addChoice(deckPanel, "sfxBank", "Machine", "Choose cassette or VHS mechanism recordings.");
+    addChoice(deckPanel, "sfxMode", "Behaviour", "Bed loops continuously; Edges reacts to audio; Sequence triggers sparse actions.");
+    addKnob(deckPanel, "sfxLevel", "Mechanism", "Level of the recorded mechanism layer.");
 
     lastQuality = getParamValue("quality");
     lastAge = getParamValue("age");
     lastWow = getParamValue("wow");
     lastGlitch = getParamValue("glitch");
 
-    startTimerHz(18);
+    setResizable(true, true);
+    setResizeLimits(820, 560, 1600, 1000);
+    setSize(1040, 680);
+    startTimerHz(30);
 }
 
-TapeEngineAudioProcessorEditor::~TapeEngineAudioProcessorEditor() {}
-
-void TapeEngineAudioProcessorEditor::addKnob(juce::Component& page, const juce::String& id, const juce::String& text, const juce::String& hint)
+TapeEngineAudioProcessorEditor::~TapeEngineAudioProcessorEditor()
 {
-    auto c = std::make_unique<Knob>(apvts, id, text);
-    c->setHint(hint);
-    page.addAndMakeVisible(*c);
-    pageItems[&page].push_back(c.get());
-    knobs.push_back(std::move(c));
+    setLookAndFeel(nullptr);
 }
 
-void TapeEngineAudioProcessorEditor::addSwitch(juce::Component& page, const juce::String& id, const juce::String& text, const juce::String& hint)
+void TapeEngineAudioProcessorEditor::addKnob(
+    Panel& owner, const juce::String& id, const juce::String& text, const juce::String& hint)
 {
-    auto c = std::make_unique<Switch>(apvts, id, text);
-    c->setHint(hint);
-    page.addAndMakeVisible(*c);
-    pageItems[&page].push_back(c.get());
-    switches.push_back(std::move(c));
+    auto component = std::make_unique<Knob>(apvts, id, text);
+    component->setHint(hint);
+    owner.addAndMakeVisible(*component);
+    panelItems[&owner].push_back(component.get());
+    knobs.push_back(std::move(component));
 }
 
-void TapeEngineAudioProcessorEditor::addChoice(juce::Component& page, const juce::String& id, const juce::String& text, const juce::String& hint)
+void TapeEngineAudioProcessorEditor::addSwitch(
+    Panel& owner, const juce::String& id, const juce::String& text, const juce::String& hint)
 {
-    auto c = std::make_unique<Choice>(apvts, id, text);
-    c->setHint(hint);
-    page.addAndMakeVisible(*c);
-    pageItems[&page].push_back(c.get());
-    choices.push_back(std::move(c));
+    auto component = std::make_unique<Switch>(apvts, id, text);
+    component->setHint(hint);
+    owner.addAndMakeVisible(*component);
+    panelItems[&owner].push_back(component.get());
+    switches.push_back(std::move(component));
 }
 
-void TapeEngineAudioProcessorEditor::layoutPage(juce::Component& page, int columns)
+void TapeEngineAudioProcessorEditor::addChoice(
+    Panel& owner, const juce::String& id, const juce::String& text, const juce::String& hint)
 {
-    auto area = page.getLocalBounds().reduced(10);
-    auto& items = pageItems[&page];
+    auto component = std::make_unique<Choice>(apvts, id, text);
+    component->setHint(hint);
+    owner.addAndMakeVisible(*component);
+    panelItems[&owner].push_back(component.get());
+    choices.push_back(std::move(component));
+}
+
+void TapeEngineAudioProcessorEditor::layoutPanel(Panel& owner, int columns)
+{
+    auto area = owner.contentBounds();
+    auto& items = panelItems[&owner];
     if (items.empty())
         return;
-
-    const auto count = (int) items.size();
     const auto cols = juce::jmax(1, columns);
-    const auto rows = juce::jmax(1, (count + cols - 1) / cols);
-    const auto cellW = area.getWidth() / cols;
-    const auto cellH = area.getHeight() / rows;
-
-    for (int i = 0; i < count; ++i)
+    const auto rows = juce::jmax(1, ((int) items.size() + cols - 1) / cols);
+    const auto cellWidth = area.getWidth() / cols;
+    const auto cellHeight = area.getHeight() / rows;
+    for (int i = 0; i < (int) items.size(); ++i)
     {
-        const auto r = i / cols;
-        const auto c = i % cols;
-        auto cell = juce::Rectangle<int>(area.getX() + c * cellW, area.getY() + r * cellH, cellW, cellH).reduced(6);
-        items[(size_t) i]->setBounds(cell);
+        const auto column = i % cols;
+        const auto row = i / cols;
+        items[(size_t) i]->setBounds(area.getX() + column * cellWidth,
+                                     area.getY() + row * cellHeight,
+                                     cellWidth, cellHeight);
     }
+}
+
+void TapeEngineAudioProcessorEditor::showAdvanced(bool shouldShowAdvanced)
+{
+    showingAdvanced = shouldShowAdvanced;
+    surfaceButton.setToggleState(!shouldShowAdvanced, juce::dontSendNotification);
+    advancedButton.setToggleState(shouldShowAdvanced, juce::dontSendNotification);
+    surfacePage.setVisible(!shouldShowAdvanced);
+    advancedPage.setVisible(shouldShowAdvanced);
+    statusLabel.setText(shouldShowAdvanced ? "FULL SIGNAL PATH  /  NO HIDDEN CONTROLS"
+                                           : "12 MS ANALOG PATH  /  SAFE OUTPUT",
+                        juce::dontSendNotification);
+    resized();
 }
 
 void TapeEngineAudioProcessorEditor::setParamValue(const juce::String& id, float plainValue)
@@ -229,56 +506,59 @@ void TapeEngineAudioProcessorEditor::setParamValue(const juce::String& id, float
 
 float TapeEngineAudioProcessorEditor::getParamValue(const juce::String& id) const
 {
-    if (auto* v = apvts.getRawParameterValue(id))
-        return v->load();
+    if (auto* value = apvts.getRawParameterValue(id))
+        return value->load();
     return 0.0f;
 }
 
 void TapeEngineAudioProcessorEditor::applyMacroQuality(float quality)
 {
-    const auto q = std::pow(1.0f - juce::jlimit(0.0f, 1.0f, quality), 1.4f);
-    setParamValue("lpHz", 17500.0f - q * 14500.0f);
-    setParamValue("hpHz", 25.0f + q * 90.0f);
-    setParamValue("hiss", juce::jlimit(0.0f, 1.0f, 0.03f + q * 0.22f));
-    setParamValue("hum", juce::jlimit(0.0f, 1.0f, 0.01f + q * 0.06f));
+    const auto targets = lost_audio::core::mapTapeMacros(quality, getParamValue("age"), getParamValue("wow"), getParamValue("glitch"));
+    setParamValue("lpHz", targets.lowPassHz);
+    setParamValue("hpHz", targets.highPassHz);
+    setParamValue("hiss", targets.hiss);
+    setParamValue("hum", targets.hum);
 }
 
 void TapeEngineAudioProcessorEditor::applyMacroAge(float age)
 {
-    const auto a = std::pow(juce::jlimit(0.0f, 1.0f, age), 1.25f);
-    setParamValue("drive", juce::jlimit(0.0f, 1.0f, 0.08f + a * 0.85f));
-    setParamValue("comp", juce::jlimit(0.0f, 1.0f, 0.12f + a * 0.5f));
-    setParamValue("headBumpDb", 1.4f + a * 5.8f);
-    setParamValue("headBumpHz", 70.0f + a * 45.0f);
-    setParamValue("outGain", 0.96f + a * 0.18f);
-    setParamValue("ceiling", 0.92f - a * 0.06f);
+    const auto targets = lost_audio::core::mapTapeMacros(getParamValue("quality"), age, getParamValue("wow"), getParamValue("glitch"));
+    setParamValue("drive", targets.drive);
+    setParamValue("comp", targets.compression);
+    setParamValue("headBumpDb", targets.headBumpDb);
+    setParamValue("headBumpHz", targets.headBumpHz);
+    setParamValue("outGain", targets.outputGain);
+    setParamValue("ceiling", targets.ceiling);
+    setParamValue("dropout", targets.dropout);
 }
 
 void TapeEngineAudioProcessorEditor::applyMacroWow(float wow)
 {
-    const auto w = std::pow(juce::jlimit(0.0f, 1.0f, wow), 1.3f);
-    setParamValue("wowDepthMs", 1.2f + w * 12.5f);
-    setParamValue("flutterDepthMs", 0.4f + w * 4.8f);
-    setParamValue("speed", 1.0f - w * 0.05f);
+    const auto targets = lost_audio::core::mapTapeMacros(getParamValue("quality"), getParamValue("age"), wow, getParamValue("glitch"));
+    setParamValue("wowDepthMs", targets.wowDepthMs);
+    setParamValue("flutterDepthMs", targets.flutterDepthMs);
+    setParamValue("speed", targets.speed);
 }
 
 void TapeEngineAudioProcessorEditor::applyMacroGlitch(float glitch)
 {
-    const auto g = std::pow(juce::jlimit(0.0f, 1.0f, glitch), 1.35f);
-    setParamValue("dropout", juce::jlimit(0.0f, 1.0f, g));
-    setParamValue("dropoutMs", 18.0f + g * 140.0f);
+    const auto targets = lost_audio::core::mapTapeMacros(getParamValue("quality"), getParamValue("age"), getParamValue("wow"), glitch);
+    setParamValue("dropout", targets.dropout);
+    setParamValue("dropoutMs", targets.dropoutMs);
 }
 
 void TapeEngineAudioProcessorEditor::applyPreset(int idx)
 {
     if (idx < 0 || idx >= (int) std::size(kPresets))
         return;
-
     suppressMacros = true;
-    for (const auto& kv : kPresets[(size_t) idx].values)
-        setParamValue(kv.first, kv.second);
+    for (const auto& item : kPresets[(size_t) idx].values)
+        setParamValue(item.first, item.second);
+    applyMacroQuality(getParamValue("quality"));
+    applyMacroAge(getParamValue("age"));
+    applyMacroWow(getParamValue("wow"));
+    applyMacroGlitch(getParamValue("glitch"));
     suppressMacros = false;
-
     lastQuality = getParamValue("quality");
     lastAge = getParamValue("age");
     lastWow = getParamValue("wow");
@@ -287,77 +567,106 @@ void TapeEngineAudioProcessorEditor::applyPreset(int idx)
 
 void TapeEngineAudioProcessorEditor::timerCallback()
 {
-    if (suppressMacros)
-        return;
-
     const auto q = getParamValue("quality");
     const auto a = getParamValue("age");
     const auto w = getParamValue("wow");
-    const auto g = getParamValue("glitch");
+    const auto damage = getParamValue("glitch");
 
-    suppressMacros = true;
-    if (std::abs(q - lastQuality) > 0.0005f)
+    if (!suppressMacros)
     {
-        applyMacroQuality(q);
-        lastQuality = q;
-        presetBox.setSelectedId(1, juce::dontSendNotification);
+        suppressMacros = true;
+        bool changed = false;
+        if (std::abs(q - lastQuality) > 0.0005f) { applyMacroQuality(q); lastQuality = q; changed = true; }
+        if (std::abs(a - lastAge) > 0.0005f) { applyMacroAge(a); lastAge = a; changed = true; }
+        if (std::abs(w - lastWow) > 0.0005f) { applyMacroWow(w); lastWow = w; changed = true; }
+        if (std::abs(damage - lastGlitch) > 0.0005f) { applyMacroGlitch(damage); lastGlitch = damage; changed = true; }
+        if (changed)
+            presetBox.setSelectedId(1, juce::dontSendNotification);
+        suppressMacros = false;
     }
-    if (std::abs(a - lastAge) > 0.0005f)
-    {
-        applyMacroAge(a);
-        lastAge = a;
-        presetBox.setSelectedId(1, juce::dontSendNotification);
-    }
-    if (std::abs(w - lastWow) > 0.0005f)
-    {
-        applyMacroWow(w);
-        lastWow = w;
-        presetBox.setSelectedId(1, juce::dontSendNotification);
-    }
-    if (std::abs(g - lastGlitch) > 0.0005f)
-    {
-        applyMacroGlitch(g);
-        lastGlitch = g;
-        presetBox.setSelectedId(1, juce::dontSendNotification);
-    }
-    suppressMacros = false;
+
+    const auto peak = processor.getOutputPeak();
+    displayLevel = peak > displayLevel ? peak : displayLevel * 0.91f;
+    deckDisplay.setOutputLevel(std::sqrt(juce::jlimit(0.0f, 1.0f, displayLevel)));
+    deckDisplay.setMotion(w);
 }
 
 void TapeEngineAudioProcessorEditor::paint(juce::Graphics& g)
 {
-    juce::ColourGradient grad(juce::Colour(0xff151b21), 0.0f, 0.0f, juce::Colour(0xff202a24), 0.0f, (float) getHeight(), false);
-    g.setGradientFill(grad);
-    g.fillAll();
+    g.fillAll(juce::Colour(deepInk));
+    auto bounds = getLocalBounds().toFloat();
+    juce::ColourGradient glow(juce::Colour(oxblood).withAlpha(0.28f), bounds.getCentreX(), 0.0f,
+                              juce::Colour(deepInk), bounds.getCentreX(), bounds.getBottom(), false);
+    g.setGradientFill(glow);
+    g.fillRect(bounds);
 
-    auto header = getLocalBounds().removeFromTop(82).reduced(8, 8);
-    g.setColour(juce::Colour(0xff1d2622));
-    g.fillRoundedRectangle(header.toFloat(), 10.0f);
-    g.setColour(juce::Colour(0xff4a5f53));
-    g.drawRoundedRectangle(header.toFloat(), 10.0f, 1.2f);
-
-    g.setColour(juce::Colour(0xffb7ffcf));
-    g.fillRoundedRectangle((float) header.getRight() - 300.0f, (float) header.getY() + 10.0f, 278.0f, 48.0f, 8.0f);
-    g.setColour(juce::Colour(0xff2e513b));
-    g.drawRoundedRectangle(juce::Rectangle<float>((float) header.getRight() - 300.0f, (float) header.getY() + 10.0f, 278.0f, 48.0f), 8.0f, 1.0f);
+    auto frame = bounds.reduced(10.0f);
+    g.setColour(juce::Colour(0xff34312b));
+    g.drawRoundedRectangle(frame, 9.0f, 1.0f);
+    g.setColour(juce::Colour(cyan).withAlpha(0.65f));
+    g.fillRect(frame.getX(), frame.getY(), juce::jmin(190.0f, frame.getWidth() * 0.22f), 2.0f);
+    g.setColour(juce::Colour(magenta).withAlpha(0.65f));
+    const auto accentWidth = juce::jmin(130.0f, frame.getWidth() * 0.16f);
+    g.fillRect(frame.getRight() - accentWidth, frame.getY(), accentWidth, 2.0f);
 }
 
 void TapeEngineAudioProcessorEditor::resized()
 {
-    auto area = getLocalBounds().reduced(10);
-    auto header = area.removeFromTop(74);
+    auto area = getLocalBounds().reduced(22, 18);
+    auto header = area.removeFromTop(72);
+    auto identity = header.removeFromLeft(juce::jmin(430, header.getWidth() / 2));
+    brand.setBounds(identity.removeFromTop(17));
+    title.setBounds(identity.removeFromTop(33));
+    subtitle.setBounds(identity);
 
-    auto left = header.removeFromLeft(390);
-    title.setBounds(left.removeFromTop(42).withTrimmedLeft(18));
-    subtitle.setBounds(left.withTrimmedLeft(20));
+    auto profile = header.removeFromRight(250);
+    presetLabel.setBounds(profile.removeFromTop(18));
+    presetBox.setBounds(profile.removeFromTop(32));
 
-    auto right = header.withTrimmedLeft(26);
-    presetLabel.setBounds(right.removeFromTop(18));
-    presetBox.setBounds(right.removeFromTop(30).removeFromLeft(230));
+    auto nav = area.removeFromTop(40);
+    surfaceButton.setBounds(nav.removeFromLeft(108).reduced(0, 4));
+    nav.removeFromLeft(7);
+    advancedButton.setBounds(nav.removeFromLeft(118).reduced(0, 4));
+    statusLabel.setBounds(nav);
+    area.removeFromTop(7);
 
-    tabs.setBounds(area);
+    surfacePage.setBounds(area);
+    advancedPage.setBounds(area);
 
-    layoutPage(macroPage, 4);
-    layoutPage(tonePage, 3);
-    layoutPage(mechanicsPage, 5);
-    layoutPage(sfxPage, 2);
+    auto surface = surfacePage.getLocalBounds();
+    if (surface.getWidth() >= 960)
+    {
+        auto left = surface.removeFromLeft((int) std::round(surface.getWidth() * 0.54f));
+        deckDisplay.setBounds(left.reduced(0, 2).withTrimmedRight(8));
+        auto right = surface.withTrimmedLeft(4);
+        macroPanel.setBounds(right.removeFromTop((int) std::round(right.getHeight() * 0.67f)).withTrimmedBottom(5));
+        surfaceOutputPanel.setBounds(right.withTrimmedTop(5));
+        layoutPanel(macroPanel, 2);
+        layoutPanel(surfaceOutputPanel, 3);
+    }
+    else
+    {
+        deckDisplay.setBounds(surface.removeFromTop((int) std::round(surface.getHeight() * 0.39f)).withTrimmedBottom(5));
+        macroPanel.setBounds(surface.removeFromTop((int) std::round(surface.getHeight() * 0.61f)).reduced(0, 5));
+        surfaceOutputPanel.setBounds(surface.withTrimmedTop(5));
+        layoutPanel(macroPanel, 4);
+        layoutPanel(surfaceOutputPanel, 3);
+    }
+
+    auto advanced = advancedPage.getLocalBounds();
+    constexpr int gap = 9;
+    auto top = advanced.removeFromTop((advanced.getHeight() - gap) / 2);
+    advanced.removeFromTop(gap);
+    auto tone = top.removeFromLeft((top.getWidth() - gap) / 2);
+    top.removeFromLeft(gap);
+    tonePanel.setBounds(tone);
+    transportPanel.setBounds(top);
+    auto texture = advanced.removeFromLeft((advanced.getWidth() - gap) / 2);
+    advanced.removeFromLeft(gap);
+    texturePanel.setBounds(texture);
+    deckPanel.setBounds(advanced);
+    layoutPanel(tonePanel, 5);
+    layoutPanel(transportPanel, 5);
+    layoutPanel(texturePanel, 5);
+    layoutPanel(deckPanel, 4);
 }

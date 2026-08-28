@@ -9,6 +9,7 @@ Thumbs.db
 
 # JUCE + CMake build outputs (all modules)
 **/build/
+/build-core/
 **/cmake-build-*/
 **/CMakeFiles/
 **/CMakeCache.txt

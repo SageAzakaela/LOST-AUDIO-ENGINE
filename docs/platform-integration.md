@@ -1,8 +1,20 @@
 # Platform and device integration
 
-Status: active implementation phase after repository preservation and documentation.
+Status: deferred backlog. Automated Linux Chromium graph execution is retained, but broader browser/device work is not a prerequisite for the native V2 effort.
 
 The immediate goal is to make the web reference dependable beyond the current Windows development environment before rebuilding the VST3 fleet. This phase is about verified compatibility, not merely opening the page on another machine.
+
+## Deferred backlog
+
+On 2026-08-27, product direction moved active development to the shared native/VST3 architecture. Preserve these platform tasks without allowing them to block that work:
+
+- Linux Firefox browser validation;
+- real WAV/MP3 load, playback, loop, replacement, and downloaded-export automation across platforms;
+- long-session stress reproduction for prior freeze and unsafe-noise failure modes;
+- physical Linux/PipeWire playback, device switching, USB interface, and listening QA;
+- Linux ARM64 and wider macOS/Windows device matrices.
+
+These remain release evidence tasks. Deferral is not evidence that they pass.
 
 ## Automated browser gate
 
