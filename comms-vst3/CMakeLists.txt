@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(CommsEngineVST3 VERSION 0.1.0 LANGUAGES CXX)
+project(CommsEngineVST3 VERSION 0.2.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -10,6 +10,11 @@ endif()
 
 if(NOT TARGET juce::juce_audio_utils)
   add_subdirectory(${JUCE_DIR} JUCE)
+endif()
+
+if(NOT TARGET lost_audio_core)
+  include(CTest)
+  add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../native/core ${CMAKE_CURRENT_BINARY_DIR}/lost-audio-core)
 endif()
 
 juce_add_plugin(CommsEngine
@@ -46,6 +51,7 @@ target_compile_definitions(CommsEngine
 
 target_link_libraries(CommsEngine
   PRIVATE
+    LostAudio::Core
     juce::juce_dsp
     juce::juce_audio_utils
   PUBLIC

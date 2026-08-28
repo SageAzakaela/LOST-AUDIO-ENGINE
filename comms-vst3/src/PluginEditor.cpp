@@ -1,387 +1,629 @@
 #include "PluginEditor.h"
 
+#include <cmath>
+
 namespace
 {
-float clampf(float x, float lo, float hi)
+constexpr std::uint32_t ink = 0xff090c0b;
+constexpr std::uint32_t deep = 0xff101411;
+constexpr std::uint32_t panel = 0xff1c201b;
+constexpr std::uint32_t panelLift = 0xff242920;
+constexpr std::uint32_t line = 0xff59604e;
+constexpr std::uint32_t bone = 0xffeee5cf;
+constexpr std::uint32_t dimBone = 0xffaaa895;
+constexpr std::uint32_t cyan = 0xff62e9eb;
+constexpr std::uint32_t amber = 0xffffb447;
+constexpr std::uint32_t signalGreen = 0xffb9df92;
+constexpr std::uint32_t danger = 0xffff625d;
+
+juce::Font uiFont(float size, bool bold = false)
 {
-    return juce::jlimit(lo, hi, x);
+    return juce::Font(juce::FontOptions("Arial", size, bold ? juce::Font::bold : juce::Font::plain));
 }
 
-struct PresetDef
+struct PresetDefinition
 {
     const char* name;
     std::initializer_list<std::pair<const char*, float>> values;
 };
 
-static const PresetDef kPresets[] = {
-    { "Landline Clean", { { "mode", 0.0f }, { "bandwidth", 0.55f }, { "drive", 0.22f }, { "glitch", 0.06f }, { "noise", 0.12f }, { "echoMix", 0.02f }, { "verbMix", 0.04f } } },
-    { "Cell Bad", { { "mode", 1.0f }, { "bandwidth", 0.32f }, { "drive", 0.45f }, { "glitch", 0.62f }, { "noise", 0.18f }, { "echoMix", 0.06f }, { "verbMix", 0.03f } } },
-    { "Intercom Old", { { "mode", 2.0f }, { "bandwidth", 0.28f }, { "drive", 0.52f }, { "glitch", 0.26f }, { "noise", 0.32f }, { "echoMix", 0.12f }, { "verbMix", 0.22f } } },
-    { "PA Hot", { { "mode", 3.0f }, { "bandwidth", 0.66f }, { "drive", 0.70f }, { "glitch", 0.14f }, { "noise", 0.12f }, { "echoMix", 0.20f }, { "verbMix", 0.14f } } },
-    { "Alarm Panel", { { "mode", 4.0f }, { "bandwidth", 0.72f }, { "drive", 0.34f }, { "glitch", 0.12f }, { "noise", 0.25f }, { "alarmTone", 1.0f }, { "toneMix", 0.55f } } },
-    { "VoIP", { { "mode", 1.0f }, { "bandwidth", 0.42f }, { "drive", 0.35f }, { "glitch", 0.78f }, { "noise", 0.14f }, { "echoMix", 0.03f }, { "verbMix", 0.02f } } },
+const PresetDefinition presets[] = {
+    { "Landline Clean", { { "mode", 0.0f }, { "bandwidth", 0.62f }, { "drive", 0.14f }, { "glitch", 0.02f }, { "noise", 0.05f }, { "character", 0.42f }, { "distance", 0.02f }, { "macroLink", 1.0f } } },
+    { "Warm Bakelite", { { "mode", 0.0f }, { "bandwidth", 0.50f }, { "drive", 0.30f }, { "glitch", 0.04f }, { "noise", 0.12f }, { "character", 0.76f }, { "distance", 0.03f }, { "macroLink", 1.0f } } },
+    { "Motel Receiver", { { "mode", 0.0f }, { "bandwidth", 0.34f }, { "drive", 0.52f }, { "glitch", 0.12f }, { "noise", 0.34f }, { "character", 0.88f }, { "distance", 0.04f }, { "macroLink", 1.0f } } },
+    { "Payphone Booth", { { "mode", 0.0f }, { "bandwidth", 0.38f }, { "drive", 0.42f }, { "glitch", 0.08f }, { "noise", 0.22f }, { "character", 0.72f }, { "distance", 0.22f }, { "macroLink", 1.0f } } },
+    { "Cell Clear", { { "mode", 1.0f }, { "bandwidth", 0.54f }, { "drive", 0.16f }, { "glitch", 0.03f }, { "noise", 0.04f }, { "character", 0.16f }, { "distance", 0.01f }, { "macroLink", 1.0f } } },
+    { "Cell Breakup", { { "mode", 1.0f }, { "bandwidth", 0.34f }, { "drive", 0.38f }, { "glitch", 0.72f }, { "noise", 0.10f }, { "character", 0.22f }, { "distance", 0.03f }, { "macroLink", 1.0f } } },
+    { "Pocket Speakerphone", { { "mode", 1.0f }, { "bandwidth", 0.42f }, { "drive", 0.28f }, { "glitch", 0.18f }, { "noise", 0.06f }, { "character", 0.48f }, { "distance", 0.28f }, { "macroLink", 1.0f } } },
+    { "Office Intercom", { { "mode", 2.0f }, { "bandwidth", 0.42f }, { "drive", 0.24f }, { "glitch", 0.10f }, { "noise", 0.12f }, { "character", 0.62f }, { "distance", 0.20f }, { "macroLink", 1.0f } } },
+    { "Security Intercom", { { "mode", 2.0f }, { "bandwidth", 0.26f }, { "drive", 0.52f }, { "glitch", 0.32f }, { "noise", 0.32f }, { "character", 0.90f }, { "distance", 0.38f }, { "macroLink", 1.0f } } },
+    { "Warehouse PA", { { "mode", 3.0f }, { "bandwidth", 0.64f }, { "drive", 0.56f }, { "glitch", 0.04f }, { "noise", 0.09f }, { "character", 0.82f }, { "distance", 0.56f }, { "macroLink", 1.0f } } },
+    { "Hospital Corridor", { { "mode", 3.0f }, { "bandwidth", 0.58f }, { "drive", 0.38f }, { "glitch", 0.02f }, { "noise", 0.06f }, { "character", 0.68f }, { "distance", 0.76f }, { "macroLink", 1.0f } } },
+    { "Subway Platform", { { "mode", 3.0f }, { "bandwidth", 0.36f }, { "drive", 0.68f }, { "glitch", 0.16f }, { "noise", 0.24f }, { "character", 0.94f }, { "distance", 0.88f }, { "macroLink", 1.0f } } },
+    { "Alarm Panel", { { "mode", 4.0f }, { "bandwidth", 0.62f }, { "drive", 0.24f }, { "glitch", 0.04f }, { "noise", 0.10f }, { "character", 0.66f }, { "distance", 0.24f }, { "alarmTone", 1.0f }, { "macroLink", 1.0f } } },
+    { "Emergency Paging", { { "mode", 4.0f }, { "bandwidth", 0.48f }, { "drive", 0.48f }, { "glitch", 0.12f }, { "noise", 0.22f }, { "character", 0.82f }, { "distance", 0.58f }, { "alarmTone", 1.0f }, { "macroLink", 1.0f } } },
+    { "Damaged Copper", { { "mode", 0.0f }, { "bandwidth", 0.20f }, { "drive", 0.72f }, { "glitch", 0.46f }, { "noise", 0.58f }, { "character", 0.86f }, { "distance", 0.08f }, { "macroLink", 1.0f } } },
+    { "Diegetic Extreme", { { "mode", 2.0f }, { "bandwidth", 0.18f }, { "drive", 0.78f }, { "glitch", 0.68f }, { "noise", 0.52f }, { "character", 0.98f }, { "distance", 0.74f }, { "macroLink", 1.0f } } },
 };
 }
 
-CommsEngineAudioProcessorEditor::Knob::Knob(APVTS& state, const juce::String& id, const juce::String& text)
+CommsEngineAudioProcessorEditor::ConsoleLookAndFeel::ConsoleLookAndFeel()
 {
-    label.setText(text, juce::dontSendNotification);
+    setColour(juce::PopupMenu::backgroundColourId, juce::Colour(deep));
+    setColour(juce::PopupMenu::textColourId, juce::Colour(bone));
+    setColour(juce::PopupMenu::highlightedBackgroundColourId, juce::Colour(0xff304f48));
+    setColour(juce::ComboBox::backgroundColourId, juce::Colour(ink));
+    setColour(juce::ComboBox::textColourId, juce::Colour(bone));
+    setColour(juce::ComboBox::outlineColourId, juce::Colour(line));
+    setColour(juce::Slider::textBoxBackgroundColourId, juce::Colour(ink));
+    setColour(juce::Slider::textBoxTextColourId, juce::Colour(amber));
+    setColour(juce::Slider::textBoxOutlineColourId, juce::Colour(line));
+}
+
+void CommsEngineAudioProcessorEditor::ConsoleLookAndFeel::drawRotarySlider(
+    juce::Graphics& g, int x, int y, int width, int height, float sliderPosition,
+    float start, float end, juce::Slider& slider)
+{
+    juce::ignoreUnused(slider);
+    const auto diameter = (float) juce::jmin(width, height) - 10.0f;
+    const auto bounds = juce::Rectangle<float>((float) x + ((float) width - diameter) * 0.5f,
+                                                (float) y + 4.0f, diameter, diameter);
+    const auto centre = bounds.getCentre();
+    const auto radius = bounds.getWidth() * 0.5f;
+    const auto angle = start + sliderPosition * (end - start);
+    juce::Path track;
+    track.addCentredArc(centre.x, centre.y, radius - 3.0f, radius - 3.0f, 0.0f, start, end, true);
+    g.setColour(juce::Colour(0xff4c4b40));
+    g.strokePath(track, juce::PathStrokeType(6.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    juce::Path value;
+    value.addCentredArc(centre.x, centre.y, radius - 3.0f, radius - 3.0f, 0.0f, start, angle, true);
+    g.setColour(juce::Colour(amber));
+    g.strokePath(value, juce::PathStrokeType(6.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    g.setColour(juce::Colour(0xff24231e));
+    g.fillEllipse(bounds.reduced(8.0f));
+    g.setColour(juce::Colour(0xff777261));
+    g.drawEllipse(bounds.reduced(8.0f), 1.0f);
+    juce::Path pointer;
+    pointer.addRoundedRectangle(-2.0f, -radius * 0.62f, 4.0f, radius * 0.42f, 2.0f);
+    g.setColour(juce::Colour(bone));
+    g.fillPath(pointer, juce::AffineTransform::rotation(angle).translated(centre.x, centre.y));
+}
+
+void CommsEngineAudioProcessorEditor::ConsoleLookAndFeel::drawButtonBackground(
+    juce::Graphics& g, juce::Button& button, const juce::Colour&, bool highlighted, bool down)
+{
+    auto bounds = button.getLocalBounds().toFloat().reduced(0.5f);
+    auto fill = button.getToggleState() ? juce::Colour(0xff244b49) : juce::Colour(panelLift);
+    if (highlighted) fill = fill.brighter(0.08f);
+    if (down) fill = fill.darker(0.12f);
+    g.setColour(fill);
+    g.fillRoundedRectangle(bounds, 4.0f);
+    g.setColour(button.getToggleState() ? juce::Colour(cyan) : juce::Colour(line));
+    g.drawRoundedRectangle(bounds, 4.0f, button.getToggleState() ? 1.5f : 1.0f);
+}
+
+void CommsEngineAudioProcessorEditor::ConsoleLookAndFeel::drawToggleButton(
+    juce::Graphics& g, juce::ToggleButton& button, bool highlighted, bool down)
+{
+    juce::ignoreUnused(highlighted, down);
+    auto bounds = button.getLocalBounds().toFloat();
+    const auto toggle = juce::Rectangle<float>(bounds.getX() + 3.0f, bounds.getCentreY() - 8.0f, 34.0f, 16.0f);
+    g.setColour(juce::Colour(button.getToggleState() ? 0xff285c55 : 0xff292a25));
+    g.fillRoundedRectangle(toggle, 8.0f);
+    g.setColour(juce::Colour(button.getToggleState() ? cyan : line));
+    g.drawRoundedRectangle(toggle, 8.0f, 1.0f);
+    const auto knobX = button.getToggleState() ? toggle.getRight() - 13.0f : toggle.getX() + 3.0f;
+    g.setColour(juce::Colour(button.getToggleState() ? cyan : dimBone));
+    g.fillEllipse(knobX, toggle.getY() + 3.0f, 10.0f, 10.0f);
+    g.setColour(button.findColour(juce::ToggleButton::textColourId));
+    g.setFont(uiFont(10.5f, true));
+    g.drawText(button.getButtonText(), 45, 0, button.getWidth() - 48, button.getHeight(), juce::Justification::centredLeft);
+}
+
+void CommsEngineAudioProcessorEditor::ConsoleLookAndFeel::drawComboBox(
+    juce::Graphics& g, int width, int height, bool, int, int, int, int, juce::ComboBox& box)
+{
+    auto bounds = juce::Rectangle<float>(0.5f, 0.5f, (float) width - 1.0f, (float) height - 1.0f);
+    g.setColour(box.findColour(juce::ComboBox::backgroundColourId));
+    g.fillRoundedRectangle(bounds, 3.0f);
+    g.setColour(box.findColour(juce::ComboBox::outlineColourId));
+    g.drawRoundedRectangle(bounds, 3.0f, 1.0f);
+    juce::Path arrow;
+    arrow.addTriangle((float) width - 18.0f, (float) height * 0.42f,
+                      (float) width - 10.0f, (float) height * 0.42f,
+                      (float) width - 14.0f, (float) height * 0.62f);
+    g.setColour(juce::Colour(cyan));
+    g.fillPath(arrow);
+}
+
+juce::Font CommsEngineAudioProcessorEditor::ConsoleLookAndFeel::getComboBoxFont(juce::ComboBox&)
+{
+    return uiFont(12.0f, true);
+}
+
+void CommsEngineAudioProcessorEditor::Panel::paint(juce::Graphics& g)
+{
+    auto bounds = getLocalBounds().toFloat().reduced(0.5f);
+    g.setColour(juce::Colour(panel));
+    g.fillRoundedRectangle(bounds, 8.0f);
+    g.setColour(juce::Colour(line));
+    g.drawRoundedRectangle(bounds, 8.0f, 1.0f);
+    g.setColour(juce::Colour(cyan));
+    g.fillRect(14.0f, 13.0f, 24.0f, 2.0f);
+    g.setColour(juce::Colour(dimBone));
+    g.setFont(uiFont(10.0f, true));
+    g.drawText(title, 46, 5, getWidth() - 58, 19, juce::Justification::centredLeft);
+}
+
+juce::Rectangle<int> CommsEngineAudioProcessorEditor::Panel::contentBounds() const
+{
+    return getLocalBounds().withTrimmedTop(28).reduced(8, 5);
+}
+
+void CommsEngineAudioProcessorEditor::ConsoleDisplay::setState(
+    float signal, int mode, float newFailure, float newDistance, bool alarm)
+{
+    signalLevel += (juce::jlimit(0.0f, 1.0f, signal) - signalLevel) * 0.22f;
+    activeMode = juce::jlimit(0, 4, mode);
+    failure = juce::jlimit(0.0f, 1.0f, newFailure);
+    distance = juce::jlimit(0.0f, 1.0f, newDistance);
+    alarmEnabled = alarm;
+    repaint();
+}
+
+void CommsEngineAudioProcessorEditor::ConsoleDisplay::advance()
+{
+    phase += 0.035f + failure * 0.08f;
+    if (phase > juce::MathConstants<float>::twoPi) phase -= juce::MathConstants<float>::twoPi;
+}
+
+void CommsEngineAudioProcessorEditor::ConsoleDisplay::paint(juce::Graphics& g)
+{
+    auto outer = getLocalBounds().toFloat();
+    g.setColour(juce::Colour(0xff34382c));
+    g.fillRoundedRectangle(outer, 12.0f);
+    g.setColour(juce::Colour(0xff737760));
+    g.drawRoundedRectangle(outer.reduced(0.5f), 12.0f, 1.5f);
+    auto face = outer.reduced(15.0f);
+    g.setColour(juce::Colour(0xff20251d));
+    g.fillRoundedRectangle(face, 8.0f);
+
+    auto upper = face.reduced(14.0f).removeFromTop(face.getHeight() * 0.44f);
+    g.setColour(juce::Colour(ink));
+    g.fillRoundedRectangle(upper, 5.0f);
+    g.setColour(juce::Colour(0xff627259));
+    g.drawRoundedRectangle(upper, 5.0f, 1.0f);
+    auto modeRow = upper.reduced(12.0f).removeFromTop(42.0f);
+    const char* modes[] { "LINE", "CELL", "ICOM", "P.A.", "ALRM" };
+    const auto modeWidth = modeRow.getWidth() / 5.0f;
+    for (int index = 0; index < 5; ++index)
+    {
+        auto cell = juce::Rectangle<float>(modeRow.getX() + modeWidth * index, modeRow.getY(), modeWidth - 4.0f, modeRow.getHeight());
+        const auto active = index == activeMode;
+        g.setColour(juce::Colour(active ? 0xff284e47 : 0xff171b17));
+        g.fillRoundedRectangle(cell, 3.0f);
+        g.setColour(juce::Colour(active ? cyan : 0xff495047));
+        g.drawRoundedRectangle(cell, 3.0f, active ? 1.5f : 1.0f);
+        if (active) g.fillEllipse(cell.getCentreX() - 3.0f, cell.getY() + 6.0f, 6.0f, 6.0f);
+        g.setColour(juce::Colour(active ? bone : dimBone));
+        g.setFont(uiFont(9.0f, true));
+        g.drawText(modes[index], cell.toNearestInt().withTrimmedTop(15), juce::Justification::centred);
+    }
+
+    auto trace = upper.reduced(12.0f).withTrimmedTop(50.0f).withTrimmedBottom(10.0f);
+    g.setColour(juce::Colour(0xff17201c));
+    g.fillRect(trace);
+    juce::Path waveform;
+    for (int pixel = 0; pixel < (int) trace.getWidth(); ++pixel)
+    {
+        const auto t = (float) pixel / juce::jmax(1.0f, trace.getWidth());
+        const auto breakup = std::sin(t * 34.0f + phase) * failure * 0.23f;
+        const auto voice = std::sin(t * 12.0f + phase * 0.7f) * (0.16f + signalLevel * 0.52f);
+        const auto y = trace.getCentreY() - (voice + breakup) * trace.getHeight() * 0.45f;
+        if (pixel == 0) waveform.startNewSubPath(trace.getX(), y); else waveform.lineTo(trace.getX() + pixel, y);
+    }
+    g.setColour(juce::Colour(alarmEnabled ? danger : signalGreen).withAlpha(0.9f));
+    g.strokePath(waveform, juce::PathStrokeType(1.5f));
+
+    auto lower = face.reduced(14.0f).withTrimmedTop(face.getHeight() * 0.47f);
+    auto meterRow = lower.removeFromTop(70.0f);
+    auto meter = meterRow.removeFromLeft(meterRow.getWidth() * 0.58f);
+    g.setColour(juce::Colour(0xffe5ddc4));
+    g.fillRoundedRectangle(meter, 4.0f);
+    g.setColour(juce::Colour(0xff554f42));
+    g.drawRoundedRectangle(meter, 4.0f, 1.0f);
+    g.setFont(uiFont(9.0f, true));
+    g.drawText("SIGNAL", meter.toNearestInt().removeFromTop(18), juce::Justification::centred);
+    const auto meterArea = meter.reduced(14.0f, 20.0f).withTrimmedTop(6.0f);
+    g.setColour(juce::Colour(0xff36372e));
+    g.fillRect(meterArea);
+    g.setColour(signalLevel > 0.82f ? juce::Colour(danger) : juce::Colour(0xff72b66a));
+    g.fillRect(meterArea.withWidth(meterArea.getWidth() * juce::jlimit(0.0f, 1.0f, signalLevel)));
+
+    auto lamps = meterRow.withTrimmedLeft(10.0f);
+    const struct { const char* text; bool on; std::uint32_t colour; } indicators[] {
+        { "VOICE", signalLevel > 0.015f, signalGreen },
+        { "DUPLEX", activeMode == 2 || activeMode == 1, cyan },
+        { "REMOTE", distance > 0.35f, amber },
+        { "ALARM", alarmEnabled, danger },
+    };
+    for (const auto& indicator : indicators)
+    {
+        auto row = lamps.removeFromTop(17.0f);
+        g.setColour(juce::Colour(indicator.on ? indicator.colour : 0xff3d4037));
+        g.fillEllipse(row.getX(), row.getCentreY() - 4.0f, 8.0f, 8.0f);
+        g.setColour(juce::Colour(dimBone));
+        g.setFont(uiFont(9.5f, true));
+        g.drawText(indicator.text, row.toNearestInt().withTrimmedLeft(16), juce::Justification::centredLeft);
+    }
+
+    auto grill = face.withTrimmedTop(face.getHeight() * 0.74f).reduced(18.0f, 6.0f);
+    g.setColour(juce::Colour(0xff0b0e0b));
+    for (int row = 0; row < 4; ++row)
+        for (int column = 0; column < 22; ++column)
+            g.fillEllipse(grill.getX() + column * (grill.getWidth() / 22.0f),
+                          grill.getY() + row * 10.0f, 4.0f, 4.0f);
+}
+
+CommsEngineAudioProcessorEditor::Knob::Knob(
+    APVTS& state, const juce::String& id, const juce::String& text, std::function<void()> userChange)
+{
+    label.setText(text.toUpperCase(), juce::dontSendNotification);
     label.setJustificationType(juce::Justification::centred);
-    label.setColour(juce::Label::textColourId, juce::Colour(0xff9cd8ff));
+    label.setColour(juce::Label::textColourId, juce::Colour(bone));
+    label.setFont(uiFont(10.5f, true));
     addAndMakeVisible(label);
-
     slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 66, 18);
-    slider.setColour(juce::Slider::thumbColourId, juce::Colour(0xff96d2ff));
-    slider.setColour(juce::Slider::rotarySliderFillColourId, juce::Colour(0xff5ba5d2));
-    slider.setColour(juce::Slider::rotarySliderOutlineColourId, juce::Colour(0xff2b3238));
-    slider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
-    slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colour(0xff3a3f45));
+    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 72, 20);
+    slider.setDoubleClickReturnValue(true, state.getParameter(id)->convertFrom0to1(state.getParameter(id)->getDefaultValue()));
+    slider.onDragStart = std::move(userChange);
     addAndMakeVisible(slider);
-
     attachment = std::make_unique<APVTS::SliderAttachment>(state, id, slider);
 }
 
 void CommsEngineAudioProcessorEditor::Knob::resized()
 {
     auto area = getLocalBounds();
-    label.setBounds(area.removeFromTop(20));
-    slider.setBounds(area.reduced(2));
+    label.setBounds(area.removeFromTop(18));
+    slider.setBounds(area.reduced(1));
 }
 
-CommsEngineAudioProcessorEditor::Choice::Choice(APVTS& state, const juce::String& id, const juce::String& text)
+void CommsEngineAudioProcessorEditor::Knob::setHint(const juce::String& hint)
 {
-    label.setText(text, juce::dontSendNotification);
-    label.setColour(juce::Label::textColourId, juce::Colour(0xff9cd8ff));
+    slider.setTooltip(hint);
+    label.setTooltip(hint);
+}
+
+CommsEngineAudioProcessorEditor::Switch::Switch(
+    APVTS& state, const juce::String& id, const juce::String& text, std::function<void()> userChange)
+{
+    button.setButtonText(text.toUpperCase());
+    button.setColour(juce::ToggleButton::textColourId, juce::Colour(bone));
+    button.onClick = std::move(userChange);
+    addAndMakeVisible(button);
+    attachment = std::make_unique<APVTS::ButtonAttachment>(state, id, button);
+}
+
+void CommsEngineAudioProcessorEditor::Switch::resized() { button.setBounds(getLocalBounds().reduced(3)); }
+void CommsEngineAudioProcessorEditor::Switch::setHint(const juce::String& hint) { button.setTooltip(hint); }
+
+CommsEngineAudioProcessorEditor::Choice::Choice(
+    APVTS& state, const juce::String& id, const juce::String& text, std::function<void()> userChange)
+{
+    label.setText(text.toUpperCase(), juce::dontSendNotification);
+    label.setColour(juce::Label::textColourId, juce::Colour(dimBone));
+    label.setFont(uiFont(9.5f, true));
     addAndMakeVisible(label);
-
-    if (auto* p = dynamic_cast<juce::AudioParameterChoice*>(state.getParameter(id)))
-        for (int i = 0; i < p->choices.size(); ++i)
-            combo.addItem(p->choices[i], i + 1);
-
-    combo.setColour(juce::ComboBox::backgroundColourId, juce::Colour(0xff1f2326));
-    combo.setColour(juce::ComboBox::textColourId, juce::Colours::white);
-    combo.setColour(juce::ComboBox::outlineColourId, juce::Colour(0xff3a3f45));
+    if (auto* parameter = dynamic_cast<juce::AudioParameterChoice*>(state.getParameter(id)))
+        for (int i = 0; i < parameter->choices.size(); ++i) combo.addItem(parameter->choices[i], i + 1);
+    combo.onChange = std::move(userChange);
     addAndMakeVisible(combo);
-
     attachment = std::make_unique<APVTS::ComboBoxAttachment>(state, id, combo);
 }
 
 void CommsEngineAudioProcessorEditor::Choice::resized()
 {
     auto area = getLocalBounds();
-    label.setBounds(area.removeFromTop(18));
-    combo.setBounds(area.reduced(1));
+    label.setBounds(area.removeFromTop(16));
+    combo.setBounds(area.removeFromTop(26));
 }
 
-CommsEngineAudioProcessorEditor::Switch::Switch(APVTS& state, const juce::String& id, const juce::String& text)
+void CommsEngineAudioProcessorEditor::Choice::setHint(const juce::String& hint)
 {
-    button.setButtonText(text);
-    button.setColour(juce::ToggleButton::textColourId, juce::Colour(0xffd2d7dc));
-    button.setColour(juce::ToggleButton::tickColourId, juce::Colour(0xff96d2ff));
-    addAndMakeVisible(button);
-    attachment = std::make_unique<APVTS::ButtonAttachment>(state, id, button);
-}
-
-void CommsEngineAudioProcessorEditor::Switch::resized()
-{
-    button.setBounds(getLocalBounds());
+    combo.setTooltip(hint);
+    label.setTooltip(hint);
 }
 
 CommsEngineAudioProcessorEditor::CommsEngineAudioProcessorEditor(CommsEngineAudioProcessor& p)
     : AudioProcessorEditor(&p), processor(p), apvts(p.getAPVTS())
 {
-    title.setText("Comms Engine", juce::dontSendNotification);
-    title.setFont(juce::Font(juce::FontOptions(30.0f, juce::Font::bold)));
-    title.setColour(juce::Label::textColourId, juce::Colour(0xffe1f4ff));
-    addAndMakeVisible(title);
-
-    subtitle.setText("Communication Channel Rack", juce::dontSendNotification);
-    subtitle.setColour(juce::Label::textColourId, juce::Colour(0xff8ba6b8));
-    addAndMakeVisible(subtitle);
-
-    presetLabel.setText("Preset", juce::dontSendNotification);
-    presetLabel.setColour(juce::Label::textColourId, juce::Colour(0xff9cd8ff));
-    addAndMakeVisible(presetLabel);
-
+    setLookAndFeel(&lookAndFeel);
+    setOpaque(true);
+    brandLabel.setText("B&E DIGITAL / LOST AUDIO", juce::dontSendNotification);
+    brandLabel.setFont(uiFont(10.5f, true));
+    brandLabel.setColour(juce::Label::textColourId, juce::Colour(cyan));
+    addAndMakeVisible(brandLabel);
+    titleLabel.setText("COMMS ENGINE", juce::dontSendNotification);
+    titleLabel.setFont(uiFont(27.0f, true));
+    titleLabel.setColour(juce::Label::textColourId, juce::Colour(bone));
+    addAndMakeVisible(titleLabel);
+    subtitleLabel.setText("DIEGETIC COMMUNICATION HARDWARE / V2", juce::dontSendNotification);
+    subtitleLabel.setFont(uiFont(10.0f, true));
+    subtitleLabel.setColour(juce::Label::textColourId, juce::Colour(dimBone));
+    addAndMakeVisible(subtitleLabel);
+    profileLabel.setText("PROFILE", juce::dontSendNotification);
+    profileLabel.setFont(uiFont(9.5f, true));
+    profileLabel.setColour(juce::Label::textColourId, juce::Colour(dimBone));
+    addAndMakeVisible(profileLabel);
     presetBox.addItem("Custom", 1);
-    for (int i = 0; i < (int) std::size(kPresets); ++i)
-        presetBox.addItem(kPresets[i].name, i + 2);
-    presetBox.onChange = [this]() {
-        const auto id = presetBox.getSelectedId();
-        if (id >= 2)
-            applyPreset(id - 2);
+    for (int i = 0; i < (int) std::size(presets); ++i) presetBox.addItem(presets[i].name, i + 2);
+    presetBox.onChange = [this]
+    {
+        if (const auto selected = presetBox.getSelectedId(); selected >= 2) applyPreset(selected - 2);
     };
     presetBox.setSelectedId(1, juce::dontSendNotification);
-    presetBox.setTooltip("Factory comms channel presets.");
+    presetBox.setTooltip("Safe profiles for handsets, intercoms, PA systems, cellular paths and alarm panels.");
     addAndMakeVisible(presetBox);
 
-    tabs.setOutline(0);
-    tabs.setTabBarDepth(34);
-    tabs.addTab("Macro", juce::Colour(0xff2c3640), &macroPage, true);
-    tabs.addTab("Core", juce::Colour(0xff2c3640), &corePage, true);
-    tabs.addTab("Space", juce::Colour(0xff2c3640), &fxPage, true);
-    tabs.addTab("Output", juce::Colour(0xff2c3640), &outputPage, true);
-    addAndMakeVisible(tabs);
-
-    addChoice(macroPage, "mode", "Mode", "Target comms system model.");
-    addKnob(macroPage, "bandwidth", "Bandwidth", "Narrow/wide channel voice range.");
-    addKnob(macroPage, "drive", "Drive", "Nonlinear transmitter crunch.");
-    addKnob(macroPage, "glitch", "Glitch", "Packet loss and rate artifacts.");
-    addKnob(macroPage, "noise", "Noise", "Hum/hiss and channel grunge.");
-    addSwitch(macroPage, "alarmTone", "Alarm Tone", "Inject warbling alarm panel tone.");
-
-    addKnob(corePage, "hpHz", "HP", "Low-cut for narrow comms body.");
-    addKnob(corePage, "lpHz", "LP", "Top-end cutoff for line quality.");
-    addKnob(corePage, "midHumpDb", "Mid Hump", "Intelligibility boost.");
-    addKnob(corePage, "midFreq", "Mid Freq", "Presence center frequency.");
-    addKnob(corePage, "comp", "Comp", "AGC-like dynamic squeeze.");
-    addKnob(corePage, "bits", "Bits", "Bit-depth reduction.");
-    addKnob(corePage, "rate", "Rate", "Sample-rate reduction.");
-    addKnob(corePage, "packet", "Packet", "Packet dropout chance.");
-    addKnob(corePage, "packetMs", "Pkt Ms", "Dropout block length.");
-    addKnob(corePage, "hum", "Hum", "Powerline/low tone content.");
-    addKnob(corePage, "hiss", "Hiss", "Broadband static.");
-    addKnob(corePage, "toneMix", "Tone Mix", "Alarm tone blend level.");
-
-    addKnob(fxPage, "echoMix", "Echo Mix", "Parallel slap/line echo amount.");
-    addKnob(fxPage, "echoMs", "Echo Ms", "Echo delay time.");
-    addKnob(fxPage, "echoFb", "Echo Fb", "Echo feedback amount.");
-    addKnob(fxPage, "echoTone", "Echo Tone", "Echo feedback lowpass tone.");
-    addKnob(fxPage, "verbMix", "Verb Mix", "Parallel room contribution.");
-    addKnob(fxPage, "verbMs", "Verb Ms", "Approximate room tail size.");
-    addKnob(fxPage, "verbDamp", "Verb Damp", "Reverb high-frequency damping.");
-
-    addKnob(outputPage, "ceiling", "Ceiling", "Limiter ceiling.");
-    addKnob(outputPage, "outGain", "Out Gain", "Final level trim.");
-
-    setResizable(false, false);
-    setSize(860, 540);
-
-    lastMode = (int) getParamValue("mode");
-    lastBandwidth = getParamValue("bandwidth");
-    lastDrive = getParamValue("drive");
-    lastGlitch = getParamValue("glitch");
-    lastNoise = getParamValue("noise");
-
-    startTimerHz(18);
-}
-
-CommsEngineAudioProcessorEditor::~CommsEngineAudioProcessorEditor() {}
-
-void CommsEngineAudioProcessorEditor::addKnob(juce::Component& page, const juce::String& id, const juce::String& text, const juce::String& hint)
-{
-    auto c = std::make_unique<Knob>(apvts, id, text);
-    c->setHint(hint);
-    page.addAndMakeVisible(*c);
-    pageItems[&page].push_back(c.get());
-    knobs.push_back(std::move(c));
-}
-
-void CommsEngineAudioProcessorEditor::addChoice(juce::Component& page, const juce::String& id, const juce::String& text, const juce::String& hint)
-{
-    auto c = std::make_unique<Choice>(apvts, id, text);
-    c->setHint(hint);
-    page.addAndMakeVisible(*c);
-    pageItems[&page].push_back(c.get());
-    choices.push_back(std::move(c));
-}
-
-void CommsEngineAudioProcessorEditor::addSwitch(juce::Component& page, const juce::String& id, const juce::String& text, const juce::String& hint)
-{
-    auto c = std::make_unique<Switch>(apvts, id, text);
-    c->setHint(hint);
-    page.addAndMakeVisible(*c);
-    pageItems[&page].push_back(c.get());
-    switches.push_back(std::move(c));
-}
-
-void CommsEngineAudioProcessorEditor::layoutPage(juce::Component& page, int columns)
-{
-    auto area = page.getLocalBounds().reduced(10);
-    auto& items = pageItems[&page];
-    if (items.empty())
-        return;
-
-    const auto count = (int) items.size();
-    const auto cols = juce::jmax(1, columns);
-    const auto rows = juce::jmax(1, (count + cols - 1) / cols);
-    const auto cellW = area.getWidth() / cols;
-    const auto cellH = area.getHeight() / rows;
-
-    for (int i = 0; i < count; ++i)
+    for (auto* button : { &surfaceButton, &advancedButton })
     {
-        const auto r = i / cols;
-        const auto c = i % cols;
-        auto cell = juce::Rectangle<int>(area.getX() + c * cellW, area.getY() + r * cellH, cellW, cellH).reduced(6);
-        items[(size_t) i]->setBounds(cell);
+        button->setClickingTogglesState(false);
+        button->setColour(juce::TextButton::textColourOffId, juce::Colour(bone));
+        button->setColour(juce::TextButton::textColourOnId, juce::Colour(ink));
+        addAndMakeVisible(*button);
     }
+    surfaceButton.onClick = [this] { showAdvanced(false); };
+    advancedButton.onClick = [this] { showAdvanced(true); };
+    statusLabel.setFont(uiFont(9.5f, true));
+    statusLabel.setColour(juce::Label::textColourId, juce::Colour(dimBone));
+    statusLabel.setJustificationType(juce::Justification::centredRight);
+    addAndMakeVisible(statusLabel);
+
+    addAndMakeVisible(surfacePage);
+    addAndMakeVisible(advancedPage);
+    surfacePage.addAndMakeVisible(consoleDisplay);
+    surfacePage.addAndMakeVisible(characterPanel);
+    surfacePage.addAndMakeVisible(outputPanel);
+    for (auto* panelComponent : { &tonePanel, &transmitterPanel, &receptionPanel, &noisePanel, &squelchPanel, &searchPanel })
+        advancedPage.addAndMakeVisible(*panelComponent);
+
+    addChoice(characterPanel, "mode", "Hardware", "Choose a landline, cellular path, intercom, PA horn or alarm panel.");
+    addKnob(characterPanel, "bandwidth", "Bandwidth", "Protected voice-band width for the selected hardware.", true);
+    addKnob(characterPanel, "drive", "Drive", "Level-matched carbon, electronics or amplifier drive.", true);
+    addKnob(characterPanel, "glitch", "Failure", "Packet loss, converter instability and line interruptions.", true);
+    addKnob(characterPanel, "noise", "Line Noise", "Protected hum, hiss and aging-line activity.", true);
+    addKnob(characterPanel, "character", "Hardware", "Physical transducer and enclosure character.", true);
+    addKnob(characterPanel, "distance", "Distance", "Move the device into its surrounding space.", true);
+    addSwitch(characterPanel, "alarmTone", "Alarm Tone", "Enable the device's two-tone warning generator.");
+    addKnob(outputPanel, "inputGain", "Input", "Trim before the communications path.");
+    addKnob(outputPanel, "mix", "Mix", "Dry/wet balance.");
+    addKnob(outputPanel, "outGain", "Output", "Final protected output trim.");
+
+    addSwitch(tonePanel, "macroLink", "Surface Link", "On: Surface controls drive a protected hardware model. Off: direct circuit controls are active.");
+    for (auto* linked : {
+            addKnob(tonePanel, "hpHz", "High-pass", "Direct voice-band low cutoff."),
+            addKnob(tonePanel, "lpHz", "Low-pass", "Direct voice-band high cutoff."),
+            addKnob(tonePanel, "midHumpDb", "Presence", "Direct communications-band emphasis."),
+            addKnob(tonePanel, "midFreq", "Presence Hz", "Voice presence center frequency.") }) linkedAdvancedControls.push_back(linked);
+
+    for (auto* linked : {
+            addKnob(transmitterPanel, "comp", "AGC", "Telecom automatic gain riding."),
+            addKnob(transmitterPanel, "bits", "Codec Bits", "Quantizer depth."),
+            addKnob(transmitterPanel, "rate", "Rate", "Converter sample-and-hold rate.") }) linkedAdvancedControls.push_back(linked);
+    addKnob(transmitterPanel, "drive", "Drive", "Carbon, electronic or amplifier nonlinearity.");
+    addKnob(transmitterPanel, "inputGain", "Input", "Input trim before all processing.");
+    addKnob(transmitterPanel, "mix", "Mix", "Dry/wet balance.");
+    addKnob(transmitterPanel, "outGain", "Output", "Final output trim.");
+
+    for (auto* linked : {
+            addKnob(receptionPanel, "packet", "Dropouts", "Probability of a line or codec block dropping."),
+            addKnob(receptionPanel, "packetMs", "Block Ms", "Length of each failure block."),
+            addKnob(receptionPanel, "duplex", "Half Duplex", "Talk-path clamp and release behavior."),
+            addKnob(receptionPanel, "lineAge", "Line Age", "Carbon granules and aging electronics.") }) linkedAdvancedControls.push_back(linked);
+
+    for (auto* linked : {
+            addKnob(noisePanel, "hum", "Hum", "Mode-aware mains and line hum."),
+            addKnob(noisePanel, "hiss", "Hiss", "Line and transducer hiss."),
+            addKnob(noisePanel, "transducer", "Body", "Receiver, intercom box or horn resonances."),
+            addKnob(noisePanel, "speakerRattle", "Rattle", "Signal-excited diaphragm and enclosure rattle.") }) linkedAdvancedControls.push_back(linked);
+
+    addKnob(squelchPanel, "distance", "Distance", "Acoustic distance and perspective.");
+    for (auto* linked : {
+            addKnob(squelchPanel, "echoMix", "Echo Mix", "Early reflection level."),
+            addKnob(squelchPanel, "echoMs", "Echo Time", "Early reflection delay."),
+            addKnob(squelchPanel, "echoFb", "Feedback", "Repeated paging-system reflections."),
+            addKnob(squelchPanel, "echoTone", "Echo Tone", "Bandwidth of repeated reflections.") }) linkedAdvancedControls.push_back(linked);
+
+    for (auto* linked : {
+            addKnob(searchPanel, "verbMix", "Room Mix", "Device-space reverberation level."),
+            addKnob(searchPanel, "verbMs", "Room Decay", "Room response length."),
+            addKnob(searchPanel, "verbDamp", "Damping", "Room high-frequency absorption."),
+            addKnob(searchPanel, "ceiling", "Ceiling", "Protected output ceiling.") }) linkedAdvancedControls.push_back(linked);
+    addSwitch(searchPanel, "alarmTone", "Alarm Tone", "Enable the panel or paging alarm generator.");
+    addKnob(searchPanel, "toneMix", "Alarm Level", "Warning-tone contribution.");
+
+    setResizable(true, true);
+    setResizeLimits(900, 620, 1600, 1000);
+    setSize(1100, 720);
+    showAdvanced(false);
+    startTimerHz(24);
 }
 
-void CommsEngineAudioProcessorEditor::setParamValue(const juce::String& id, float plainValue)
+CommsEngineAudioProcessorEditor::~CommsEngineAudioProcessorEditor()
 {
-    if (auto* p = apvts.getParameter(id))
-        p->setValueNotifyingHost(p->convertTo0to1(plainValue));
+    stopTimer();
+    setLookAndFeel(nullptr);
 }
 
-float CommsEngineAudioProcessorEditor::getParamValue(const juce::String& id) const
+CommsEngineAudioProcessorEditor::Knob* CommsEngineAudioProcessorEditor::addKnob(
+    Panel& owner, const juce::String& id, const juce::String& text, const juce::String& hint, bool surfaceMacro)
 {
-    if (auto* v = apvts.getRawParameterValue(id))
-        return v->load();
+    auto callback = [this, surfaceMacro]
+    {
+        if (surfaceMacro) setParameter("macroLink", 1.0f);
+        markCustom();
+    };
+    auto control = std::make_unique<Knob>(apvts, id, text, callback);
+    control->setHint(hint);
+    auto* result = control.get();
+    owner.addAndMakeVisible(*control);
+    panelItems[&owner].push_back(result);
+    knobs.push_back(std::move(control));
+    return result;
+}
+
+CommsEngineAudioProcessorEditor::Switch* CommsEngineAudioProcessorEditor::addSwitch(
+    Panel& owner, const juce::String& id, const juce::String& text, const juce::String& hint)
+{
+    auto control = std::make_unique<Switch>(apvts, id, text, [this] { markCustom(); });
+    control->setHint(hint);
+    auto* result = control.get();
+    owner.addAndMakeVisible(*control);
+    panelItems[&owner].push_back(result);
+    switches.push_back(std::move(control));
+    return result;
+}
+
+CommsEngineAudioProcessorEditor::Choice* CommsEngineAudioProcessorEditor::addChoice(
+    Panel& owner, const juce::String& id, const juce::String& text, const juce::String& hint)
+{
+    auto control = std::make_unique<Choice>(apvts, id, text, [this] { markCustom(); });
+    control->setHint(hint);
+    auto* result = control.get();
+    owner.addAndMakeVisible(*control);
+    panelItems[&owner].push_back(result);
+    choices.push_back(std::move(control));
+    return result;
+}
+
+void CommsEngineAudioProcessorEditor::layoutPanel(Panel& owner, int columns)
+{
+    auto area = owner.contentBounds();
+    auto& items = panelItems[&owner];
+    if (items.empty()) return;
+    const auto cols = juce::jmax(1, columns);
+    const auto rows = juce::jmax(1, ((int) items.size() + cols - 1) / cols);
+    const auto width = area.getWidth() / cols;
+    const auto height = area.getHeight() / rows;
+    for (int index = 0; index < (int) items.size(); ++index)
+        items[(std::size_t) index]->setBounds(area.getX() + (index % cols) * width,
+                                             area.getY() + (index / cols) * height,
+                                             width, height);
+}
+
+void CommsEngineAudioProcessorEditor::showAdvanced(bool shouldShowAdvanced)
+{
+    showingAdvanced = shouldShowAdvanced;
+    surfacePage.setVisible(!showingAdvanced);
+    advancedPage.setVisible(showingAdvanced);
+    surfaceButton.setToggleState(!showingAdvanced, juce::dontSendNotification);
+    advancedButton.setToggleState(showingAdvanced, juce::dontSendNotification);
+    resized();
+}
+
+void CommsEngineAudioProcessorEditor::setParameter(const juce::String& id, float plainValue)
+{
+    if (auto* parameter = apvts.getParameter(id)) parameter->setValueNotifyingHost(parameter->convertTo0to1(plainValue));
+}
+
+float CommsEngineAudioProcessorEditor::getParameter(const juce::String& id) const
+{
+    if (auto* value = apvts.getRawParameterValue(id)) return value->load();
     return 0.0f;
 }
 
-void CommsEngineAudioProcessorEditor::applyMacroTargets(int mode, float bandwidth, float drive, float glitch, float noise)
+void CommsEngineAudioProcessorEditor::markCustom()
 {
-    const auto bw = clampf(bandwidth, 0.0f, 1.0f);
-    const auto drv = clampf(drive, 0.0f, 1.0f);
-    const auto gch = clampf(glitch, 0.0f, 1.0f);
-    const auto noi = clampf(noise, 0.0f, 1.0f);
-
-    const auto narrow = std::pow(1.0f - bw, 1.35f);
-    const auto d = std::pow(drv, 1.25f);
-    const auto g = std::pow(gch, 1.35f);
-    const auto n = std::pow(noi, 1.2f);
-
-    float hp = 250.0f, hpR = 320.0f, lp = 4300.0f, lpR = 1900.0f, hump = 2.8f, humpR = 5.4f, mid = 1850.0f, midR = 380.0f, comp = 0.54f, out = 0.95f, ceil = 0.92f;
-    if (mode == 1) { hp = 220.0f; hpR = 360.0f; lp = 3700.0f; lpR = 1600.0f; hump = 2.0f; humpR = 4.2f; mid = 1700.0f; midR = 450.0f; comp = 0.58f; out = 1.02f; ceil = 0.92f; }
-    if (mode == 2) { hp = 340.0f; hpR = 380.0f; lp = 3300.0f; lpR = 1100.0f; hump = 4.2f; humpR = 6.0f; mid = 1950.0f; midR = 450.0f; comp = 0.66f; out = 0.98f; ceil = 0.9f; }
-    if (mode == 3) { hp = 160.0f; hpR = 280.0f; lp = 6800.0f; lpR = 2600.0f; hump = 1.6f; humpR = 3.2f; mid = 1500.0f; midR = 450.0f; comp = 0.42f; out = 1.15f; ceil = 0.88f; }
-    if (mode == 4) { hp = 250.0f; hpR = 360.0f; lp = 7600.0f; lpR = 3400.0f; hump = 1.0f; humpR = 3.0f; mid = 1600.0f; midR = 700.0f; comp = 0.46f; out = 1.05f; ceil = 0.9f; }
-
-    const auto hpHz = std::round(hp + narrow * hpR);
-    const auto lpHz = std::round(lp - narrow * lpR);
-    const auto midDb = std::round((hump + narrow * humpR) * 20.0f) / 20.0f;
-    const auto midFreq = std::round(mid + (0.55f - narrow) * midR);
-
-    const auto compV = clampf(comp + d * 0.38f, 0.0f, 1.0f);
-    const auto bitsBase = mode == 3 ? 14.0f : 13.0f;
-    const auto bits = std::round(clampf(1.0f - g, 0.0f, 1.0f) * (bitsBase - 4.0f) + 4.0f);
-    const auto rate = std::round(46000.0f - g * 38000.0f);
-
-    const auto packetScale = mode == 1 ? 0.72f : (mode == 4 ? 0.35f : 0.25f);
-    const auto packet = clampf(g * packetScale, 0.0f, 1.0f);
-    const auto packetMs = std::round(10.0f + g * (mode == 1 ? 120.0f : 75.0f));
-
-    const auto hum = clampf(0.06f + n * (mode == 2 ? 0.55f : 0.4f), 0.0f, 1.0f);
-    const auto hiss = clampf(0.08f + n * 0.55f, 0.0f, 1.0f);
-    const auto toneMix = clampf((mode == 4 ? 0.45f : 0.22f) + n * 0.15f, 0.0f, 1.0f);
-
-    const auto outGain = std::round((out + d * 0.12f) * 100.0f) / 100.0f;
-
-    const auto roomBase = mode == 2 ? 0.18f : (mode == 3 ? 0.12f : (mode == 4 ? 0.14f : 0.05f));
-    const auto verbMix = clampf(roomBase + n * 0.12f, 0.0f, 1.0f);
-    const auto verbMs = std::round((mode == 2 ? 420.0f : (mode == 3 ? 540.0f : (mode == 4 ? 360.0f : 220.0f))) * (0.75f + 0.55f * n));
-    const auto verbDamp = clampf(mode == 2 ? 0.7f : (mode == 3 ? 0.55f : 0.45f + n * 0.1f), 0.0f, 1.0f);
-
-    const auto echoBase = mode == 3 ? 0.14f : (mode == 2 ? 0.08f : (mode == 4 ? 0.05f : 0.03f));
-    const auto echoMix = clampf(echoBase + g * 0.08f, 0.0f, 1.0f);
-    const auto echoMs = std::round((mode == 3 ? 240.0f : (mode == 2 ? 260.0f : 180.0f)) * (0.85f + 0.35f * g));
-    const auto echoFb = clampf(0.12f + (mode == 3 ? 0.35f : 0.22f) * g, 0.0f, 1.0f);
-    const auto echoTone = clampf(mode == 2 ? 0.45f : 0.6f + n * 0.15f, 0.0f, 1.0f);
-
-    setParamValue("hpHz", hpHz);
-    setParamValue("lpHz", lpHz);
-    setParamValue("midHumpDb", midDb);
-    setParamValue("midFreq", midFreq);
-    setParamValue("comp", compV);
-    setParamValue("bits", bits);
-    setParamValue("rate", rate);
-    setParamValue("packet", packet);
-    setParamValue("packetMs", packetMs);
-    setParamValue("hum", hum);
-    setParamValue("hiss", hiss);
-    setParamValue("toneMix", toneMix);
-    setParamValue("ceiling", ceil);
-    setParamValue("outGain", outGain);
-    setParamValue("echoMix", echoMix);
-    setParamValue("echoMs", echoMs);
-    setParamValue("echoFb", echoFb);
-    setParamValue("echoTone", echoTone);
-    setParamValue("verbMix", verbMix);
-    setParamValue("verbMs", verbMs);
-    setParamValue("verbDamp", verbDamp);
+    if (!suppressPresetChanges) presetBox.setSelectedId(1, juce::dontSendNotification);
 }
 
-void CommsEngineAudioProcessorEditor::applyPreset(int idx)
+void CommsEngineAudioProcessorEditor::applyPreset(int index)
 {
-    if (idx < 0 || idx >= (int) std::size(kPresets))
-        return;
-
-    suppressMacros = true;
-    for (const auto& kv : kPresets[(size_t) idx].values)
-        setParamValue(kv.first, kv.second);
-
-    applyMacroTargets((int) getParamValue("mode"), getParamValue("bandwidth"), getParamValue("drive"), getParamValue("glitch"), getParamValue("noise"));
-    suppressMacros = false;
-
-    lastMode = (int) getParamValue("mode");
-    lastBandwidth = getParamValue("bandwidth");
-    lastDrive = getParamValue("drive");
-    lastGlitch = getParamValue("glitch");
-    lastNoise = getParamValue("noise");
+    if (index < 0 || index >= (int) std::size(presets)) return;
+    suppressPresetChanges = true;
+    for (auto* parameter : processor.getParameters()) parameter->setValueNotifyingHost(parameter->getDefaultValue());
+    for (const auto& [id, value] : presets[(std::size_t) index].values) setParameter(id, value);
+    suppressPresetChanges = false;
 }
 
 void CommsEngineAudioProcessorEditor::timerCallback()
 {
-    if (suppressMacros)
-        return;
-
-    const auto mode = (int) getParamValue("mode");
-    const auto bw = getParamValue("bandwidth");
-    const auto drive = getParamValue("drive");
-    const auto glitch = getParamValue("glitch");
-    const auto noise = getParamValue("noise");
-
-    if (mode != lastMode || std::abs(bw - lastBandwidth) > 0.0005f || std::abs(drive - lastDrive) > 0.0005f || std::abs(glitch - lastGlitch) > 0.0005f || std::abs(noise - lastNoise) > 0.0005f)
-    {
-        suppressMacros = true;
-        applyMacroTargets(mode, bw, drive, glitch, noise);
-        suppressMacros = false;
-
-        lastMode = mode;
-        lastBandwidth = bw;
-        lastDrive = drive;
-        lastGlitch = glitch;
-        lastNoise = noise;
-        presetBox.setSelectedId(1, juce::dontSendNotification);
-    }
+    const auto linked = getParameter("macroLink") > 0.5f;
+    for (auto* control : linkedAdvancedControls) control->setEnabled(!linked);
+    consoleDisplay.setState(processor.getOutputPeak(), (int) getParameter("mode"),
+                            getParameter("glitch"), getParameter("distance"),
+                            getParameter("alarmTone") > 0.5f);
+    consoleDisplay.advance();
+    statusLabel.setText(linked ? "SURFACE LINK  /  PROTECTED COMMS PATH"
+                               : "ADVANCED CIRCUIT  /  DIRECT HARDWARE CONTROL",
+                        juce::dontSendNotification);
 }
 
 void CommsEngineAudioProcessorEditor::paint(juce::Graphics& g)
 {
-    juce::ColourGradient grad(juce::Colour(0xff131a20), 0.0f, 0.0f, juce::Colour(0xff202b35), 0.0f, (float) getHeight(), false);
-    g.setGradientFill(grad);
-    g.fillAll();
-
-    auto header = getLocalBounds().removeFromTop(82).reduced(8, 8);
-    g.setColour(juce::Colour(0xff1f2832));
-    g.fillRoundedRectangle(header.toFloat(), 10.0f);
-    g.setColour(juce::Colour(0xff556776));
-    g.drawRoundedRectangle(header.toFloat(), 10.0f, 1.2f);
-
-    g.setColour(juce::Colour(0xffa6e2ff));
-    g.fillRoundedRectangle((float) header.getRight() - 300.0f, (float) header.getY() + 10.0f, 278.0f, 48.0f, 8.0f);
-    g.setColour(juce::Colour(0xff275666));
-    g.drawRoundedRectangle(juce::Rectangle<float>((float) header.getRight() - 300.0f, (float) header.getY() + 10.0f, 278.0f, 48.0f), 8.0f, 1.0f);
+    g.fillAll(juce::Colour(ink));
+    auto header = getLocalBounds().removeFromTop(112).toFloat();
+    g.setColour(juce::Colour(deep));
+    g.fillRect(header);
+    g.setColour(juce::Colour(cyan));
+    g.fillRect(16.0f, 0.0f, 190.0f, 2.0f);
+    g.setColour(juce::Colour(amber));
+    g.fillRect((float) getWidth() - 150.0f, 0.0f, 134.0f, 2.0f);
+    g.setColour(juce::Colour(0xff343a31));
+    g.drawHorizontalLine(111, 0.0f, (float) getWidth());
+    g.setColour(juce::Colour(0xff171a16).withAlpha(0.62f));
+    for (int y = 112; y < getHeight(); y += 4) g.drawHorizontalLine(y, 0.0f, (float) getWidth());
 }
 
 void CommsEngineAudioProcessorEditor::resized()
 {
-    auto area = getLocalBounds().reduced(10);
-    auto header = area.removeFromTop(74);
+    auto area = getLocalBounds().reduced(16);
+    auto header = area.removeFromTop(94);
+    auto profile = header.removeFromRight(270);
+    profileLabel.setBounds(profile.removeFromTop(17));
+    presetBox.setBounds(profile.removeFromTop(32));
+    auto heading = header;
+    brandLabel.setBounds(heading.removeFromTop(18));
+    titleLabel.setBounds(heading.removeFromTop(35));
+    subtitleLabel.setBounds(heading.removeFromTop(18));
+    auto modeRow = area.removeFromTop(40);
+    surfaceButton.setBounds(modeRow.removeFromLeft(108).reduced(0, 4));
+    modeRow.removeFromLeft(8);
+    advancedButton.setBounds(modeRow.removeFromLeft(108).reduced(0, 4));
+    statusLabel.setBounds(modeRow);
+    area.removeFromTop(6);
+    surfacePage.setBounds(area);
+    advancedPage.setBounds(area);
 
-    auto left = header.removeFromLeft(420);
-    title.setBounds(left.removeFromTop(42).withTrimmedLeft(18));
-    subtitle.setBounds(left.withTrimmedLeft(20));
-
-    auto right = header.withTrimmedLeft(26);
-    presetLabel.setBounds(right.removeFromTop(18));
-    presetBox.setBounds(right.removeFromTop(30).removeFromLeft(230));
-
-    tabs.setBounds(area);
-    layoutPage(macroPage, 3);
-    layoutPage(corePage, 4);
-    layoutPage(fxPage, 4);
-    layoutPage(outputPage, 2);
+    if (!showingAdvanced)
+    {
+        auto surface = surfacePage.getLocalBounds();
+        auto display = surface.removeFromLeft((int) std::round(surface.getWidth() * 0.56f));
+        consoleDisplay.setBounds(display.reduced(0, 4).withTrimmedRight(7));
+        auto controls = surface.withTrimmedLeft(7);
+        characterPanel.setBounds(controls.removeFromTop((int) std::round(controls.getHeight() * 0.62f)).withTrimmedBottom(6));
+        outputPanel.setBounds(controls.withTrimmedTop(6));
+        layoutPanel(characterPanel, 2);
+        layoutPanel(outputPanel, 3);
+    }
+    else
+    {
+        auto advanced = advancedPage.getLocalBounds();
+        const auto gap = 8;
+        const auto columnWidth = (advanced.getWidth() - gap * 2) / 3;
+        const auto rowHeight = (advanced.getHeight() - gap) / 2;
+        Panel* panels[] { &tonePanel, &transmitterPanel, &receptionPanel, &noisePanel, &squelchPanel, &searchPanel };
+        for (int index = 0; index < 6; ++index)
+        {
+            const auto column = index % 3;
+            const auto row = index / 3;
+            panels[index]->setBounds(column * (columnWidth + gap), row * (rowHeight + gap), columnWidth, rowHeight);
+        }
+        layoutPanel(tonePanel, 3);
+        layoutPanel(transmitterPanel, 4);
+        layoutPanel(receptionPanel, 2);
+        layoutPanel(noisePanel, 2);
+        layoutPanel(squelchPanel, 3);
+        layoutPanel(searchPanel, 3);
+    }
 }

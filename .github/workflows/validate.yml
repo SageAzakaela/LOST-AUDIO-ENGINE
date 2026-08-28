@@ -34,10 +34,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libasound2-dev libegl1-mesa-dev libfreetype-dev libfontconfig1-dev libgl1-mesa-dev libx11-dev libxcomposite-dev libxcursor-dev libxext-dev libxi-dev libxinerama-dev libxrandr-dev libxrender-dev
-      - name: Compile the Tape and Transmission V2 plugins and editors
+      - name: Compile the Tape, Transmission, and Comms V2 plugins and editors
         run: |
           cmake -S . -B build-tape -DLAE_BUILD_PLUGINS=ON -DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release
-          cmake --build build-tape --target TapeEngine_VST3 TransmissionEngine_VST3 --parallel 2
+          cmake --build build-tape --target TapeEngine_VST3 TransmissionEngine_VST3 CommsEngine_VST3 --parallel 2
       - name: Run browser DSP and responsive harnesses
         run: node scripts/run-browser-harnesses.mjs --ci
       - name: Generate deterministic parity fixtures
@@ -59,13 +59,14 @@ jobs:
       - name: Configure pinned JUCE and native V2
         run: cmake -S . -B build-tape -DLAE_BUILD_PLUGINS=ON -DBUILD_TESTING=OFF
       - name: Build Windows VST3s
-        run: cmake --build build-tape --config Release --target TapeEngine_VST3 TransmissionEngine_VST3 --parallel 2
+        run: cmake --build build-tape --config Release --target TapeEngine_VST3 TransmissionEngine_VST3 CommsEngine_VST3 --parallel 2
       - name: Verify developer bundles
         shell: pwsh
         run: |
           $bundles = @(
             "build-tape/tape-vst3/TapeEngine_artefacts/Release/VST3/Tape Engine.vst3",
-            "build-tape/transmission-vst3/TransmissionEngine_artefacts/Release/VST3/Transmission Engine.vst3"
+            "build-tape/transmission-vst3/TransmissionEngine_artefacts/Release/VST3/Transmission Engine.vst3",
+            "build-tape/comms-vst3/CommsEngine_artefacts/Release/VST3/Comms Engine.vst3"
           )
           foreach ($bundle in $bundles) {
             if (-not (Test-Path -LiteralPath $bundle)) {
@@ -77,7 +78,8 @@ jobs:
         run: |
           $products = @(
             @{ Bundle = "build-tape/tape-vst3/TapeEngine_artefacts/Release/VST3/Tape Engine.vst3"; Binary = "Tape Engine.vst3" },
-            @{ Bundle = "build-tape/transmission-vst3/TransmissionEngine_artefacts/Release/VST3/Transmission Engine.vst3"; Binary = "Transmission Engine.vst3" }
+            @{ Bundle = "build-tape/transmission-vst3/TransmissionEngine_artefacts/Release/VST3/Transmission Engine.vst3"; Binary = "Transmission Engine.vst3" },
+            @{ Bundle = "build-tape/comms-vst3/CommsEngine_artefacts/Release/VST3/Comms Engine.vst3"; Binary = "Comms Engine.vst3" }
           )
           $stage = "dist/dev/lost-audio-v2-windows-x64"
           New-Item -ItemType Directory -Path $stage -Force | Out-Null

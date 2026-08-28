@@ -42,6 +42,8 @@ const required = [
   "native/core/src/TapeProcessor.cpp", "native/core/tests/TapeProcessorTests.cpp",
   "native/core/include/lost_audio/core/TransmissionProcessor.h",
   "native/core/src/TransmissionProcessor.cpp", "native/core/tests/TransmissionProcessorTests.cpp",
+  "native/core/include/lost_audio/core/CommsProcessor.h",
+  "native/core/src/CommsProcessor.cpp", "native/core/tests/CommsProcessorTests.cpp",
   "installer/windows/TapeEngine.iss", "scripts/build-tape-windows-installer.ps1",
   "tests/obfuscation-body-harness.mjs", "tests/parity/parity.py", ".github/workflows/validate.yml",
 ];

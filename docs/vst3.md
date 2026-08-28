@@ -45,6 +45,31 @@ influence, and a material clean/damaged difference. Audible comparison against
 frozen web renders, smoothing under aggressive automation, DAW recall, and
 hands-on UI approval remain open gates.
 
+## Comms V2 vertical slice
+
+Comms now uses a third dependency-free processor in `native/core`. Its five
+hardware modes do not share one generic radio curve: Landline uses companded
+quantization and carbon-granule modulation; Cellular uses predictive coding and
+packet failures; Intercom emphasizes half-duplex gating and box resonance; PA
+uses a wider driven horn and distant space; Alarm Panel adds a protected
+two-tone generator. Signal-excited transducers, line aging, hum/hiss, early
+reflections, room response, distance filtering, AGC, and final limiting complete
+the path.
+
+The previous editor-driven macro updates have been removed. Surface mapping now
+runs in the processor even when the editor is closed, while Surface Link can be
+disabled for direct hardware control. V2 appends the missing character,
+distance, transducer, line-age, duplex, rattle, input, and mix parameters without
+changing the existing `CmEg` identity or legacy parameter identifiers. The
+resizable no-scroll console provides a live voice trace, hardware-channel
+indicators, six focused Advanced panels, and sixteen reset-safe profiles.
+
+The portable Comms test protects transparent dry mix, deterministic seeded
+failures, host-block-size invariance, bounded finite output, macro influence,
+and material separation between hardware modes. Audible comparison against
+frozen web renders, parameter smoothing, DAW recall/automation, and hands-on UI
+approval remain open gates.
+
 ## Developer builds
 
 During V2 development, build plugins locally and test the generated `.vst3`
@@ -61,7 +86,7 @@ The bundle is generated at:
 build-tape/tape-vst3/TapeEngine_artefacts/Release/VST3/Tape Engine.vst3
 ```
 
-CI uploads the current Tape and Transmission bundles together as
+CI uploads the current Tape, Transmission, and Comms bundles together as
 `lost-audio-v2-windows-dev-vst3` for build inspection. They are unsigned, are
 not releases, and may be rejected by Windows
 Smart App Control after download. A locally compiled bundle is the supported
