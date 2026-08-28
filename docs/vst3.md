@@ -22,6 +22,29 @@ Its former fixed 860 x 540 stock-tab editor has been retired. Tape V2 now uses a
 
 The dependency-free native test checks reported/actual latency, seed determinism, host-block-size invariance, finite output, ceiling safety, and macro influence. CI additionally compiles the Tape VST3 target and its editor against the pinned JUCE revision, then preserves an explicitly labelled unsigned developer bundle after the source, DSP, native, and browser gates pass. Audible parity, smoothing under automation, complete preset parity, DAW scanning, and hands-on plugin UI approval remain open gates.
 
+## Transmission V2 vertical slice
+
+Transmission now uses a second dependency-free processor in `native/core`. It
+ports the web receiver's level-matched pre/post saturation, repeated filter
+stages, causal six-millisecond carrier displacement, deterministic dropouts and
+interference, colored noise, generational loss, squelch transitions, fixed host
+latency, and latency-aligned Mix control. The JUCE adapter retains embedded
+tuning recordings and transport-aware search events.
+
+The legacy fixed 860 x 540 tab grid has been replaced by a resizable receiver
+surface with a live tuning scale, signal meter, clear Surface/Advanced modes,
+six no-scroll advanced sections, protected Surface linking, direct-circuit
+unlocking, input/mix/output controls, and sixteen reset-safe factory profiles.
+The existing `TrnE` identity and parameter identifiers are preserved; new V2
+parameters are appended and saved with `engineId=transmission` and
+`schemaVersion=2`.
+
+The portable Transmission test protects fixed latency, latency-aligned dry mix,
+seed determinism, host-block-size invariance, bounded finite output, macro
+influence, and a material clean/damaged difference. Audible comparison against
+frozen web renders, smoothing under aggressive automation, DAW recall, and
+hands-on UI approval remain open gates.
+
 ## Developer builds
 
 During V2 development, build plugins locally and test the generated `.vst3`
@@ -38,8 +61,9 @@ The bundle is generated at:
 build-tape/tape-vst3/TapeEngine_artefacts/Release/VST3/Tape Engine.vst3
 ```
 
-CI uploads the same bundle as `lost-audio-tape-v2-windows-dev-vst3` for build
-inspection. It is unsigned, is not a release, and may be rejected by Windows
+CI uploads the current Tape and Transmission bundles together as
+`lost-audio-v2-windows-dev-vst3` for build inspection. They are unsigned, are
+not releases, and may be rejected by Windows
 Smart App Control after download. A locally compiled bundle is the supported
 development path until release signing is implemented.
 

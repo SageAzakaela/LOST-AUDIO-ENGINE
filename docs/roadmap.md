@@ -249,7 +249,7 @@ Exit: the web reference has evidence-backed Windows/Linux support, platform fail
 1. Pin JUCE and establish clean cross-platform CMake/CI builds.
 2. Build the shared parameter/preset schema and migration system.
 3. Implement a portable realtime-safe DSP core plus JUCE and WebAssembly/AudioWorklet adapters.
-4. Port the complete web Tape graph first, including deterministic transport behavior, then use the proven boundary for Transmission.
+4. Port the complete web Tape graph first, including deterministic transport behavior, then use the proven boundary for Transmission. (Transmission's first shared-core V2 vertical slice is implemented; listening and host approval remain.)
 5. Create reusable Surface/Advanced UI components while retaining distinct device art direction.
 6. Run parity, plugin validation, DAW recall/automation smoke tests, and level-matched listening.
 

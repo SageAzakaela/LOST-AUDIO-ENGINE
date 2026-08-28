@@ -40,6 +40,8 @@ const required = [
   "tests/platform-browser-harness.html", "tests/platform-browser-harness.js",
   "native/core/CMakeLists.txt", "native/core/include/lost_audio/core/TapeProcessor.h",
   "native/core/src/TapeProcessor.cpp", "native/core/tests/TapeProcessorTests.cpp",
+  "native/core/include/lost_audio/core/TransmissionProcessor.h",
+  "native/core/src/TransmissionProcessor.cpp", "native/core/tests/TransmissionProcessorTests.cpp",
   "installer/windows/TapeEngine.iss", "scripts/build-tape-windows-installer.ps1",
   "tests/obfuscation-body-harness.mjs", "tests/parity/parity.py", ".github/workflows/validate.yml",
 ];

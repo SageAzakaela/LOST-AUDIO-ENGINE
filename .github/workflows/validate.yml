@@ -34,10 +34,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libasound2-dev libegl1-mesa-dev libfreetype-dev libfontconfig1-dev libgl1-mesa-dev libx11-dev libxcomposite-dev libxcursor-dev libxext-dev libxi-dev libxinerama-dev libxrandr-dev libxrender-dev
-      - name: Compile the Tape V2 plugin and editor
+      - name: Compile the Tape and Transmission V2 plugins and editors
         run: |
           cmake -S . -B build-tape -DLAE_BUILD_PLUGINS=ON -DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release
-          cmake --build build-tape --target TapeEngine_VST3 --parallel 2
+          cmake --build build-tape --target TapeEngine_VST3 TransmissionEngine_VST3 --parallel 2
       - name: Run browser DSP and responsive harnesses
         run: node scripts/run-browser-harnesses.mjs --ci
       - name: Generate deterministic parity fixtures
@@ -56,28 +56,38 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-      - name: Configure pinned JUCE and Tape V2
+      - name: Configure pinned JUCE and native V2
         run: cmake -S . -B build-tape -DLAE_BUILD_PLUGINS=ON -DBUILD_TESTING=OFF
-      - name: Build Windows VST3
-        run: cmake --build build-tape --config Release --target TapeEngine_VST3 --parallel 2
-      - name: Verify test bundle
+      - name: Build Windows VST3s
+        run: cmake --build build-tape --config Release --target TapeEngine_VST3 TransmissionEngine_VST3 --parallel 2
+      - name: Verify developer bundles
         shell: pwsh
         run: |
-          $bundle = "build-tape/tape-vst3/TapeEngine_artefacts/Release/VST3/Tape Engine.vst3"
-          if (-not (Test-Path -LiteralPath $bundle)) {
-            throw "Tape V2 bundle was not produced at $bundle"
+          $bundles = @(
+            "build-tape/tape-vst3/TapeEngine_artefacts/Release/VST3/Tape Engine.vst3",
+            "build-tape/transmission-vst3/TransmissionEngine_artefacts/Release/VST3/Transmission Engine.vst3"
+          )
+          foreach ($bundle in $bundles) {
+            if (-not (Test-Path -LiteralPath $bundle)) {
+              throw "V2 developer bundle was not produced at $bundle"
+            }
           }
       - name: Stage unsigned developer bundle
         shell: pwsh
         run: |
-          $bundle = "build-tape/tape-vst3/TapeEngine_artefacts/Release/VST3/Tape Engine.vst3"
-          $processor = "$bundle/Contents/x86_64-win/Tape Engine.vst3"
-          $stage = "dist/dev/tape-v2-windows-x64"
+          $products = @(
+            @{ Bundle = "build-tape/tape-vst3/TapeEngine_artefacts/Release/VST3/Tape Engine.vst3"; Binary = "Tape Engine.vst3" },
+            @{ Bundle = "build-tape/transmission-vst3/TransmissionEngine_artefacts/Release/VST3/Transmission Engine.vst3"; Binary = "Transmission Engine.vst3" }
+          )
+          $stage = "dist/dev/lost-audio-v2-windows-x64"
           New-Item -ItemType Directory -Path $stage -Force | Out-Null
-          Copy-Item -LiteralPath $bundle -Destination $stage -Recurse
-          $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $processor
-          "$($hash.Hash.ToLowerInvariant())  Tape Engine.vst3/Contents/x86_64-win/Tape Engine.vst3" |
-            Set-Content -LiteralPath "$stage/SHA256SUMS.txt" -Encoding ascii
+          $hashLines = foreach ($product in $products) {
+            Copy-Item -LiteralPath $product.Bundle -Destination $stage -Recurse
+            $processor = "$($product.Bundle)/Contents/x86_64-win/$($product.Binary)"
+            $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $processor
+            "$($hash.Hash.ToLowerInvariant())  $($product.Binary)/Contents/x86_64-win/$($product.Binary)"
+          }
+          $hashLines | Set-Content -LiteralPath "$stage/SHA256SUMS.txt" -Encoding ascii
           @"
           LOST AUDIO ENGINE - UNSIGNED DEVELOPER BUILD
 
@@ -90,10 +100,10 @@ jobs:
           reject downloaded unsigned binaries. Prefer a build made locally from
           this commit for testing on a development machine.
           "@ | Set-Content -LiteralPath "$stage/DEV-BUILD.txt" -Encoding ascii
-      - name: Upload Windows Tape V2 developer bundle
+      - name: Upload Windows V2 developer bundles
         uses: actions/upload-artifact@v7
         with:
-          name: lost-audio-tape-v2-windows-dev-vst3
+          name: lost-audio-v2-windows-dev-vst3
           path: |
-            dist/dev/tape-v2-windows-x64/
+            dist/dev/lost-audio-v2-windows-x64/
           if-no-files-found: error

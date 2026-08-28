@@ -1,5 +1,6 @@
 add_library(lost_audio_core STATIC
   src/TapeProcessor.cpp
+  src/TransmissionProcessor.cpp
 )
 
 add_library(LostAudio::Core ALIAS lost_audio_core)
@@ -23,4 +24,10 @@ if(BUILD_TESTING)
   )
   target_link_libraries(lost_audio_core_tests PRIVATE LostAudio::Core)
   add_test(NAME lost_audio_core_tests COMMAND lost_audio_core_tests)
+
+  add_executable(lost_audio_transmission_core_tests
+    tests/TransmissionProcessorTests.cpp
+  )
+  target_link_libraries(lost_audio_transmission_core_tests PRIVATE LostAudio::Core)
+  add_test(NAME lost_audio_transmission_core_tests COMMAND lost_audio_transmission_core_tests)
 endif()
