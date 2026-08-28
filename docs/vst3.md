@@ -20,7 +20,20 @@ The Tape adapter now:
 
 Its former fixed 860 x 540 stock-tab editor has been retired. Tape V2 now uses a resizable, device-specific cassette surface with animated reels, live output metering, four readable character macros, and a deliberate Surface/Advanced split. Advanced keeps the entire signal path visible in four named sections without scrolling. The minimum 820 x 560 layout is intended for laptop hosts; the editor scales to 1600 x 1000.
 
-The dependency-free native test checks reported/actual latency, seed determinism, host-block-size invariance, finite output, ceiling safety, and macro influence. CI additionally compiles the Tape VST3 target and its editor against the pinned JUCE revision, then produces a downloadable Windows VST3 test bundle after the source, DSP, native, and browser gates pass. Audible parity, smoothing under automation, complete preset parity, DAW scanning, and hands-on plugin UI approval remain open gates.
+The dependency-free native test checks reported/actual latency, seed determinism, host-block-size invariance, finite output, ceiling safety, and macro influence. CI additionally compiles the Tape VST3 target and its editor against the pinned JUCE revision, then produces a downloadable Windows installer after the source, DSP, native, and browser gates pass. Audible parity, smoothing under automation, complete preset parity, DAW scanning, and hands-on plugin UI approval remain open gates.
+
+## Windows installer
+
+Tape V2 is packaged with Inno Setup 6.4.3. The installer requests normal administrative elevation, installs the complete 64-bit bundle to the VST3 standard location at `C:\Program Files\Common Files\VST3\Tape Engine.vst3`, and registers a Windows uninstall entry. It intentionally has no custom destination page, launcher, or Start-menu shortcut.
+
+To reproduce the package after building `TapeEngine_VST3` in Release mode:
+
+```powershell
+nuget install Tools.InnoSetup -Version 6.4.3 -OutputDirectory .tools -ExcludeVersion
+.\scripts\build-tape-windows-installer.ps1 -BuildDirectory .\build-tape -OutputDirectory .\dist\windows -IsccPath .\.tools\Tools.InnoSetup\tools\ISCC.exe
+```
+
+The script validates the bundle and processor binary before compiling the installer, then emits the setup executable and a SHA-256 file. Public releases still require Authenticode signing; CI preview installers are unsigned and must not be represented as production installers.
 
 ## Plugin identities
 

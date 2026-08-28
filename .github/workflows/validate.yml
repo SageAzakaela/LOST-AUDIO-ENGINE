@@ -67,9 +67,22 @@ jobs:
           if (-not (Test-Path -LiteralPath $bundle)) {
             throw "Tape V2 bundle was not produced at $bundle"
           }
-      - name: Upload Windows Tape V2 test build
+      - name: Acquire pinned installer compiler
+        shell: pwsh
+        run: |
+          $package = ".tools/Tools.InnoSetup.6.4.3.nupkg"
+          $compilerRoot = ".tools/Tools.InnoSetup.6.4.3"
+          New-Item -ItemType Directory -Path $compilerRoot -Force | Out-Null
+          Invoke-WebRequest -UseBasicParsing -Uri "https://api.nuget.org/v3-flatcontainer/tools.innosetup/6.4.3/tools.innosetup.6.4.3.nupkg" -OutFile $package
+          tar -xf $package -C $compilerRoot
+      - name: Package Windows installer
+        shell: pwsh
+        run: ./scripts/build-tape-windows-installer.ps1 -BuildDirectory ./build-tape -OutputDirectory ./dist/windows -IsccPath ./.tools/Tools.InnoSetup.6.4.3/tools/ISCC.exe
+      - name: Upload Windows Tape V2 installer
         uses: actions/upload-artifact@v7
         with:
-          name: lost-audio-tape-v2-windows-vst3
-          path: build-tape/tape-vst3/TapeEngine_artefacts/Release/VST3/Tape Engine.vst3
+          name: lost-audio-tape-v2-windows-installer
+          path: |
+            dist/windows/*.exe
+            dist/windows/*.sha256
           if-no-files-found: error

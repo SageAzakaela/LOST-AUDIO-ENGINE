@@ -40,6 +40,7 @@ const required = [
   "tests/platform-browser-harness.html", "tests/platform-browser-harness.js",
   "native/core/CMakeLists.txt", "native/core/include/lost_audio/core/TapeProcessor.h",
   "native/core/src/TapeProcessor.cpp", "native/core/tests/TapeProcessorTests.cpp",
+  "installer/windows/TapeEngine.iss", "scripts/build-tape-windows-installer.ps1",
   "tests/obfuscation-body-harness.mjs", "tests/parity/parity.py", ".github/workflows/validate.yml",
 ];
 for (const path of required) if (!existsSync(join(root, path))) fail(`required path is missing: ${path}`);
