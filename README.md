@@ -99,16 +99,18 @@ python tests/parity/parity.py generate --out tests/parity/fixtures
 
 Run the cross-platform Chromium gate with `node scripts/run-browser-harnesses.mjs --full`; it requires no package installation and writes evidence under `.artifacts/`. Browser DSP harnesses and the manual listening matrix are documented in [docs/testing.md](docs/testing.md). Numerical tests protect wiring, determinism, safety, and parameter influence; they do not replace level-matched listening.
 
-## Build the existing native plugins
+## Build the native plugins
 
-The repository contains ten JUCE projects. They are historical MVP ports and are **not yet at parity with the web reference**.
+The repository contains eleven individual B&E Digital JUCE effects plus the
+all-in-one Lost Audio Suite and Lost Audio Sequencer. The shared native DSP and wrapper regressions are
+automated; audible character and DAW workflow approval remain hands-on QA gates.
 
 ```powershell
 cmake -S . -B build -DJUCE_DIR=C:\path\to\JUCE
 cmake --build build --config Release
 ```
 
-JUCE is external and not yet pinned. Record the exact JUCE commit for diagnostic builds. See [docs/vst3.md](docs/vst3.md) before treating any native build as a release.
+JUCE is pinned by the root build. See [docs/vst3.md](docs/vst3.md) before treating any native build as a release.
 
 Native V2 testing currently uses local developer builds. Windows installers and
 public native packages are deliberately deferred until the individual plugin

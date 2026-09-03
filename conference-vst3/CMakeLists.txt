@@ -12,9 +12,14 @@ if(NOT TARGET juce::juce_audio_utils)
   add_subdirectory(${JUCE_DIR} JUCE)
 endif()
 
+if(NOT TARGET lost_audio_core)
+  include(CTest)
+  add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../native/core ${CMAKE_CURRENT_BINARY_DIR}/lost-audio-core)
+endif()
+
 juce_add_plugin(ConferenceEngine
-  COMPANY_NAME "LostAudio"
-  BUNDLE_ID "com.lostaudio.conferenceengine"
+  COMPANY_NAME "B&E Digital"
+  BUNDLE_ID "com.lostaudio.conferenceengine" # Stable legacy identity; publisher is B&E Digital.
   IS_SYNTH FALSE
   NEEDS_MIDI_INPUT FALSE
   NEEDS_MIDI_OUTPUT FALSE
@@ -46,6 +51,7 @@ target_compile_definitions(ConferenceEngine
 
 target_link_libraries(ConferenceEngine
   PRIVATE
+    LostAudio::Core
     juce::juce_dsp
     juce::juce_audio_utils
   PUBLIC
@@ -53,3 +59,20 @@ target_link_libraries(ConferenceEngine
     juce::juce_recommended_lto_flags
     juce::juce_recommended_warning_flags
 )
+
+if(BUILD_TESTING)
+  add_executable(lost_audio_conference_adapter_tests tests/AdapterTests.cpp)
+  target_include_directories(lost_audio_conference_adapter_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_BINARY_DIR}/ConferenceEngine_artefacts/JuceLibraryCode
+  )
+  target_link_libraries(lost_audio_conference_adapter_tests PRIVATE ConferenceEngine LostAudio::Core juce::juce_audio_plugin_client juce::juce_audio_utils juce::juce_dsp)
+  add_test(NAME lost_audio_conference_adapter_tests COMMAND lost_audio_conference_adapter_tests)
+
+  add_executable(lost_audio_conference_visual_harness tests/VisualHarness.cpp)
+  target_include_directories(lost_audio_conference_visual_harness PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_BINARY_DIR}/ConferenceEngine_artefacts/JuceLibraryCode
+  )
+  target_link_libraries(lost_audio_conference_visual_harness PRIVATE ConferenceEngine LostAudio::Core juce::juce_audio_plugin_client juce::juce_audio_utils juce::juce_dsp)
+endif()

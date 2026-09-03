@@ -1,16 +1,38 @@
 # Open Mic Night VST3
 
-JUCE-based VST3 + Standalone port of Open Mic Night.
+Open Mic Night is Lost Audio Engine's live-scene processor: microphone,
+preamp, monitor, PA, venue, audience, and deliberately armed feedback in one
+stereo physical model. V2 uses the dependency-free processor in `native/core`
+and keeps the original `OmNt` plug-in identity and V1 parameter prefix.
 
-## Build (Windows / VS 2022)
+Feedback is disarmed in every factory preset. Arm it explicitly, and keep the
+Safety control engaged while auditioning. The feedback loop is internally
+bounded and followed by a separate output ceiling, but normal monitoring
+precautions still apply.
+
+The V2 developer-QA bundle embeds four selectable audience ambiences plus
+separate applause and cheer reactions from the web tool. Reactive mode listens
+to performance energy and responds after phrase endings; Steady Ambience and
+Manual / Clocked are explicit alternatives. Beds are loudness-normalized and
+crossfaded when switched. Public distribution of those recordings still
+requires explicit provenance and rights confirmation. Additional legacy MP3
+beds remain excluded until their license and provenance metadata are complete.
+
+## Developer build
+
+From the repository root:
 
 ```powershell
-& "C:\Program Files\CMake\bin\cmake.exe" -S "c:\Users\erina\Desktop\aaaaaaa\RADIO FILTER\openmicnight-vst3" -B "c:\Users\erina\Desktop\aaaaaaa\RADIO FILTER\openmicnight-vst3\build" -G "Visual Studio 17 2022" -A x64 -DJUCE_DIR="C:/SDKs/JUCE"
-& "C:\Program Files\CMake\bin\cmake.exe" --build "c:\Users\erina\Desktop\aaaaaaa\RADIO FILTER\openmicnight-vst3\build" --config Release
+cmake -S . -B build -DLAE_BUILD_PLUGINS=ON -DBUILD_TESTING=OFF
+cmake --build build --config Release --target OpenMicNight_VST3 --parallel 2
 ```
 
-## Output
+The unsigned developer bundle is generated at:
 
-`openmicnight-vst3/build/OpenMicNight_artefacts/Release/VST3/Open Mic Night.vst3`
+```text
+build/openmicnight-vst3/OpenMicNight_artefacts/Release/VST3/Open Mic Night.vst3
+```
 
-`COPY_PLUGIN_AFTER_BUILD` is disabled, so copy the bundle manually to your VST3 scan path.
+`COPY_PLUGIN_AFTER_BUILD` is disabled. Copying into a DAW scan path remains an
+explicit local QA step; public installers stay deferred until the fleet is
+approved and the release-signing pipeline exists.

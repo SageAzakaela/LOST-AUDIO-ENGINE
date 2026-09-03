@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -30,6 +31,7 @@ struct TransmissionParameters
     float inputGain = 1.0f;
     float outputGain = 0.92f;
     float mix = 1.0f;
+    float ceiling = 1.0f;
     int passes = 1;
     bool walkieEnabled = false;
     float walkieThresholdDb = -45.0f;
@@ -70,11 +72,24 @@ public:
 
     void prepare(double sampleRate, std::size_t channelCount);
     void reset(std::uint32_t seed = 0x7472616eu) noexcept;
+    void triggerDropout(float strength = 1.0f, float durationSeconds = 0.08f) noexcept;
     void process(float* const* channels, std::size_t channelCount, std::size_t sampleCount,
                  const TransmissionParameters& parameters) noexcept;
 
     [[nodiscard]] int latencySamples() const noexcept;
     [[nodiscard]] double sampleRate() const noexcept { return sampleRate_; }
+    [[nodiscard]] float carrierDisplacementMs() const noexcept { return carrierDisplacementMs_; }
+    [[nodiscard]] bool dropoutActive() const noexcept { return dropoutActive_; }
+    [[nodiscard]] float dropoutProgress() const noexcept { return dropoutProgress_; }
+    [[nodiscard]] float compressionReduction() const noexcept { return compressionReduction_; }
+    [[nodiscard]] float noiseActivity() const noexcept { return noiseActivity_; }
+    [[nodiscard]] float crackleActivity() const noexcept { return crackleActivity_; }
+    [[nodiscard]] float limiterActivity() const noexcept { return limiterActivity_; }
+    [[nodiscard]] bool squelchClosed() const noexcept { return walkie_.inSilence; }
+    [[nodiscard]] float squelchEventActivity() const noexcept
+    {
+        return walkie_.clickTotal > 0 ? static_cast<float>(walkie_.clickRemaining) / static_cast<float>(walkie_.clickTotal) : 0.0f;
+    }
 
 private:
     struct Biquad
@@ -112,6 +127,7 @@ private:
         float dropoutDepth = 1.0f;
         int crackleRemaining = 0;
         int crackleTotal = 0;
+        float crackleState = 0.0f;
     };
 
     struct DryDelay
@@ -154,5 +170,10 @@ private:
     std::size_t preparedChannels_ = 0;
     int stageDelaySamples_ = 288;
     std::uint32_t seed_ = 0x7472616eu;
+    std::atomic<float> pendingDropoutStrength_ { 0.0f }, pendingDropoutDuration_ { 0.0f };
+    float carrierDisplacementMs_ = 0.0f, dropoutProgress_ = 0.0f;
+    float compressionReduction_ = 0.0f, noiseActivity_ = 0.0f;
+    float crackleActivity_ = 0.0f, limiterActivity_ = 0.0f;
+    bool dropoutActive_ = false;
 };
 }

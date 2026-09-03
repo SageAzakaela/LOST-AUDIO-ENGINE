@@ -1,8 +1,9 @@
-import { buildLameGraph, buildMasterLane, ensureMasterWorklets } from "./audio/graph.js?v=20260827.43";
+import { buildLameGraph, buildMasterLane, ensureMasterWorklets } from "./audio/graph.js?v=20260828.44";
 import { encodeWavPcm16 } from "./audio/wav.js";
 import { mapBandwidth } from "../../src/audio/graph.js?v=20260827.4";
 import { ENGINE_PRESETS, MASTER_PRESETS } from "./presets.js?v=20260827.33";
 import { detectPlatformCapabilities, formatPlatformReport, getAudioContextConstructor, getOfflineAudioContextConstructor } from "./platform.js?v=20260827.1";
+import { MOBILE_REALTIME_RELEASE_MS, MOBILE_VISUAL_FRAME_MS, realtimePreviewPolicy, shouldUpdateMasterMeter, shouldUpdateRackMeters } from "./mobile-power.js?v=20260828.1";
 
 const TUNING_MANIFEST_URL = new URL("../../audio/manifest.json", import.meta.url);
 const TAPE_SFX_MANIFEST_URL = new URL("../../tape-engine/audio/manifest.json", import.meta.url);
@@ -10,6 +11,15 @@ const CAMCORDER_SFX_MANIFEST_URL = new URL("../../camcorder-engine/audio/manifes
 const TV_SFX_MANIFEST_URL = new URL("../../television-engine/audio/manifest.json", import.meta.url);
 const AudioContextConstructor = getAudioContextConstructor(window);
 const OfflineAudioContextConstructor = getOfflineAudioContextConstructor(window);
+const mobilePowerQaEnabled = new URLSearchParams(window.location.search).has("mobile-power-qa");
+let mobilePowerQaFrames = 0;
+
+function syncMobilePowerQa(state = null) {
+  if (!mobilePowerQaEnabled) return;
+  document.documentElement.dataset.powerVisualFrames = String(mobilePowerQaFrames);
+  document.documentElement.dataset.powerAudio = state || (realtime?.ctx || automationRt?.ctx ? "active" : "released");
+  document.documentElement.dataset.powerPlaying = realtime?.playing || automationRt?.playing ? "true" : "false";
+}
 
 const els = {
   fileInput: document.querySelector("#fileInput"),
@@ -47,6 +57,13 @@ const els = {
   compatibilitySummary: document.querySelector("#compatibilitySummary"),
   compatibilityMissing: document.querySelector("#compatibilityMissing"),
   compatibilityDetails: document.querySelector("#compatibilityDetails"),
+  mobileWorkflowBar: document.querySelector(".mobile-workflow-bar"),
+  mobileWorkflowEyebrow: document.querySelector("#mobileWorkflowEyebrow"),
+  mobileWorkflowTitle: document.querySelector("#mobile-workflow-title"),
+  mobileWorkflowHint: document.querySelector("#mobileWorkflowHint"),
+  mobilePlayBtn: document.querySelector("#mobilePlayBtn"),
+  mobileRackCount: document.querySelector("#mobileRackCount"),
+  rackOrderStatus: document.querySelector("#rackOrderStatus"),
 
   inputTrim: document.querySelector("#inputTrim"),
   monitorVolume: document.querySelector("#monitorVolume"),
@@ -738,14 +755,13 @@ async function ensureCamcorderSfxDecoded({ camBedSource = "", windBedSource = ""
   }
 }
 
-function scheduleCamcorderSfx(ctx, windNode, settings, seed, { startTime = 0, durationSeconds = 0, stopAt = null, looping = false } = {}) {
+function scheduleCamcorderSfx(ctx, windNode, cameraNode, settings, seed, { startTime = 0, durationSeconds = 0, stopAt = null, looping = false } = {}) {
   const created = [];
-  if (!windNode) return created;
+  if (!windNode && !cameraNode) return created;
   const s = settings || {};
 
   const windEnabled = Boolean(s.wind);
   const windLevel = Number(s.windLevel ?? 0);
-  if (!windEnabled || windLevel <= 0.0001) return created;
 
   const camLevel = Math.max(0, Math.min(1, Number(s.camLevel ?? 0.35)));
   const windBedLevel = Math.max(0, Math.min(1, Number(s.windBedLevel ?? 0.85)));
@@ -760,9 +776,9 @@ function scheduleCamcorderSfx(ctx, windNode, settings, seed, { startTime = 0, du
   const bedBuf = bedName ? camcorderSfxCache.get(bedName) || null : null;
   const hitBuf = hitName ? camcorderSfxCache.get(hitName) || null : null;
 
-  if (camBuf && camLevel > 0.0001) {
+  if (cameraNode && camBuf && camLevel > 0.0001) {
     const g = new GainNode(ctx, { gain: camLevel });
-    g.connect(windNode);
+    g.connect(cameraNode);
     const bed = new AudioBufferSourceNode(ctx, { buffer: camBuf });
     bed.loop = true;
     bed.loopStart = 0;
@@ -772,6 +788,8 @@ function scheduleCamcorderSfx(ctx, windNode, settings, seed, { startTime = 0, du
     if (!looping && stopAt != null) bed.stop(stopAt);
     created.push(bed);
   }
+
+  if (!windEnabled || windLevel <= 0.0001 || !windNode) return created;
 
   if (bedBuf && windBedLevel > 0.0001) {
     const g = new GainNode(ctx, { gain: windBedLevel });
@@ -961,9 +979,12 @@ let graphStale = true;
 let selectedModuleId = null;
 let libraryFilter = "all";
 let monitorDry = false;
-const transport = { position: 0, frame: 0 };
+let mobilePanel = "rack";
+let mobileWorkflowResizeObserver = null;
+const transport = { position: 0, frame: 0, frameTimer: 0 };
 const masterMeter = { peakHold: 0, holdUntil: 0 };
 const liveAutomation = { lanes: new Map(), target: "", dragging: null, applying: false, lastMasterUi: 0 };
+let realtimeReleaseTimer = 0;
 
 const automationRt = {
   ctx: null,
@@ -2648,20 +2669,22 @@ function makeModuleEl(m, index, { showWet = true, omitSurfaceParams = false } = 
   const left = document.createElement("button");
   left.className = "miniBtn";
   left.textContent = "←";
+  left.setAttribute("aria-label", `Move ${m.name} earlier in the signal path`);
   const rack = rackModules();
   const rackIndex = rack.findIndex((module) => module.instanceId === m.instanceId);
   left.disabled = rackIndex <= 0;
-  left.addEventListener("click", () => {
+  left.addEventListener("click", async () => {
     if (rackIndex <= 0) return;
-    moveRackModule(m.instanceId, rackIndex - 1);
+    await shiftRackModule(m.instanceId, -1);
   });
   const right = document.createElement("button");
   right.className = "miniBtn";
   right.textContent = "→";
+  right.setAttribute("aria-label", `Move ${m.name} later in the signal path`);
   right.disabled = rackIndex < 0 || rackIndex >= rack.length - 1;
-  right.addEventListener("click", () => {
+  right.addEventListener("click", async () => {
     if (rackIndex < 0 || rackIndex >= rack.length - 1) return;
-    moveRackModule(m.instanceId, rackIndex + 1);
+    await shiftRackModule(m.instanceId, 1);
   });
   btns.appendChild(left);
   btns.appendChild(right);
@@ -3465,6 +3488,118 @@ function selectedModule() {
   return rackModules().find((module) => module.instanceId === selectedModuleId) || null;
 }
 
+const mobileLayoutQuery = window.matchMedia("(max-width: 960px), (pointer: coarse) and (max-width: 1180px)");
+const MOBILE_PANEL_COPY = {
+  library: {
+    eyebrow: "DEVICE LIBRARY / INSTALL",
+    title: "Add",
+    hint: "Choose a device for the signal path. Installed hardware remains marked in the library.",
+  },
+  rack: {
+    eyebrow: "SIGNAL PATH / LEFT TO RIGHT",
+    title: "Rack",
+    hint: "Swipe through the chain. Move the exposed controls, or tap a device face for deeper tuning.",
+  },
+  inspector: {
+    eyebrow: "FOCUSED DEVICE / TUNING",
+    title: "Tune",
+    hint: "The selected device opens here. Its place in the signal path remains unchanged.",
+  },
+  output: {
+    eyebrow: "MASTER OUTPUT / POST CHAIN",
+    title: "Output",
+    hint: "Shape, meter, and protect the final signal with the mastering chain.",
+  },
+};
+
+function isMobileWorkbench() {
+  return mobileLayoutQuery.matches;
+}
+
+function syncMobileTransportUi() {
+  if (!els.mobilePlayBtn) return;
+  const playing = Boolean(realtime.playing);
+  els.mobilePlayBtn.disabled = !audioBuffer;
+  els.mobilePlayBtn.classList.toggle("is-playing", playing);
+  els.mobilePlayBtn.setAttribute("aria-pressed", playing ? "true" : "false");
+  els.mobilePlayBtn.setAttribute("aria-label", playing ? "Pause audio" : "Play audio");
+  const icon = els.mobilePlayBtn.querySelector("span");
+  const label = els.mobilePlayBtn.querySelector("b");
+  if (icon) icon.textContent = playing ? "Ⅱ" : "▶";
+  if (label) label.textContent = playing ? "PAUSE" : "PLAY";
+}
+
+function syncMobileWorkflowUi() {
+  const focused = selectedModule();
+  const copy = MOBILE_PANEL_COPY[mobilePanel] || MOBILE_PANEL_COPY.rack;
+  if (els.mobileWorkflowEyebrow) els.mobileWorkflowEyebrow.textContent = copy.eyebrow;
+  if (els.mobileWorkflowTitle) els.mobileWorkflowTitle.textContent = mobilePanel === "inspector" && focused ? focused.name : copy.title;
+  if (els.mobileWorkflowHint) els.mobileWorkflowHint.textContent = copy.hint;
+  if (els.mobileRackCount) els.mobileRackCount.textContent = String(rackModules().length);
+  for (const button of document.querySelectorAll(".mobile-workflow-dock [data-mobile-panel]")) {
+    const panel = String(button.dataset.mobilePanel || "rack");
+    button.setAttribute("aria-pressed", panel === mobilePanel ? "true" : "false");
+    if (panel === "inspector") button.disabled = !focused;
+  }
+  syncMobileTransportUi();
+}
+
+function syncMobileWorkflowGeometry() {
+  if (!els.mobileWorkflowBar) return;
+  const height = Math.max(76, Math.ceil(els.mobileWorkflowBar.getBoundingClientRect().height));
+  document.documentElement.style.setProperty("--mobile-context-height", `${height}px`);
+}
+
+function setMobilePanel(panel, { scroll = false } = {}) {
+  const requested = Object.prototype.hasOwnProperty.call(MOBILE_PANEL_COPY, panel) ? panel : "rack";
+  mobilePanel = requested === "inspector" && !selectedModule() ? "rack" : requested;
+  document.body.dataset.mobilePanel = mobilePanel;
+  if (isMobileWorkbench()) {
+    if (mobilePanel === "output") openDrawer("mastering", true);
+    else if (els.toolDrawer?.dataset.drawerOpen === "true") openDrawer(String(els.toolDrawer.dataset.drawerTab || "mastering"), false);
+  }
+  syncMobileWorkflowUi();
+  if (shouldUpdateMasterMeter({ mobile: isMobileWorkbench(), panel: mobilePanel }) && !realtime.playing) updateMasterMeter(0, 0);
+  if (scroll && isMobileWorkbench()) {
+    const targets = {
+      library: document.querySelector(".device-library"),
+      rack: document.querySelector(".rack-bay"),
+      inspector: document.querySelector(".device-inspector"),
+      output: els.toolDrawer,
+    };
+    syncMobileWorkflowGeometry();
+    const target = targets[mobilePanel] || document.querySelector(".rack-bay");
+    target?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+  }
+}
+
+function initMobileWorkflow() {
+  for (const button of document.querySelectorAll(".mobile-workflow-dock [data-mobile-panel]")) {
+    button.addEventListener("click", () => setMobilePanel(String(button.dataset.mobilePanel || "rack"), { scroll: true }));
+  }
+  els.mobilePlayBtn?.addEventListener("click", () => els.playBtn?.click());
+  els.moduleRow?.addEventListener("click", (event) => {
+    if (!(event.target instanceof Element) || !event.target.closest("[data-mobile-open-library]")) return;
+    setMobilePanel("library", { scroll: true });
+  });
+  const onLayoutChange = () => {
+    if (isMobileWorkbench()) {
+      suspendMobileAutomationCanvas();
+      setMobilePanel(mobilePanel);
+    }
+    else if (els.toolDrawer?.dataset.drawerOpen === "true" && mobilePanel === "output") openDrawer(String(els.toolDrawer.dataset.drawerTab || "mastering"), false);
+  };
+  if (typeof mobileLayoutQuery.addEventListener === "function") mobileLayoutQuery.addEventListener("change", onLayoutChange);
+  else mobileLayoutQuery.addListener?.(onLayoutChange);
+  syncMobileWorkflowGeometry();
+  if (typeof ResizeObserver === "function" && els.mobileWorkflowBar) {
+    mobileWorkflowResizeObserver?.disconnect?.();
+    mobileWorkflowResizeObserver = new ResizeObserver(syncMobileWorkflowGeometry);
+    mobileWorkflowResizeObserver.observe(els.mobileWorkflowBar);
+  }
+  setMobilePanel("rack");
+}
+
 function renderDeviceLibrary() {
   if (!els.deviceLibrary) return;
   els.deviceLibrary.replaceChildren();
@@ -3611,6 +3746,15 @@ async function addModuleToRack(type, targetIndex = rackModules().length) {
   const rack = rackModules().filter((candidate) => candidate !== module);
   rack.splice(Math.max(0, Math.min(rack.length, targetIndex)), 0, module);
   await commitRackStructure(rack, { selectId: module.instanceId });
+  if (isMobileWorkbench()) {
+    setMobilePanel("rack", { scroll: true });
+    window.requestAnimationFrame(() => {
+      const card = els.moduleRow?.querySelector(`[data-instance-id="${module.instanceId}"]`);
+      if (!card || !els.moduleRow) return;
+      const centeredLeft = card.offsetLeft - Math.max(0, (els.moduleRow.clientWidth - card.offsetWidth) / 2);
+      els.moduleRow.scrollTo?.({ left: Math.max(0, centeredLeft), behavior: "smooth" });
+    });
+  }
 }
 
 async function removeModuleFromRack(instanceId) {
@@ -3621,16 +3765,42 @@ async function removeModuleFromRack(instanceId) {
   const rack = rackModules();
   const nextSelected = rack[0]?.instanceId ?? null;
   await commitRackStructure(rack, { selectId: nextSelected });
+  if (isMobileWorkbench() && mobilePanel === "inspector" && !nextSelected) setMobilePanel("rack", { scroll: true });
 }
 
 async function moveRackModule(instanceId, targetIndex) {
   const rack = rackModules();
   const from = rack.findIndex((module) => module.instanceId === instanceId);
-  if (from < 0) return;
+  if (from < 0) return -1;
   const [module] = rack.splice(from, 1);
   const destination = Math.max(0, Math.min(rack.length, targetIndex));
+  if (destination === from) return from;
   rack.splice(destination, 0, module);
   await commitRackStructure(rack, { selectId: instanceId });
+  return destination;
+}
+
+async function shiftRackModule(instanceId, direction, focusSelector = "") {
+  const rack = rackModules();
+  const from = rack.findIndex((module) => module.instanceId === instanceId);
+  if (from < 0) return false;
+  const target = from + Math.sign(direction);
+  if (target < 0 || target >= rack.length) return false;
+  const module = rack[from];
+  const destination = await moveRackModule(instanceId, target);
+  if (destination < 0) return false;
+  const total = rackModules().length;
+  if (els.rackOrderStatus) els.rackOrderStatus.textContent = `${module.name} moved to signal position ${destination + 1} of ${total}.`;
+  window.requestAnimationFrame(() => {
+    const card = els.moduleRow?.querySelector(`[data-instance-id="${instanceId}"]`);
+    if (!card || !els.moduleRow) return;
+    card.classList.add("is-reordered");
+    window.setTimeout(() => card.classList.remove("is-reordered"), 520);
+    const centeredLeft = card.offsetLeft - Math.max(0, (els.moduleRow.clientWidth - card.offsetWidth) / 2);
+    els.moduleRow.scrollTo?.({ left: Math.max(0, centeredLeft), behavior: "smooth" });
+    if (focusSelector) card.querySelector(focusSelector)?.focus?.({ preventScroll: true });
+  });
+  return true;
 }
 
 function makeRackModuleEl(module, rackIndex) {
@@ -3670,6 +3840,35 @@ function makeRackModuleEl(module, rackIndex) {
   const model = document.createElement("p");
   model.className = "rack-module__model";
   model.textContent = meta.model;
+  const order = document.createElement("div");
+  order.className = "rack-module__order";
+  order.setAttribute("aria-label", `${module.name} signal order`);
+  const moveEarlier = document.createElement("button");
+  moveEarlier.type = "button";
+  moveEarlier.className = "rack-module__order-button rack-module__order-button--earlier";
+  moveEarlier.dataset.rackShift = "earlier";
+  moveEarlier.textContent = "←";
+  moveEarlier.disabled = rackIndex <= 0;
+  moveEarlier.setAttribute("aria-label", `Move ${module.name} earlier in the signal path`);
+  moveEarlier.addEventListener("click", async (event) => {
+    event.stopPropagation();
+    await shiftRackModule(module.instanceId, -1, '[data-rack-shift="earlier"]');
+  });
+  const position = document.createElement("span");
+  position.className = "rack-module__position";
+  position.innerHTML = `<b>SIGNAL</b><strong>${String(rackIndex + 1).padStart(2, "0")} / ${String(rackModules().length).padStart(2, "0")}</strong>`;
+  const moveLater = document.createElement("button");
+  moveLater.type = "button";
+  moveLater.className = "rack-module__order-button rack-module__order-button--later";
+  moveLater.dataset.rackShift = "later";
+  moveLater.textContent = "→";
+  moveLater.disabled = rackIndex >= rackModules().length - 1;
+  moveLater.setAttribute("aria-label", `Move ${module.name} later in the signal path`);
+  moveLater.addEventListener("click", async (event) => {
+    event.stopPropagation();
+    await shiftRackModule(module.instanceId, 1, '[data-rack-shift="later"]');
+  });
+  order.append(moveEarlier, position, moveLater);
   const meter = document.createElement("div");
   meter.className = "rack-module__meter";
   meter.setAttribute("aria-hidden", "true");
@@ -3760,13 +3959,14 @@ function makeRackModuleEl(module, rackIndex) {
     renderModules();
   });
   foot.append(preset, stomp);
-  face.append(top, name, model, meter, surface, control, foot);
+  face.append(top, name, model, order, meter, surface, control, foot);
   root.appendChild(face);
   root.addEventListener("click", (event) => {
     if (event.target.closest("button, input, select, label")) return;
     selectedModuleId = module.instanceId;
     for (const card of els.moduleRow.querySelectorAll(".rack-module")) card.classList.toggle("is-selected", card.dataset.instanceId === String(module.instanceId));
     renderInspector();
+    if (isMobileWorkbench()) setMobilePanel("inspector", { scroll: true });
   });
   drag.addEventListener("dragstart", (event) => {
     event.dataTransfer.effectAllowed = "move";
@@ -3780,7 +3980,8 @@ function makeRackModuleEl(module, rackIndex) {
 
 function openDrawer(tab = "mastering", forceOpen = true) {
   if (!els.toolDrawer) return;
-  const nextTab = ["mastering", "automation"].includes(tab) ? tab : "mastering";
+  const requestedTab = ["mastering", "automation"].includes(tab) ? tab : "mastering";
+  const nextTab = isMobileWorkbench() && requestedTab === "automation" ? "mastering" : requestedTab;
   els.toolDrawer.dataset.drawerTab = nextTab;
   if (forceOpen !== null) els.toolDrawer.dataset.drawerOpen = forceOpen ? "true" : "false";
   const isOpen = els.toolDrawer.dataset.drawerOpen === "true";
@@ -3825,6 +4026,7 @@ function renderModules() {
     renderDeviceLibrary();
     renderInspector();
     renderMixer();
+    syncMobileWorkflowUi();
     return;
   }
   const rack = rackModules();
@@ -3832,7 +4034,7 @@ function renderModules() {
     const empty = document.createElement("div");
     empty.id = "rackEmpty";
     empty.className = "rack-empty";
-    empty.innerHTML = '<span class="rack-empty__jack" aria-hidden="true">IN</span><strong>DRAG HARDWARE HERE</strong><p>The dry signal is already passing through. Add a device whenever you want to disturb it.</p><span class="rack-empty__jack rack-empty__jack--out" aria-hidden="true">OUT</span>';
+    empty.innerHTML = '<span class="rack-empty__jack" aria-hidden="true">IN</span><strong>ADD HARDWARE TO BEGIN</strong><p>The dry signal is already passing through. Drag a device here or choose one from the library.</p><button class="rack-empty__add" type="button" data-mobile-open-library>CHOOSE A DEVICE <span aria-hidden="true">＋</span></button><span class="rack-empty__jack rack-empty__jack--out" aria-hidden="true">OUT</span>';
     els.moduleRow.appendChild(empty);
   } else {
     rack.forEach((module, index) => els.moduleRow.appendChild(makeRackModuleEl(module, index)));
@@ -3842,6 +4044,7 @@ function renderModules() {
   renderInspector();
   renderMixer();
   refreshLiveAutomationTargets();
+  syncMobileWorkflowUi();
 }
 
 async function applyEnginePresetToModule(m, presetKey) {
@@ -4008,6 +4211,7 @@ function syncTransportUi() {
     const label = els.playBtn.querySelector("b");
     if (label) label.textContent = realtime.playing ? "PAUSE" : "PLAY";
   }
+  syncMobileTransportUi();
   if (els.scopeState) {
     els.scopeState.textContent = realtime.playing ? (monitorDry ? "SOURCE MONITOR" : "LIVE / PROCESSED") : "WAITING FOR SIGNAL";
   }
@@ -4114,7 +4318,7 @@ function updateMasterMeter(rms, peak) {
   if (els.masterPeakHold) els.masterPeakHold.style.left = `${holdPercent}%`;
 }
 
-function drawProcessedScope() {
+function drawProcessedScope({ updateMeter = true } = {}) {
   const canvas = els.processedWaveformCanvas;
   if (!canvas) return 0;
   const ctx = canvas.getContext("2d");
@@ -4128,7 +4332,7 @@ function drawProcessedScope() {
   ctx.lineTo(width, height / 2);
   ctx.stroke();
   if (!realtime.analyser || !realtime.scopeData || !realtime.playing) {
-    updateMasterMeter(0, 0);
+    if (updateMeter) updateMasterMeter(0, 0);
     return 0;
   }
   realtime.analyser.getFloatTimeDomainData(realtime.scopeData);
@@ -4148,28 +4352,94 @@ function drawProcessedScope() {
   }
   ctx.stroke();
   const rms = Math.sqrt(sum / Math.max(1, realtime.scopeData.length));
-  updateMasterMeter(rms, peak);
+  if (updateMeter) updateMasterMeter(rms, peak);
   return rms;
 }
 
+function cancelSignalFrame() {
+  if (transport.frame) window.cancelAnimationFrame(transport.frame);
+  if (transport.frameTimer) window.clearTimeout(transport.frameTimer);
+  transport.frame = 0;
+  transport.frameTimer = 0;
+}
+
+function queueSignalFrame({ immediate = false } = {}) {
+  if (document.hidden || !realtime.playing) return;
+  if (transport.frame || transport.frameTimer) {
+    if (!immediate) return;
+    cancelSignalFrame();
+  }
+  const requestFrame = () => {
+    transport.frameTimer = 0;
+    transport.frame = window.requestAnimationFrame(animateSignal);
+  };
+  if (isMobileWorkbench() && !immediate) transport.frameTimer = window.setTimeout(requestFrame, MOBILE_VISUAL_FRAME_MS);
+  else requestFrame();
+}
+
 function animateSignal() {
+  transport.frame = 0;
+  if (document.hidden) return;
+  mobilePowerQaFrames += 1;
+  syncMobilePowerQa();
   syncTransportUi();
   if (realtime.playing) applyLiveAutomationAt(currentTransportPosition());
   drawSourceWaveform();
-  const level = drawProcessedScope();
-  for (const card of els.moduleRow?.querySelectorAll(".rack-module") || []) {
-    const module = modules.find((candidate) => String(candidate.instanceId) === card.dataset.instanceId);
-    const energy = module?.enabled ? Math.min(1, level * 7 * (0.35 + clamp01(module.wet))) : 0.03;
-    [...card.querySelectorAll(".rack-module__meter i")].forEach((bar, index) => {
-      const threshold = (index + 1) / 9;
-      bar.style.height = `${Math.max(10, energy >= threshold ? 32 + index * 7 : 10)}%`;
-      bar.style.opacity = energy >= threshold ? "1" : ".18";
-    });
+  const mobile = isMobileWorkbench();
+  const level = drawProcessedScope({ updateMeter: shouldUpdateMasterMeter({ mobile, panel: mobilePanel }) });
+  if (shouldUpdateRackMeters({ mobile, panel: mobilePanel })) {
+    for (const card of els.moduleRow?.querySelectorAll(".rack-module") || []) {
+      const module = modules.find((candidate) => String(candidate.instanceId) === card.dataset.instanceId);
+      const energy = module?.enabled ? Math.min(1, level * 7 * (0.35 + clamp01(module.wet))) : 0.03;
+      [...card.querySelectorAll(".rack-module__meter i")].forEach((bar, index) => {
+        const threshold = (index + 1) / 9;
+        bar.style.height = `${Math.max(10, energy >= threshold ? 32 + index * 7 : 10)}%`;
+        bar.style.opacity = energy >= threshold ? "1" : ".18";
+      });
+    }
   }
-  transport.frame = window.requestAnimationFrame(animateSignal);
+  queueSignalFrame();
 }
 
-function stopPlayback({ resetTransport = true } = {}) {
+function cancelRealtimeRelease() {
+  if (realtimeReleaseTimer) window.clearTimeout(realtimeReleaseTimer);
+  realtimeReleaseTimer = 0;
+}
+
+async function releaseRealtimeGraph() {
+  cancelRealtimeRelease();
+  if (realtime.playing) return;
+  const context = realtime.ctx;
+  realtime.ctx = null;
+  realtime.graph = null;
+  realtime.analyser = null;
+  realtime.monitorGain = null;
+  realtime.scopeData = null;
+  realtime.extraSources = [];
+  realtime.tapeBedSources = [];
+  realtime.tvBedSources = [];
+  graphStale = true;
+  if (context) {
+    try {
+      await context.close();
+    } catch {
+      // ignore
+    }
+  }
+  syncMobilePowerQa(automationRt.ctx ? "active" : "released");
+}
+
+function scheduleRealtimeRelease(delay = MOBILE_REALTIME_RELEASE_MS) {
+  cancelRealtimeRelease();
+  if (!isMobileWorkbench() || (!realtime.ctx && !automationRt.ctx) || realtime.playing || automationRt.playing) return;
+  realtimeReleaseTimer = window.setTimeout(() => {
+    realtimeReleaseTimer = 0;
+    if (realtime.playing || automationRt.playing) return;
+    void Promise.all([releaseRealtimeGraph(), teardownAutomationRealtime()]);
+  }, Math.max(0, delay));
+}
+
+function stopPlayback({ resetTransport = true, releaseOnIdle = true } = {}) {
   if (!resetTransport && realtime.playing) transport.position = currentTransportPosition();
   if (resetTransport) transport.position = 0;
   stopAutomationPlayback();
@@ -4243,9 +4513,14 @@ function stopPlayback({ resetTransport = true } = {}) {
     }
   }
   realtime.playing = false;
+  syncMobilePowerQa();
+  cancelSignalFrame();
+  drawSourceWaveform();
+  drawProcessedScope({ updateMeter: shouldUpdateMasterMeter({ mobile: isMobileWorkbench(), panel: mobilePanel }) });
   els.stopBtn.disabled = true;
   syncTransportUi();
   setState(audioBuffer ? "Ready" : "Idle");
+  if (releaseOnIdle) scheduleRealtimeRelease();
 }
 
 async function syncTapeSfxRuntime() {
@@ -4362,6 +4637,8 @@ function stopAutomationPlayback() {
   automationRt.sources = [];
   automationRt.playing = false;
   automationRt.stopAt = 0;
+  syncMobilePowerQa();
+  cancelSignalFrame();
 }
 
 async function teardownAutomationRealtime() {
@@ -4379,23 +4656,13 @@ async function teardownAutomationRealtime() {
   automationRt.master = null;
   automationRt.monitorGain = null;
   automationRt.sampleRate = 0;
+  syncMobilePowerQa(realtime.ctx ? "active" : "released");
 }
 
 async function teardownRealtime() {
-  stopPlayback();
-  if (realtime.ctx) {
-    try {
-      await realtime.ctx.close();
-    } catch {
-      // ignore
-    }
-  }
-  realtime.ctx = null;
-  realtime.graph = null;
-  realtime.analyser = null;
-  realtime.monitorGain = null;
-  realtime.scopeData = null;
-  graphStale = true;
+  cancelRealtimeRelease();
+  stopPlayback({ releaseOnIdle: false });
+  await releaseRealtimeGraph();
 }
 
 function makeMonoBuffer(decoded) {
@@ -4443,14 +4710,15 @@ function refreshFileStatus(name = "None") {
 async function ensureRealtimeGraph() {
   if (!audioBuffer) return;
   const wantStereo = !els.monoOut.checked;
-  if (realtime.ctx && realtime.graph && !graphStale && realtime.stereo === wantStereo && realtime.ctx.sampleRate === audioBuffer.sampleRate) return;
+  const previewPolicy = realtimePreviewPolicy({ mobile: isMobileWorkbench(), sourceSampleRate: audioBuffer.sampleRate });
+  if (realtime.ctx && realtime.graph && !graphStale && realtime.stereo === wantStereo && realtime.ctx.sampleRate === previewPolicy.sampleRate) return;
 
   await teardownRealtime();
   realtime.stereo = wantStereo;
 
   realtime.ctx = new AudioContextConstructor({
-    latencyHint: "interactive",
-    sampleRate: audioBuffer.sampleRate,
+    latencyHint: previewPolicy.latencyHint,
+    sampleRate: previewPolicy.sampleRate,
   });
 
   let sample = null;
@@ -4470,11 +4738,12 @@ async function ensureRealtimeGraph() {
     tuningEdges,
     tuningSample: sample,
   });
+  syncMobilePowerQa("active");
   realtime.graph.masters?.[0]?.setNoiseFloorListener((value) => {
     if (els.noiseReducerState && els.masterNoiseLearn?.checked) els.noiseReducerState.textContent = `FLOOR ${Number(value).toFixed(1)} dB`;
   });
 
-  realtime.analyser = new AnalyserNode(realtime.ctx, { fftSize: 2048, smoothingTimeConstant: 0.16 });
+  realtime.analyser = new AnalyserNode(realtime.ctx, { fftSize: previewPolicy.analyserFftSize, smoothingTimeConstant: 0.16 });
   realtime.monitorGain = new GainNode(realtime.ctx, { gain: monitorVolumeValue() });
   realtime.scopeData = new Float32Array(realtime.analyser.fftSize);
   realtime.graph.output.connect(realtime.analyser);
@@ -4563,13 +4832,15 @@ function getAutomationSampleRate() {
 async function ensureAutomationRealtimeGraph() {
   ensureAutomationLayers();
   const wantStereo = !els.monoOut.checked;
-  const sr = getAutomationSampleRate();
+  const previewPolicy = realtimePreviewPolicy({ mobile: isMobileWorkbench(), sourceSampleRate: getAutomationSampleRate() });
+  const sr = previewPolicy.sampleRate;
   if (automationRt.ctx && automationRt.master && automationRt.sum && automationRt.stereo === wantStereo && automationRt.sampleRate === sr) return;
 
   await teardownAutomationRealtime();
   automationRt.stereo = wantStereo;
   automationRt.sampleRate = sr;
-  automationRt.ctx = new AudioContextConstructor({ latencyHint: "interactive", sampleRate: sr });
+  automationRt.ctx = new AudioContextConstructor({ latencyHint: previewPolicy.latencyHint, sampleRate: sr });
+  syncMobilePowerQa("active");
 
   const ctx = automationRt.ctx;
   await ensureMasterWorklets(ctx);
@@ -4626,6 +4897,7 @@ async function startAutomationPlayback() {
   ensureAutomationLayers();
   const any = automation.layers.some((l) => l?.buffer);
   if (!any) throw new Error("No layer audio loaded");
+  cancelRealtimeRelease();
   await ensureAutomationRealtimeGraph();
   if (!automationRt.ctx) return;
 
@@ -4685,6 +4957,7 @@ async function startAutomationPlayback() {
   }
 
   automationRt.playing = true;
+  syncMobilePowerQa("active");
   els.stopBtn.disabled = false;
   setState("Playing (Automation)");
 
@@ -4693,6 +4966,7 @@ async function startAutomationPlayback() {
     stopAutomationPlayback();
     els.stopBtn.disabled = true;
     setState("Stopped");
+    scheduleRealtimeRelease();
   }, Math.max(0, Math.round((automationRt.stopAt - ctx.currentTime) * 1000)));
 }
 
@@ -4820,10 +5094,11 @@ async function startPlayback() {
     return;
   }
   if (!audioBuffer) return;
+  cancelRealtimeRelease();
   const requestedOffset = Math.max(0, Math.min(audioBuffer.duration, transport.position));
   await ensureRealtimeGraph();
   if (!realtime.ctx || !realtime.graph) return;
-  stopPlayback({ resetTransport: false });
+  stopPlayback({ resetTransport: false, releaseOnIdle: false });
   const loopRegion = getLoopRegion();
   const looping = Boolean(els.loopToggle.checked);
   const playOffset = looping
@@ -4937,9 +5212,10 @@ async function startPlayback() {
         const stopAt = looping ? null : baseTime + totalDur;
         for (const lg of w.laneGraphs || []) {
           const windNode = lg?.graph?.wind || lg?.graph?.nodes?.wind || null;
-          if (!windNode) continue;
+          const cameraNode = lg?.graph?.camera || lg?.graph?.nodes?.camera || null;
+          if (!windNode && !cameraNode) continue;
           const seed = (lg?.seed ?? audioDataSeed) >>> 0;
-          const created = scheduleCamcorderSfx(realtime.ctx, windNode, camSettings, seed, {
+          const created = scheduleCamcorderSfx(realtime.ctx, windNode, cameraNode, camSettings, seed, {
             startTime: baseTime,
             durationSeconds: totalDur,
             stopAt,
@@ -4976,16 +5252,25 @@ async function startPlayback() {
       }
       els.stopBtn.disabled = true;
       syncTransportUi();
+      cancelSignalFrame();
+      drawSourceWaveform();
+      drawProcessedScope({ updateMeter: shouldUpdateMasterMeter({ mobile: isMobileWorkbench(), panel: mobilePanel }) });
+      const releaseDelay = tapeEndStopAt > 0 && realtime.ctx
+        ? Math.max(MOBILE_REALTIME_RELEASE_MS, Math.round((tapeEndStopAt - realtime.ctx.currentTime) * 1000) + 1000)
+        : MOBILE_REALTIME_RELEASE_MS;
+      scheduleRealtimeRelease(releaseDelay);
     }
   };
   realtime.src = src;
   realtime.playing = true;
+  syncMobilePowerQa("active");
   realtime.sourceOffsetSec = playOffset;
   realtime.sourceStartedAt = baseTime + audioStartAt;
   src.start(realtime.sourceStartedAt, playOffset);
   setState("Playing");
   els.stopBtn.disabled = false;
   syncTransportUi();
+  queueSignalFrame({ immediate: true });
 }
 
 function downloadBytes(bytes, fileName) {
@@ -5149,9 +5434,10 @@ async function exportWav() {
           await ensureCamcorderSfxDecoded(camSettings);
           for (const lg of w.laneGraphs || []) {
             const windNode = lg?.graph?.wind || lg?.graph?.nodes?.wind || null;
-            if (!windNode) continue;
+            const cameraNode = lg?.graph?.camera || lg?.graph?.nodes?.camera || null;
+            if (!windNode && !cameraNode) continue;
             const seed = (lg?.seed ?? audioDataSeed) >>> 0;
-            scheduleCamcorderSfx(offline, windNode, camSettings, seed, {
+            scheduleCamcorderSfx(offline, windNode, cameraNode, camSettings, seed, {
               startTime: 0,
               durationSeconds: totalDur,
               stopAt: totalDur,
@@ -5772,9 +6058,22 @@ function refreshLiveAutomationTargets() {
   els.autoTarget.value = previous;
 }
 
+function suspendMobileAutomationCanvas() {
+  const canvas = els.autoLaneCanvas;
+  if (!canvas) return;
+  canvas.width = 1;
+  canvas.height = 1;
+  canvas.style.width = "1px";
+  canvas.style.height = "1px";
+}
+
 function drawLiveAutomationLane() {
   const canvas = els.autoLaneCanvas;
   if (!canvas) return;
+  if (isMobileWorkbench()) {
+    suspendMobileAutomationCanvas();
+    return;
+  }
   const ctx = canvas.getContext("2d");
   const dpr = Math.max(1, window.devicePixelRatio || 1);
   const duration = Math.max(6, audioBuffer?.duration || 0);
@@ -5839,6 +6138,10 @@ function drawLiveAutomationLane() {
 
 function renderLiveAutomationUi() {
   if (!els.autoTarget || !els.autoLaneCanvas) return;
+  if (isMobileWorkbench()) {
+    suspendMobileAutomationCanvas();
+    return;
+  }
   if (els.autoBpmVal) els.autoBpmVal.textContent = Number(els.autoBpm?.value || 120).toFixed(1);
   if (els.autoZoomVal) els.autoZoomVal.textContent = `${Math.round(Number(els.autoZoom?.value || 100))} px/s`;
   if (els.autoLenText) els.autoLenText.textContent = fmtTime(audioBuffer?.duration || 0);
@@ -5847,7 +6150,7 @@ function renderLiveAutomationUi() {
 }
 
 function applyLiveAutomationAt(position) {
-  if (!realtime.playing || liveAutomation.applying) return;
+  if (isMobileWorkbench() || !realtime.playing || liveAutomation.applying) return;
   const targets = new Map(getLiveAutomationTargets().map((target) => [target.id, target]));
   let changed = false;
   let masterChanged = false;
@@ -6178,6 +6481,11 @@ function initWorkstationUi() {
   for (const button of document.querySelectorAll("[data-drawer-target]")) {
     button.addEventListener("click", () => {
       const target = String(button.dataset.drawerTarget || "mastering");
+      if (isMobileWorkbench()) {
+        openDrawer(target, true);
+        setMobilePanel("output");
+        return;
+      }
       const isSameOpen = els.toolDrawer?.dataset.drawerOpen === "true" && els.toolDrawer?.dataset.drawerTab === target;
       openDrawer(target, !isSameOpen);
     });
@@ -6187,8 +6495,23 @@ function initWorkstationUi() {
     openDrawer(String(els.toolDrawer?.dataset.drawerTab || "mastering"), !isOpen);
   });
   openDrawer("mastering", false);
+  initMobileWorkflow();
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && els.toolDrawer?.dataset.drawerOpen === "true") openDrawer(String(els.toolDrawer.dataset.drawerTab || "mastering"), false);
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (!isMobileWorkbench()) return;
+    if (document.hidden) {
+      const wasPlaying = realtime.playing || automationRt.playing;
+      if (wasPlaying) stopPlayback({ resetTransport: false, releaseOnIdle: false });
+      else cancelSignalFrame();
+      void Promise.all([releaseRealtimeGraph(), teardownAutomationRealtime()]);
+      if (wasPlaying) setState("Paused to save battery");
+      return;
+    }
+    syncTransportUi();
+    drawSourceWaveform();
+    drawProcessedScope({ updateMeter: shouldUpdateMasterMeter({ mobile: true, panel: mobilePanel }) });
   });
 
   for (const button of document.querySelectorAll("[data-library-filter]")) {
@@ -6274,7 +6597,9 @@ function initWorkstationUi() {
     setState("Safe stop");
   });
 
-  if (!transport.frame) transport.frame = window.requestAnimationFrame(animateSignal);
+  syncTransportUi();
+  drawSourceWaveform();
+  drawProcessedScope({ updateMeter: shouldUpdateMasterMeter({ mobile: isMobileWorkbench(), panel: mobilePanel }) });
 }
 
 els.fileInput.addEventListener("change", async () => {
@@ -6445,7 +6770,7 @@ function showCompatibilityGate(report, runtimeError = null) {
   if (els.compatibilitySummary) {
     els.compatibilitySummary.textContent = runtimeError
       ? "Lost Audio Engine stopped before loading audio. Your files were not uploaded or changed."
-      : "Lost Audio Engine needs the complete desktop Web Audio toolset below. Try a current Chrome, Edge, or Firefox build over HTTPS or localhost.";
+      : "Lost Audio Engine needs the Web Audio capabilities below. Try a current Safari, Chrome, Edge, or Firefox build over HTTPS or localhost.";
   }
   if (els.compatibilityMissing) {
     const items = runtimeError ? [`Initialization error: ${runtimeError?.message || runtimeError}`] : report.missing.map((check) => check.label);

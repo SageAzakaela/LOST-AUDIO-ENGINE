@@ -13,8 +13,8 @@ if(NOT TARGET juce::juce_audio_utils)
 endif()
 
 juce_add_plugin(CamcorderEngine
-  COMPANY_NAME "LostAudio"
-  BUNDLE_ID "com.lostaudio.camcorderengine"
+  COMPANY_NAME "B&E Digital"
+  BUNDLE_ID "com.lostaudio.camcorderengine" # Stable legacy identity; publisher is B&E Digital.
   IS_SYNTH FALSE
   NEEDS_MIDI_INPUT FALSE
   NEEDS_MIDI_OUTPUT FALSE
@@ -28,6 +28,18 @@ juce_add_plugin(CamcorderEngine
 )
 
 juce_generate_juce_header(CamcorderEngine)
+
+juce_add_binary_data(CamcorderEngineAssets
+  SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/camera-bed-1.wav"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/camera-bed-2.wav"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/camera-bed-3.wav"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/camera-bed-4.wav"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/wind-bed-1.wav"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/wind-bed-2.wav"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/wind-bed-3.wav"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/wind-bed-4.wav"
+)
 
 target_sources(CamcorderEngine
   PRIVATE
@@ -46,6 +58,8 @@ target_compile_definitions(CamcorderEngine
 
 target_link_libraries(CamcorderEngine
   PRIVATE
+    CamcorderEngineAssets
+    LostAudio::Core
     juce::juce_dsp
     juce::juce_audio_utils
   PUBLIC
@@ -53,3 +67,22 @@ target_link_libraries(CamcorderEngine
     juce::juce_recommended_lto_flags
     juce::juce_recommended_warning_flags
 )
+
+if(BUILD_TESTING)
+  add_executable(lost_audio_camcorder_adapter_tests tests/BedAdapterTests.cpp)
+  target_include_directories(lost_audio_camcorder_adapter_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_BINARY_DIR}/CamcorderEngine_artefacts/JuceLibraryCode
+    ${CMAKE_CURRENT_BINARY_DIR}/juce_binarydata_CamcorderEngineAssets/JuceLibraryCode
+  )
+  target_link_libraries(lost_audio_camcorder_adapter_tests PRIVATE CamcorderEngine CamcorderEngineAssets LostAudio::Core juce::juce_audio_plugin_client juce::juce_audio_utils juce::juce_dsp)
+  add_test(NAME lost_audio_camcorder_adapter_tests COMMAND lost_audio_camcorder_adapter_tests)
+
+  add_executable(lost_audio_camcorder_visual_harness tests/VisualHarness.cpp)
+  target_include_directories(lost_audio_camcorder_visual_harness PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_BINARY_DIR}/CamcorderEngine_artefacts/JuceLibraryCode
+    ${CMAKE_CURRENT_BINARY_DIR}/juce_binarydata_CamcorderEngineAssets/JuceLibraryCode
+  )
+  target_link_libraries(lost_audio_camcorder_visual_harness PRIVATE CamcorderEngine CamcorderEngineAssets LostAudio::Core juce::juce_audio_plugin_client juce::juce_audio_utils juce::juce_dsp)
+endif()

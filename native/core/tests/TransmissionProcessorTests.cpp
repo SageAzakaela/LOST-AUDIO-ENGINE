@@ -108,6 +108,20 @@ int main()
     const auto cleanRender = render(128, 9u, clean);
     ok &= require(difference(cleanRender, blockA) > 0.015f, "damaged settings must materially change the signal");
 
+    TransmissionProcessor triggered;
+    triggered.prepare(48000.0, 2);
+    triggered.reset(0x5eed1234u);
+    TransmissionParameters triggeredParameters = clean;
+    triggeredParameters.mix = 1.0f;
+    std::vector<float> left(12000, 0.25f), right(12000, -0.25f);
+    float* linked[] { left.data(), right.data() };
+    triggered.triggerDropout(0.8f, 0.05f);
+    triggered.process(linked, 2, 1024, triggeredParameters);
+    ok &= require(triggered.dropoutActive(), "manual carrier loss must become active");
+    ok &= require(triggered.dropoutProgress() > 0.0f, "manual carrier loss must publish progress");
+    triggered.process(linked, 2, 8000, triggeredParameters);
+    ok &= require(!triggered.dropoutActive(), "manual carrier loss must recover within its requested duration");
+
     if (!ok) return 1;
     std::cout << "Transmission core passed: latency=" << latencyProbe.latencySamples()
               << " samples, block-invariant deterministic damage, bounded output, live macros\n";

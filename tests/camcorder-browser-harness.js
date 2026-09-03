@@ -1,4 +1,4 @@
-import { buildCamcorderGraph, defaultSettings } from "../camcorder-engine/src/audio/graph.js?v=20260827.27";
+import { buildCamcorderGraph, defaultSettings } from "../camcorder-engine/src/audio/graph.js?v=20260828.28";
 import { PRESETS } from "../camcorder-engine/src/presets.js?v=20260827.27";
 
 const sampleRate = 48000;

@@ -160,6 +160,7 @@ const baseHarnesses = [
   { name: "camcorder", path: "/tests/camcorder-browser-harness.html", timeout: 60000 },
   { name: "laptop-1366", path: "/tests/responsive-browser-harness.html?width=1366&height=768", timeout: 15000 },
   { name: "mobile-handoff", path: "/tests/responsive-browser-harness.html?width=390&height=844", timeout: 15000 },
+  { name: "mobile-workflow", path: "/tests/mobile-workflow-browser-harness.html?width=390&height=844", timeout: 30000 },
 ];
 const fullHarnesses = [
   { name: "parameter-influence-analog", path: "/tests/parameter-influence-harness.html?group=analog", timeout: 180000 },
@@ -205,7 +206,14 @@ try {
     const failures = collectSafetyFailures(parsed);
     if (harness.name === "platform" && parsed.supported !== true) failures.push("platform.supported=false");
     if (harness.name === "laptop-1366" && (parsed.horizontalOverflow || !parsed.workstationVisible || parsed.mobileVisible)) failures.push("desktop responsive contract failed");
-    if (harness.name === "mobile-handoff" && (!parsed.mobileVisible || parsed.workstationVisible)) failures.push("mobile handoff contract failed");
+    if (harness.name === "mobile-handoff" && (
+      parsed.horizontalOverflow
+      || !parsed.workstationVisible
+      || parsed.mobileVisible
+      || !parsed.mobileDockVisible
+      || parsed.visiblePanels?.length !== 1
+    )) failures.push("mobile workstation contract failed");
+    if (harness.name === "mobile-workflow" && parsed.pass !== true) failures.push("mobile workflow contract failed");
     if (failures.length) throw new Error(`${harness.name}: ${failures.join(", ")}`);
     results.harnesses[harness.name] = parsed;
     process.stdout.write("passed\n");

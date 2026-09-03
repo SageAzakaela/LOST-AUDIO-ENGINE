@@ -71,6 +71,9 @@ void CDProcessor::reset(std::uint32_t seed) noexcept
     historyFilled_ = 0;
     pendingDamage_.store(0.0f, std::memory_order_relaxed);
     pendingSkip_.store(0.0f, std::memory_order_relaxed);
+    pendingSkipLoopSamples_.store(0, std::memory_order_relaxed);
+    pendingSkipDurationSamples_.store(0, std::memory_order_relaxed);
+    pendingSkipRestart_.store(false, std::memory_order_relaxed);
     jitterPhase_ = nextFloat(randomState_);
     jitterNoise_ = 0.0f;
     discPhase_ = nextFloat(randomState_);
@@ -81,7 +84,7 @@ void CDProcessor::reset(std::uint32_t seed) noexcept
     errorRemaining_ = errorTotal_ = 0;
     activeMode_ = CDConcealment::interpolate;
     defectScale_ = { 1.0f, 1.0f };
-    repeatStart_ = repeatPosition_ = 0; repeatLength_ = 1; trackingRemaining_ = 0;
+    repeatStart_ = repeatPosition_ = 0; repeatLength_ = 1; trackingRemaining_ = trackingTotal_ = trackingFadeSamples_ = 0;
     servoEnvelope_ = servoSweep_ = 0.0f;
     servoPhaseA_ = nextFloat(randomState_); servoPhaseB_ = nextFloat(randomState_);
     limiterEnvelope_ = outputPeak_ = 0.0f;
@@ -96,9 +99,23 @@ void CDProcessor::triggerDamage(float strength) noexcept
 
 void CDProcessor::triggerSkip(float strength) noexcept
 {
+    pendingSkipLoopSamples_.store(0, std::memory_order_relaxed);
+    pendingSkipDurationSamples_.store(0, std::memory_order_relaxed);
+    pendingSkipRestart_.store(false, std::memory_order_relaxed);
     auto current = pendingSkip_.load(std::memory_order_relaxed);
     const auto wanted = std::clamp(strength, 0.05f, 1.0f);
     while (current < wanted && !pendingSkip_.compare_exchange_weak(current, wanted, std::memory_order_relaxed)) {}
+}
+
+void CDProcessor::triggerMusicalSkip(float strength, int loopSamples, int durationSamples,
+                                     bool restartActive) noexcept
+{
+    pendingSkipLoopSamples_.store(std::max(1, loopSamples), std::memory_order_relaxed);
+    pendingSkipDurationSamples_.store(std::max(1, durationSamples), std::memory_order_relaxed);
+    pendingSkipRestart_.store(restartActive, std::memory_order_relaxed);
+    auto current = pendingSkip_.load(std::memory_order_relaxed);
+    const auto wanted = std::clamp(strength, 0.05f, 1.0f);
+    while (current < wanted && !pendingSkip_.compare_exchange_weak(current, wanted, std::memory_order_release)) {}
 }
 
 std::uint32_t CDProcessor::nextU32(std::uint32_t& state) noexcept
@@ -175,7 +192,7 @@ void CDProcessor::prepareRepeat(int offsetSamples, int loopSamples) noexcept
 void CDProcessor::beginRepeat(int offsetSamples, int loopSamples, int durationSamples) noexcept
 {
     prepareRepeat(offsetSamples, loopSamples);
-    trackingRemaining_ = std::max(repeatLength_, durationSamples);
+    trackingRemaining_ = trackingTotal_ = std::max(repeatLength_, durationSamples);
 }
 
 void CDProcessor::process(float* const* channels, std::size_t channelCount, std::size_t sampleCount,
@@ -215,6 +232,21 @@ void CDProcessor::process(float* const* channels, std::size_t channelCount, std:
         std::array<float, maxChannels> dry {};
         std::array<float, maxChannels> dryAligned {};
         std::array<float, maxChannels> y {};
+        const auto readRepeatedSample = [&](const ChannelState& state) noexcept
+        {
+            const auto position = repeatPosition_ % repeatLength_;
+            const auto tailIndex = (repeatStart_ + position) % (int) state.history.size();
+            const auto tail = state.history[(std::size_t) tailIndex];
+            const auto crossfadeSamples = std::max(1, std::min(repeatLength_ / 4, (int) std::round(sr * .005f)));
+            const auto crossfadeStart = repeatLength_ - crossfadeSamples;
+            if (position < crossfadeStart) return tail;
+
+            const auto headPosition = position - crossfadeStart;
+            const auto headIndex = (repeatStart_ + headPosition) % (int) state.history.size();
+            const auto blend = (float) headPosition / (float) crossfadeSamples;
+            return tail + (state.history[(std::size_t) headIndex] - tail) * blend;
+        };
+
         for (std::size_t channel = 0; channel < count; ++channel)
         {
             dry[channel] = channels[channel][sample];
@@ -245,6 +277,8 @@ void CDProcessor::process(float* const* channels, std::size_t channelCount, std:
         const auto passedB = crossedPhase(previousDiscPhase, discPhase_, scratchPhaseB_);
         const auto shapedDamage = damageWave(p.damageShape, discPhase_);
         auto defectSeverity = 0.0f;
+        if (errorRemaining_ > 0 || trackingRemaining_ > 0)
+            pendingDamage_.exchange(0.0f, std::memory_order_relaxed);
         const auto manualStrength = errorRemaining_ <= 0 && trackingRemaining_ <= 0
             ? pendingDamage_.exchange(0.0f, std::memory_order_relaxed) : 0.0f;
         const auto manualDamage = manualStrength > 0.0f && errorRemaining_ <= 0 && trackingRemaining_ <= 0;
@@ -283,12 +317,50 @@ void CDProcessor::process(float* const* channels, std::size_t channelCount, std:
             }
         }
 
-        const auto skipHistoryNeeded = std::max(repeatSamples * 2, std::min(trackingOffset, (int) std::round(sr * 0.08f)));
-        const auto skipStrength = trackingRemaining_ <= 0 && historyFilled_ >= skipHistoryNeeded
-            ? pendingSkip_.exchange(0.0f, std::memory_order_relaxed) : 0.0f;
-        if (skipStrength > 0.0f && trackingRemaining_ <= 0 && historyFilled_ >= skipHistoryNeeded)
+        auto requestedLoop = pendingSkipLoopSamples_.load(std::memory_order_relaxed);
+        auto requestedDuration = pendingSkipDurationSamples_.load(std::memory_order_relaxed);
+        const auto musicalSkip = requestedLoop > 0 && requestedDuration > 0;
+        const auto requestedHistory = musicalSkip ? requestedLoop + 2
+            : std::max(repeatSamples * 2, std::min(trackingOffset, (int) std::round(sr * 0.08f)));
+        auto skipStrength = 0.0f;
+        auto restartSkip = false;
+        if (pendingSkip_.load(std::memory_order_acquire) > 0.0f)
         {
-            beginRepeat(trackingOffset, repeatSamples, (int) std::round(sr * (0.22f + skipStrength * 1.45f)));
+            restartSkip = pendingSkipRestart_.load(std::memory_order_relaxed);
+            const auto eventBusy = trackingRemaining_ > 0 || errorRemaining_ > 0;
+            if (eventBusy && !restartSkip)
+            {
+                // Performer clock events never form a hidden queue. A skip is
+                // either the event happening now or it is deliberately ignored.
+                pendingSkip_.exchange(0.0f, std::memory_order_acq_rel);
+                pendingSkipLoopSamples_.store(0, std::memory_order_relaxed);
+                pendingSkipDurationSamples_.store(0, std::memory_order_relaxed);
+            }
+            else if ((!eventBusy || restartSkip) && historyFilled_ >= requestedHistory)
+            {
+                skipStrength = pendingSkip_.exchange(0.0f, std::memory_order_acq_rel);
+                requestedLoop = pendingSkipLoopSamples_.exchange(0, std::memory_order_relaxed);
+                requestedDuration = pendingSkipDurationSamples_.exchange(0, std::memory_order_relaxed);
+                pendingSkipRestart_.store(false, std::memory_order_relaxed);
+            }
+            else if (musicalSkip && historyFilled_ < requestedHistory)
+            {
+                // A quantized event that cannot capture its complete slice is
+                // dropped. Letting it fire later would move it off the grid.
+                pendingSkip_.exchange(0.0f, std::memory_order_acq_rel);
+                pendingSkipLoopSamples_.store(0, std::memory_order_relaxed);
+                pendingSkipDurationSamples_.store(0, std::memory_order_relaxed);
+                pendingSkipRestart_.store(false, std::memory_order_relaxed);
+            }
+        }
+        if (skipStrength > 0.0f && ((trackingRemaining_ <= 0 && errorRemaining_ <= 0) || restartSkip))
+        {
+            const auto resolvedLoop = requestedLoop > 0 ? requestedLoop : repeatSamples;
+            const auto resolvedOffset = requestedLoop > 0 ? resolvedLoop + 1 : trackingOffset;
+            const auto resolvedDuration = requestedDuration > 0 ? requestedDuration
+                : (int) std::round(sr * (0.22f + skipStrength * 1.45f));
+            beginRepeat(resolvedOffset, resolvedLoop, resolvedDuration);
+            trackingFadeSamples_ = std::max(1, std::min(resolvedLoop / 4, (int) std::round(sr * .005f)));
             defectScale_ = { 1.0f, 1.0f };
             servoEnvelope_ = std::max(servoEnvelope_, 0.45f + skipStrength * 0.55f);
             servoSweep_ = std::max(servoSweep_, 0.55f + skipStrength * 0.45f);
@@ -297,6 +369,7 @@ void CDProcessor::process(float* const* channels, std::size_t channelCount, std:
         if (trackingRemaining_ <= 0 && nextFloat(randomState_) < trackingProbability)
         {
             beginRepeat(trackingOffset, repeatSamples, (int) std::round(sr * (0.16f + p.trackingRate * 1.75f)));
+            trackingFadeSamples_ = std::max(1, std::min(repeatSamples / 4, (int) std::round(sr * .005f)));
             defectScale_ = { 1.0f, 1.0f };
             servoEnvelope_ = std::max(servoEnvelope_, 0.35f + p.trackingRate * 0.65f);
             servoSweep_ = std::max(servoSweep_, 0.5f + p.servoHunt * 0.5f);
@@ -310,35 +383,27 @@ void CDProcessor::process(float* const* channels, std::size_t channelCount, std:
             auto concealed = unaffected;
             if (trackingRemaining_ > 0)
             {
-                const auto index = (repeatStart_ + repeatPosition_ % repeatLength_) % (int) state.history.size();
-                concealed = state.history[(std::size_t) index];
+                concealed = readRepeatedSample(state);
             }
             else if (errorRemaining_ > 0)
             {
                 const auto progress = 1.0f - (float) errorRemaining_ / (float) std::max(1, errorTotal_);
                 const auto elapsed = errorTotal_ - errorRemaining_;
-                const auto repairSamples = std::min(interpolationSamples, std::max(1, errorTotal_ / 3));
-                if (elapsed < repairSamples)
+                if (activeMode_ == CDConcealment::interpolate)
                 {
+                    const auto repairSamples = std::min(interpolationSamples, std::max(1, errorTotal_));
                     const auto predicted = state.lastGood + state.lastGoodDelta * (float) std::min(20, elapsed + 1);
-                    const auto repairProgress = (float) elapsed / (float) std::max(1, repairSamples);
-                    const auto returnBlend = 0.12f + repairProgress * repairProgress * 0.82f;
-                    concealed = predicted * (1.0f - returnBlend) + unaffected * returnBlend;
+                    const auto repairProgress = std::clamp((float) elapsed / (float) std::max(1, repairSamples), 0.0f, 1.0f);
+                    concealed = predicted * (1.0f - repairProgress) + unaffected * repairProgress;
                 }
                 else if (activeMode_ == CDConcealment::mute)
                 {
                     const auto edge = std::min({ 1.0f, progress * 12.0f, ((float) errorRemaining_ / (float) std::max(1, errorTotal_)) * 12.0f });
                     concealed = unaffected * (1.0f - edge);
                 }
-                else if (activeMode_ == CDConcealment::interpolate)
-                {
-                    const auto predicted = state.lastGood + state.lastGoodDelta * (float) std::min(12, errorTotal_ - errorRemaining_ + 1);
-                    concealed = predicted * (1.0f - progress * 0.65f) + unaffected * progress * 0.65f;
-                }
                 else if (activeMode_ == CDConcealment::repeat)
                 {
-                    const auto index = (repeatStart_ + repeatPosition_ % repeatLength_) % (int) state.history.size();
-                    concealed = state.history[(std::size_t) index];
+                    concealed = readRepeatedSample(state);
                 }
                 else concealed = state.lastGood;
             }
@@ -348,7 +413,28 @@ void CDProcessor::process(float* const* channels, std::size_t channelCount, std:
                 state.lastGoodDelta = state.lastGoodDelta * 0.82f + delta * 0.18f;
                 state.lastGood = unaffected;
             }
-            y[channel] = unaffected + (concealed - unaffected) * defectScale_[channel];
+            auto eventBlend = 1.0f;
+            if (trackingRemaining_ > 0 && trackingFadeSamples_ > 0)
+            {
+                const auto elapsed = trackingTotal_ - trackingRemaining_;
+                const auto fadeIn = std::clamp((float) elapsed / (float) trackingFadeSamples_, 0.0f, 1.0f);
+                const auto fadeOut = std::clamp((float) trackingRemaining_ / (float) trackingFadeSamples_, 0.0f, 1.0f);
+                eventBlend = std::min(fadeIn, fadeOut);
+            }
+            else if (errorRemaining_ > 0)
+            {
+                // Damage is allowed to be abrupt in character, but entering or
+                // leaving the concealment path on a single sample produces the
+                // unmistakable click of a broken audio stream.  A very short
+                // edge crossfade keeps the defect intact without manufacturing
+                // an unrelated full-scale impulse.
+                const auto elapsed = errorTotal_ - errorRemaining_;
+                const auto fadeSamples = std::max(1, std::min(errorTotal_ / 4, (int) std::round(sr * .003f)));
+                const auto fadeIn = std::clamp((float) elapsed / (float) fadeSamples, 0.0f, 1.0f);
+                const auto fadeOut = std::clamp((float) errorRemaining_ / (float) fadeSamples, 0.0f, 1.0f);
+                eventBlend = std::min(fadeIn, fadeOut);
+            }
+            y[channel] = unaffected + (concealed - unaffected) * defectScale_[channel] * eventBlend;
         }
         if (trackingRemaining_ > 0) { ++repeatPosition_; --trackingRemaining_; }
         else if (errorRemaining_ > 0) { if (activeMode_ == CDConcealment::repeat) ++repeatPosition_; --errorRemaining_; }

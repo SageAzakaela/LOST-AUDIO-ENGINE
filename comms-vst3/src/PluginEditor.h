@@ -66,6 +66,7 @@ private:
              std::function<void()> userChange);
         void resized() override;
         void setHint(const juce::String& hint);
+        void setUserChange(std::function<void()> userChange) { slider.onDragStart = std::move(userChange); }
     private:
         juce::Label label;
         juce::Slider slider;

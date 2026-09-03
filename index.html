@@ -16,15 +16,15 @@
     <meta name="twitter:title" content="Lost Audio Engine | B&E Digital" />
     <meta name="twitter:description" content="A modular browser workstation for making audio sound old, strange, distant, damaged, or unreliable." />
     <title>Lost Audio Engine — Modular Device Workstation</title>
-    <link rel="stylesheet" href="./lame/styles.css?v=20260827.26" />
+    <link rel="stylesheet" href="./lame/styles.css?v=20260830.34" />
   </head>
-  <body>
-    <section class="mobile-gate" aria-labelledby="mobile-gate-title">
+  <body data-mobile-panel="rack">
+    <section class="mobile-gate" aria-labelledby="mobile-gate-title" hidden>
       <div class="mobile-gate__signal" aria-hidden="true"><i></i><b>LOST AUDIO ENGINE</b><i></i></div>
-      <span>B&amp;E / DESKTOP AUDIO INSTRUMENT</span>
-      <h1 id="mobile-gate-title">This workstation needs a desktop.</h1>
-      <p>Lost Audio Engine is a live modular audio rack with precision controls, waveform editing, drag-and-drop hardware, and realtime monitoring. A phone-sized version would hide the instrument instead of preserving it.</p>
-      <strong>This tool is available only on desktop devices. Open this page on a laptop or desktop browser at least 1024px wide.</strong>
+      <span>B&amp;E / MOBILE AUDIO INSTRUMENT</span>
+      <h1 id="mobile-gate-title">Preparing the mobile rack.</h1>
+      <p>Lost Audio Engine is checking this browser before opening the live signal path.</p>
+      <strong>The mobile workstation uses the same local audio engine with a focused touch workflow.</strong>
       <small>Your audio is processed locally in the browser.</small>
     </section>
     <section id="compatibilityGate" class="compatibility-gate" role="alert" aria-labelledby="compatibilityTitle" hidden>
@@ -79,6 +79,11 @@
           <label class="loop-field"><span>OUT</span><input id="loopEnd" type="number" min="0" step="0.01" value="0" /></label>
         </div>
       </section>
+      <section class="mobile-workflow-bar" aria-labelledby="mobile-workflow-title">
+        <div><span id="mobileWorkflowEyebrow">LIVE SIGNAL / LEFT TO RIGHT</span><h2 id="mobile-workflow-title">Rack</h2></div>
+        <p id="mobileWorkflowHint">Swipe through the chain. Move the controls on each device, or tap its face for deeper tuning.</p>
+        <button id="mobilePlayBtn" class="mobile-mini-transport" type="button" disabled aria-label="Play audio"><span aria-hidden="true">▶</span><b>PLAY</b></button>
+      </section>
       <section class="workbench-grid">
         <aside class="device-library" aria-labelledby="device-library-title">
           <header class="bay-heading"><span>DEVICE LIBRARY</span><h2 id="device-library-title">Hardware</h2><p>Drag from the grip into the signal path, or use the add switch.</p></header>
@@ -87,7 +92,8 @@
         </aside>
         <section class="rack-bay" aria-labelledby="rack-title">
           <header class="bay-heading bay-heading--rack"><div><span>SIGNAL PATH / LEFT TO RIGHT</span><h2 id="rack-title">Live rack</h2></div><div class="rack-readout"><span>ACTIVE DEVICES</span><strong id="rackCount">00</strong></div></header>
-          <div id="moduleRow" class="rack-chain" role="list" aria-label="Active device chain"><div id="rackEmpty" class="rack-empty"><span class="rack-empty__jack" aria-hidden="true">IN</span><strong>DRAG HARDWARE HERE</strong><p>The dry signal is already passing through. Add a device whenever you want to disturb it.</p><span class="rack-empty__jack rack-empty__jack--out" aria-hidden="true">OUT</span></div></div>
+          <div id="moduleRow" class="rack-chain" role="list" aria-label="Active device chain"><div id="rackEmpty" class="rack-empty"><span class="rack-empty__jack" aria-hidden="true">IN</span><strong>ADD HARDWARE TO BEGIN</strong><p>The dry signal is already passing through. Drag a device here or choose one from the library.</p><button class="rack-empty__add" type="button" data-mobile-open-library>CHOOSE A DEVICE <span aria-hidden="true">＋</span></button><span class="rack-empty__jack rack-empty__jack--out" aria-hidden="true">OUT</span></div></div>
+          <p id="rackOrderStatus" class="visually-hidden" role="status" aria-live="polite"></p>
           <div class="rack-signal-line" aria-hidden="true"><span>INPUT</span><i></i><b>OUTPUT</b></div>
         </section>
         <aside class="device-inspector" aria-labelledby="inspector-title">
@@ -148,6 +154,12 @@
           </section>
         </div>
       </section>
+      <nav class="mobile-workflow-dock" aria-label="Mobile workstation views">
+        <button type="button" data-mobile-panel="library" aria-pressed="false"><span aria-hidden="true">＋</span><b>Add</b></button>
+        <button type="button" data-mobile-panel="rack" aria-pressed="true"><span aria-hidden="true">⇢</span><b>Rack</b><em id="mobileRackCount">0</em></button>
+        <button type="button" data-mobile-panel="inspector" aria-pressed="false" disabled><span aria-hidden="true">◎</span><b>Tune</b></button>
+        <button type="button" data-mobile-panel="output" aria-pressed="false"><span aria-hidden="true">⌁</span><b>Output</b></button>
+      </nav>
       <footer class="workstation-footer"><span>LOST AUDIO ENGINE / LOCAL SIGNAL PROCESSING</span><nav aria-label="LOST project links"><a href="/?channel=tools">B&amp;E TOOLS ↗</a><a href="https://github.com/SageAzakaela/LOST-AUDIO-ENGINE" target="_blank" rel="noreferrer">SOURCE ↗</a></nav></footer>
     </main>
 
@@ -232,6 +244,6 @@
       </footer>
     </aside>
 
-    <script type="module" src="./lame/src/main.js?v=20260827.52"></script>
+    <script type="module" src="./lame/src/main.js?v=20260830.64"></script>
   </body>
 </html>

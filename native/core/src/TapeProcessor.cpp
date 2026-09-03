@@ -74,10 +74,23 @@ void TapeProcessor::reset(std::uint32_t seed) noexcept
         channel.humPhase = 0.0f;
         channel.hissPrevious = 0.0f;
         channel.dropoutRemaining = 0;
+        channel.dropoutTotal = 0;
         channel.dropoutBlock = 0;
         channel.dropoutGain = 1.0f;
+        channel.dropoutDepth = 1.0f;
         channel.dropoutInitialized = false;
     }
+    pendingDropoutStrength_.store(0.0f);
+    pendingDropoutDuration_.store(0.0f);
+    modulationDisplacementMs_ = dropoutProgress_ = compressionReduction_ = 0.0f;
+    saturationActivity_ = noiseActivity_ = limiterActivity_ = 0.0f;
+    dropoutActive_ = false;
+}
+
+void TapeProcessor::triggerDropout(float strength, float durationSeconds) noexcept
+{
+    pendingDropoutDuration_.store(std::max(0.0f, durationSeconds), std::memory_order_relaxed);
+    pendingDropoutStrength_.store(clamp01(strength), std::memory_order_release);
 }
 
 int TapeProcessor::latencySamples() const noexcept
@@ -141,8 +154,8 @@ void TapeProcessor::process(float* const* channels, std::size_t channelCount, st
     const auto outputGain = clamp(raw.outputGain, 0.0f, 1.5f);
     const auto sampleRate = static_cast<float>(sampleRate_);
 
-    const auto wowHz = 0.22f + wowAmount * 0.55f;
-    const auto flutterHz = 4.8f + wowAmount * 6.5f;
+    const auto wowHz = raw.wowRateHz > 0.0f ? clamp(raw.wowRateHz, 0.01f, 40.0f) : 0.22f + wowAmount * 0.55f;
+    const auto flutterHz = raw.flutterRateHz > 0.0f ? clamp(raw.flutterRateHz, 0.01f, 80.0f) : 4.8f + wowAmount * 6.5f;
     const auto wowDepthSeconds = (wowDepthMs / 1000.0f) * (0.25f + 0.75f * wowAmount);
     const auto flutterDepthSeconds = (flutterDepthMs / 1000.0f) * (0.25f + 0.75f * wowAmount);
     const auto totalDepthSeconds = clamp(wowDepthSeconds + flutterDepthSeconds, 0.0f, 0.03f);
@@ -153,12 +166,28 @@ void TapeProcessor::process(float* const* channels, std::size_t channelCount, st
     const auto dropoutBlockSamples = std::max(8, static_cast<int>(std::round((dropoutMs / 1000.0f) * sampleRate)));
     const auto humDepth = hum * hum * 0.02f;
     const auto hissDepth = hiss * hiss * 0.03f;
-    const auto saturationAmount = 1.0f + drive * 6.0f;
-    const auto asymmetry = drive * 0.045f;
+    // Keep useful oxide colour in the lower half of the control. The transfer
+    // remains gain-normalised, so more harmonics do not masquerade as loudness.
+    const auto saturationAmount = 1.0f + drive * 8.5f;
+    const auto asymmetry = drive * 0.065f;
     const auto saturationZero = std::tanh(asymmetry * saturationAmount);
     const auto saturationSlope = std::max(0.2f, saturationAmount * (1.0f - saturationZero * saturationZero));
     const auto limiterAttack = std::exp(-1.0f / (0.002f * sampleRate));
     const auto limiterRelease = std::exp(-1.0f / (0.06f * sampleRate));
+    const auto manualStrength = pendingDropoutStrength_.exchange(0.0f, std::memory_order_acq_rel);
+    if (manualStrength > 0.0f)
+    {
+        const auto seconds = pendingDropoutDuration_.exchange(0.0f, std::memory_order_relaxed);
+        const auto length = std::max(1, static_cast<int>(std::round(
+            (seconds > 0.0f ? seconds : dropoutMs * 0.001f) * sampleRate)));
+        for (std::size_t index = 0; index < activeChannels; ++index)
+        {
+            auto& state = channels_[index];
+            state.dropoutRemaining = state.dropoutTotal = length;
+            state.dropoutBlock = std::max(state.dropoutBlock, length);
+            state.dropoutDepth = manualStrength;
+        }
+    }
 
     for (std::size_t channelIndex = 0; channelIndex < activeChannels; ++channelIndex)
     {
@@ -185,6 +214,7 @@ void TapeProcessor::process(float* const* channels, std::size_t channelCount, st
             const auto wowSignal = std::sin(state.wowPhase * 2.0f * pi);
             const auto flutterSignal = std::sin(state.flutterPhase * 2.0f * pi);
             const auto modulation = (wowSignal * wowDepthSeconds + flutterSignal * flutterDepthSeconds + state.drift) * (0.6f + 0.4f * wowAmount);
+            modulationDisplacementMs_=modulation*1000.0f;
             const auto delaySeconds = clamp(static_cast<float>(latencySeconds) + modulation, 0.001f,
                                             static_cast<float>(latencySeconds) + totalDepthSeconds + 0.01f);
             auto value = readDelay(state, delaySeconds * sampleRate);
@@ -199,21 +229,29 @@ void TapeProcessor::process(float* const* channels, std::size_t channelCount, st
             state.envelope = amplitude + envelopeCoefficient * (state.envelope - amplitude);
             const auto over = std::max(1.0f, (state.envelope + 1.0e-6f) / 0.2f);
             const auto compressionGain = compression > 0.0001f ? std::pow(over, -compressionPower) : 1.0f;
+            compressionReduction_ = std::max(1.0f - compressionGain, compressionReduction_ * 0.999f);
             value *= std::max(0.45f, compressionGain) * (1.0f + compression * 0.12f);
 
             const auto saturated = (std::tanh((value + asymmetry) * saturationAmount) - saturationZero) / saturationSlope;
-            value = value * (1.0f - drive) + saturated * drive;
+            saturationActivity_ = std::max(std::abs(saturated - value) * drive, saturationActivity_ * 0.999f);
+            const auto saturationBlend = drive <= 0.0f ? 0.0f : std::min(1.0f, 0.18f + drive * 0.92f);
+            value = value * (1.0f - saturationBlend) + saturated * saturationBlend;
 
             if (state.dropoutBlock <= 0)
             {
                 state.dropoutBlock = dropoutBlockSamples;
                 state.dropoutRemaining = nextFloat(state.randomState) < dropout * dropout ? dropoutBlockSamples : 0;
+                state.dropoutTotal = state.dropoutRemaining;
+                state.dropoutDepth = 1.0f;
             }
             --state.dropoutBlock;
-            const auto dropoutTarget = state.dropoutRemaining > 0 ? 0.0f : 1.0f;
+            const auto dropoutTarget = state.dropoutRemaining > 0 ? 1.0f-state.dropoutDepth : 1.0f;
             state.dropoutGain = clamp(state.dropoutGain + (dropoutTarget - state.dropoutGain) / 48.0f, 0.0f, 1.0f);
             if (state.dropoutRemaining > 0)
                 --state.dropoutRemaining;
+            dropoutActive_ = dropoutActive_ || state.dropoutRemaining > 0;
+            if (state.dropoutRemaining > 0 && state.dropoutTotal > 0)
+                dropoutProgress_ = std::max(dropoutProgress_, 1.0f - static_cast<float>(state.dropoutRemaining) / static_cast<float>(state.dropoutTotal));
             value *= state.dropoutGain;
 
             state.humPhase += (2.0f * pi * 60.0f) / sampleRate;
@@ -222,18 +260,33 @@ void TapeProcessor::process(float* const* channels, std::size_t channelCount, st
             const auto white = nextSigned(state.randomState);
             const auto highPassedNoise = white - state.hissPrevious;
             state.hissPrevious = white;
-            value += std::sin(state.humPhase) * humDepth + highPassedNoise * hissDepth;
+            const auto noise = std::sin(state.humPhase) * humDepth + highPassedNoise * hissDepth;
+            noiseActivity_ = std::max(std::abs(noise), noiseActivity_ * 0.999f);
+            value += noise;
 
             auto output = value * outputGain;
             const auto outputAmplitude = std::abs(output);
             const auto limiterCoefficient = outputAmplitude > state.limiterEnvelope ? limiterAttack : limiterRelease;
             state.limiterEnvelope = outputAmplitude + limiterCoefficient * (state.limiterEnvelope - outputAmplitude);
+            limiterActivity_ *= 0.999f;
             if (state.limiterEnvelope > ceiling)
+            {
+                limiterActivity_ = std::max(1.0f - ceiling / (state.limiterEnvelope + 1.0e-6f), limiterActivity_);
                 output *= ceiling / (state.limiterEnvelope + 1.0e-6f);
+            }
             samples[sampleIndex] = clamp(output, -ceiling, ceiling);
 
             state.writeIndex = (state.writeIndex + 1) % state.delay.size();
         }
+    }
+    dropoutActive_ = false;
+    dropoutProgress_ = 0.0f;
+    for (std::size_t index = 0; index < activeChannels; ++index)
+    {
+        const auto& state = channels_[index];
+        dropoutActive_ = dropoutActive_ || state.dropoutRemaining > 0;
+        if (state.dropoutRemaining > 0 && state.dropoutTotal > 0)
+            dropoutProgress_ = std::max(dropoutProgress_, 1.0f - static_cast<float>(state.dropoutRemaining) / static_cast<float>(state.dropoutTotal));
     }
 }
 }

@@ -34,10 +34,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libasound2-dev libegl1-mesa-dev libfreetype-dev libfontconfig1-dev libgl1-mesa-dev libx11-dev libxcomposite-dev libxcursor-dev libxext-dev libxi-dev libxinerama-dev libxrandr-dev libxrender-dev
-      - name: Compile the Tape, Transmission, Comms, and CD V2 plugins and editors
+      - name: Compile the complete B&E Digital Lost Audio plugin fleet
         run: |
           cmake -S . -B build-tape -DLAE_BUILD_PLUGINS=ON -DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release
-          cmake --build build-tape --target TapeEngine_VST3 TransmissionEngine_VST3 CommsEngine_VST3 CDEngine_VST3 --parallel 2
+          cmake --build build-tape --target BrainCruncher_VST3 TapeEngine_VST3 TransmissionEngine_VST3 CommsEngine_VST3 CDEngine_VST3 ConferenceEngine_VST3 CamcorderEngine_VST3 CartridgeEngine_VST3 TelevisionEngine_VST3 OcclusionEngine_VST3 OpenMicNight_VST3 LostAudioSuite_VST3 LostAudioSequencer_VST3 --parallel 2
       - name: Run browser DSP and responsive harnesses
         run: node scripts/run-browser-harnesses.mjs --ci
       - name: Generate deterministic parity fixtures
@@ -59,15 +59,24 @@ jobs:
       - name: Configure pinned JUCE and native V2
         run: cmake -S . -B build-tape -DLAE_BUILD_PLUGINS=ON -DBUILD_TESTING=OFF
       - name: Build Windows VST3s
-        run: cmake --build build-tape --config Release --target TapeEngine_VST3 TransmissionEngine_VST3 CommsEngine_VST3 CDEngine_VST3 --parallel 2
+        run: cmake --build build-tape --config Release --target BrainCruncher_VST3 TapeEngine_VST3 TransmissionEngine_VST3 CommsEngine_VST3 CDEngine_VST3 ConferenceEngine_VST3 CamcorderEngine_VST3 CartridgeEngine_VST3 TelevisionEngine_VST3 OcclusionEngine_VST3 OpenMicNight_VST3 LostAudioSuite_VST3 LostAudioSequencer_VST3 --parallel 2
       - name: Verify developer bundles
         shell: pwsh
         run: |
           $bundles = @(
+            "build-tape/brain-cruncher-vst3/BrainCruncher_artefacts/Release/VST3/Brain Cruncher.vst3",
             "build-tape/tape-vst3/TapeEngine_artefacts/Release/VST3/Tape Engine.vst3",
             "build-tape/transmission-vst3/TransmissionEngine_artefacts/Release/VST3/Transmission Engine.vst3",
             "build-tape/comms-vst3/CommsEngine_artefacts/Release/VST3/Comms Engine.vst3",
-            "build-tape/cd-vst3/CDEngine_artefacts/Release/VST3/CD Engine.vst3"
+            "build-tape/cd-vst3/CDEngine_artefacts/Release/VST3/CD Engine.vst3",
+            "build-tape/conference-vst3/ConferenceEngine_artefacts/Release/VST3/Conference Engine.vst3",
+            "build-tape/camcorder-vst3/CamcorderEngine_artefacts/Release/VST3/Camcorder Engine.vst3",
+            "build-tape/cartridge-vst3/CartridgeEngine_artefacts/Release/VST3/Cartridge Engine.vst3",
+            "build-tape/television-vst3/TelevisionEngine_artefacts/Release/VST3/Television Engine.vst3",
+            "build-tape/occlusion-vst3/OcclusionEngine_artefacts/Release/VST3/Occlusion Engine.vst3",
+            "build-tape/openmicnight-vst3/OpenMicNight_artefacts/Release/VST3/Open Mic Night.vst3",
+            "build-tape/suite-vst3/LostAudioSuite_artefacts/Release/VST3/Lost Audio Suite.vst3",
+            "build-tape/sequencer-vst3/LostAudioSequencer_artefacts/Release/VST3/Lost Audio Sequencer.vst3"
           )
           foreach ($bundle in $bundles) {
             if (-not (Test-Path -LiteralPath $bundle)) {
@@ -78,12 +87,21 @@ jobs:
         shell: pwsh
         run: |
           $products = @(
+            @{ Bundle = "build-tape/brain-cruncher-vst3/BrainCruncher_artefacts/Release/VST3/Brain Cruncher.vst3"; Binary = "Brain Cruncher.vst3" },
             @{ Bundle = "build-tape/tape-vst3/TapeEngine_artefacts/Release/VST3/Tape Engine.vst3"; Binary = "Tape Engine.vst3" },
             @{ Bundle = "build-tape/transmission-vst3/TransmissionEngine_artefacts/Release/VST3/Transmission Engine.vst3"; Binary = "Transmission Engine.vst3" },
             @{ Bundle = "build-tape/comms-vst3/CommsEngine_artefacts/Release/VST3/Comms Engine.vst3"; Binary = "Comms Engine.vst3" },
-            @{ Bundle = "build-tape/cd-vst3/CDEngine_artefacts/Release/VST3/CD Engine.vst3"; Binary = "CD Engine.vst3" }
+            @{ Bundle = "build-tape/cd-vst3/CDEngine_artefacts/Release/VST3/CD Engine.vst3"; Binary = "CD Engine.vst3" },
+            @{ Bundle = "build-tape/conference-vst3/ConferenceEngine_artefacts/Release/VST3/Conference Engine.vst3"; Binary = "Conference Engine.vst3" },
+            @{ Bundle = "build-tape/camcorder-vst3/CamcorderEngine_artefacts/Release/VST3/Camcorder Engine.vst3"; Binary = "Camcorder Engine.vst3" },
+            @{ Bundle = "build-tape/cartridge-vst3/CartridgeEngine_artefacts/Release/VST3/Cartridge Engine.vst3"; Binary = "Cartridge Engine.vst3" },
+            @{ Bundle = "build-tape/television-vst3/TelevisionEngine_artefacts/Release/VST3/Television Engine.vst3"; Binary = "Television Engine.vst3" },
+            @{ Bundle = "build-tape/occlusion-vst3/OcclusionEngine_artefacts/Release/VST3/Occlusion Engine.vst3"; Binary = "Occlusion Engine.vst3" },
+            @{ Bundle = "build-tape/openmicnight-vst3/OpenMicNight_artefacts/Release/VST3/Open Mic Night.vst3"; Binary = "Open Mic Night.vst3" },
+            @{ Bundle = "build-tape/suite-vst3/LostAudioSuite_artefacts/Release/VST3/Lost Audio Suite.vst3"; Binary = "Lost Audio Suite.vst3" },
+            @{ Bundle = "build-tape/sequencer-vst3/LostAudioSequencer_artefacts/Release/VST3/Lost Audio Sequencer.vst3"; Binary = "Lost Audio Sequencer.vst3" }
           )
-          $stage = "dist/dev/lost-audio-v2-windows-x64"
+          $stage = "dist/dev/be-digital-vst3-windows-x64"
           New-Item -ItemType Directory -Path $stage -Force | Out-Null
           $hashLines = foreach ($product in $products) {
             Copy-Item -LiteralPath $product.Bundle -Destination $stage -Recurse
@@ -107,7 +125,7 @@ jobs:
       - name: Upload Windows V2 developer bundles
         uses: actions/upload-artifact@v7
         with:
-          name: lost-audio-v2-windows-dev-vst3
+          name: be-digital-vst3-windows-dev
           path: |
-            dist/dev/lost-audio-v2-windows-x64/
+            dist/dev/be-digital-vst3-windows-x64/
           if-no-files-found: error

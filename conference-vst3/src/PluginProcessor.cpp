@@ -1,58 +1,155 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
+#include <lost_audio/core/TempoSync.h>
+
+#include <algorithm>
+#include <array>
+#include <cmath>
+
 namespace
 {
-float clampf(float x, float lo, float hi)
-{
-    return juce::jlimit(lo, hi, x);
-}
-
-float softClip(float x)
-{
-    return std::tanh(x);
-}
+float clamp01(float value) noexcept { return juce::jlimit(0.0f, 1.0f, value); }
+const juce::StringArray divisions { "1 Bar", "1/2", "1/4", "1/8", "1/16", "1/32", "1/4T", "1/8T", "1/16T", "1/8D", "1/16D" };
 }
 
 ConferenceEngineAudioProcessor::ConferenceEngineAudioProcessor()
     : AudioProcessor(BusesProperties().withInput("Input", juce::AudioChannelSet::stereo(), true)
                                      .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts(*this, nullptr, "PARAMS", createParameterLayout()),
-      rng(0x636f6e66)
+      apvts(*this, nullptr, "PARAMS", createParameterLayout())
 {
+    apvts.state.setProperty("engineId", "conference", nullptr);
+    apvts.state.setProperty("schemaVersion", 3, nullptr);
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout ConferenceEngineAudioProcessor::createParameterLayout()
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> p;
-    auto n01 = juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f);
-
+    const auto n01 = juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f);
+    // V1 and V2 IDs remain in their original order for host automation and project recall.
     p.push_back(std::make_unique<juce::AudioParameterChoice>("mode", "Mode", juce::StringArray { "Discord", "Zoom", "Skype", "Cell" }, 0));
     p.push_back(std::make_unique<juce::AudioParameterFloat>("bandwidth", "Bandwidth", n01, 0.45f));
     p.push_back(std::make_unique<juce::AudioParameterFloat>("codec", "Codec", n01, 0.35f));
     p.push_back(std::make_unique<juce::AudioParameterFloat>("dropouts", "Dropouts", n01, 0.25f));
     p.push_back(std::make_unique<juce::AudioParameterFloat>("jitter", "Jitter Macro", n01, 0.2f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("robot", "Robot", n01, 0.12f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("noise", "Noise", n01, 0.12f));
-
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("hpHz", "HP", juce::NormalisableRange<float>(40.0f, 1200.0f, 1.0f), 260.0f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("lpHz", "LP", juce::NormalisableRange<float>(800.0f, 16000.0f, 1.0f), 4200.0f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("midHumpDb", "Mid Hump", juce::NormalisableRange<float>(0.0f, 14.0f, 0.1f), 2.2f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("midFreq", "Mid Freq", juce::NormalisableRange<float>(600.0f, 5000.0f, 1.0f), 1750.0f));
-
-    p.push_back(std::make_unique<juce::AudioParameterChoice>("concealMode", "Conceal", juce::StringArray { "Hold", "Mute", "Interp", "Repeat" }, 0));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("packetLoss", "Packet Loss", n01, 0.18f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("packetMs", "Packet Ms", juce::NormalisableRange<float>(4.0f, 240.0f, 1.0f), 24.0f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("repeatMs", "Repeat Ms", juce::NormalisableRange<float>(1.0f, 300.0f, 1.0f), 42.0f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("jitterMs", "Jitter Ms", juce::NormalisableRange<float>(0.0f, 3.0f, 0.001f), 0.12f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("jitterRate", "Jitter Rate", juce::NormalisableRange<float>(1.0f, 220.0f, 0.1f), 34.0f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("gate", "Gate", n01, 0.12f));
-    p.push_back(std::make_unique<juce::AudioParameterInt>("bits", "Bits", 4, 16, 12));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("rate", "Rate", juce::NormalisableRange<float>(6000.0f, 48000.0f, 1.0f), 24000.0f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("robot", "Robot", n01, 0.02f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("noise", "Noise", n01, 0.04f));
+    // These defaults resolve the original default macro recipe into explicit canonical values.
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("hpHz", "High-pass", juce::NormalisableRange<float>(40.0f, 1200.0f, 1.0f), 248.0f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("lpHz", "Low-pass", juce::NormalisableRange<float>(800.0f, 16000.0f, 1.0f), 5277.0f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("midHumpDb", "Mid Hump", juce::NormalisableRange<float>(0.0f, 14.0f, 0.1f), 3.8f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("midFreq", "Mid Frequency", juce::NormalisableRange<float>(600.0f, 5000.0f, 1.0f), 2194.0f));
+    p.push_back(std::make_unique<juce::AudioParameterChoice>("concealMode", "Conceal", juce::StringArray { "Hold", "Mute", "Interpolate", "Repeat" }, 0));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("packetLoss", "Packet Loss", n01, 0.012f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("packetMs", "Packet Length", juce::NormalisableRange<float>(4.0f, 240.0f, 1.0f), 19.0f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("repeatMs", "Repeat Length", juce::NormalisableRange<float>(1.0f, 300.0f, 1.0f), 24.0f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("jitterMs", "Jitter Depth", juce::NormalisableRange<float>(0.0f, 8.0f, 0.001f), 0.817f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("jitterRate", "Jitter Rate", juce::NormalisableRange<float>(1.0f, 220.0f, 0.1f), 10.4f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("gate", "Gate", n01, 0.124f));
+    p.push_back(std::make_unique<juce::AudioParameterInt>("bits", "Codec Bits", 4, 16, 12));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("rate", "Codec Rate", juce::NormalisableRange<float>(6000.0f, 48000.0f, 1.0f), 35980.0f));
     p.push_back(std::make_unique<juce::AudioParameterFloat>("ceiling", "Ceiling", juce::NormalisableRange<float>(0.2f, 1.0f, 0.001f), 0.92f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("outGain", "Out Gain", juce::NormalisableRange<float>(0.0f, 1.5f, 0.01f), 0.98f));
-
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("outGain", "Output", juce::NormalisableRange<float>(0.0f, 1.5f, 0.01f), 0.98f));
+    p.push_back(std::make_unique<juce::AudioParameterBool>("macroLink", "Legacy Macro Link", false));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("burstiness", "Burst Memory", n01, 0.18f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("suppression", "Noise Suppression", n01, 0.600f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("agc", "Automatic Gain", n01, 0.646f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("bufferSlip", "Buffer Slip", n01, 0.02f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("bandwidthSwitch", "Bandwidth Collapse", n01, 0.03f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("comfortNoise", "Comfort Noise", n01, 0.10f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("inputGain", "Input Gain", juce::NormalisableRange<float>(-24.0f, 24.0f, 0.1f), 0.0f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("mix", "Mix", n01, 1.0f));
+    // V3 performer parameters are append-only.
+    p.push_back(std::make_unique<juce::AudioParameterBool>("packetTempoSync", "Clock Packet Loss", false));
+    p.push_back(std::make_unique<juce::AudioParameterChoice>("packetDivision", "Packet Trigger Grid", divisions, 2));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("packetProbability", "Packet Trigger Probability", n01, 0.45f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("packetDepth", "Packet Failure Depth", n01, 1.0f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("packetDurationMs", "Packet Failure Length", juce::NormalisableRange<float>(4.0f, 1200.0f, 1.0f), 80.0f));
+    p.push_back(std::make_unique<juce::AudioParameterBool>("packetLengthSync", "Clock Packet Length", false));
+    p.push_back(std::make_unique<juce::AudioParameterChoice>("packetLengthDivision", "Packet Failure Length Grid", divisions, 4));
+    p.push_back(std::make_unique<juce::AudioParameterBool>("robotTempoSync", "Clock Robot Grain", false));
+    p.push_back(std::make_unique<juce::AudioParameterChoice>("robotDivision", "Robot Trigger Grid", divisions, 3));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("robotProbability", "Robot Trigger Probability", n01, 0.35f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("robotStrength", "Robot Event Strength", n01, 0.88f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("robotDurationMs", "Robot Event Length", juce::NormalisableRange<float>(8.0f, 2000.0f, 1.0f), 180.0f));
+    p.push_back(std::make_unique<juce::AudioParameterBool>("robotLengthSync", "Clock Robot Length", false));
+    p.push_back(std::make_unique<juce::AudioParameterChoice>("robotLengthDivision", "Robot Event Length Grid", divisions, 3));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("robotGrainMs", "Robot Grain Length", juce::NormalisableRange<float>(2.0f, 90.0f, 0.1f), 24.0f));
+    p.push_back(std::make_unique<juce::AudioParameterBool>("jitterTempoSync", "Clock Jitter Updates", false));
+    p.push_back(std::make_unique<juce::AudioParameterChoice>("jitterDivision", "Jitter Update Grid", divisions, 4));
     return { p.begin(), p.end() };
+}
+
+float ConferenceEngineAudioProcessor::value(const char* id) const noexcept
+{
+    if (const auto* raw = apvts.getRawParameterValue(id)) return raw->load(std::memory_order_relaxed);
+    return 0.0f;
+}
+
+bool ConferenceEngineAudioProcessor::legacyMacrosActive() const noexcept { return value("macroLink") > 0.5f; }
+
+void ConferenceEngineAudioProcessor::materialiseLegacyMacros()
+{
+    if (!legacyMacrosActive()) return;
+    const auto mode = (lost_audio::core::ConferenceMode) juce::jlimit(0, 3, (int) std::lround(value("mode")));
+    const auto t = lost_audio::core::mapConferenceMacros(mode, value("bandwidth"), value("codec"), value("dropouts"), value("jitter"), value("robot"), value("noise"));
+    const auto set = [this] (const char* id, float plain)
+    {
+        if (auto* parameter = apvts.getParameter(id)) parameter->setValueNotifyingHost(parameter->convertTo0to1(plain));
+    };
+    set("hpHz", t.highPassHz); set("lpHz", t.lowPassHz); set("midHumpDb", t.midHumpDb); set("midFreq", t.midFrequencyHz);
+    set("packetLoss", t.packetLoss); set("packetMs", t.packetMs); set("repeatMs", t.repeatMs); set("jitterMs", t.jitterMs);
+    set("jitterRate", t.jitterRate); set("gate", t.gate); set("bits", (float) t.bits); set("rate", t.converterRateHz);
+    set("robot", t.robot); set("noise", t.noise); set("burstiness", t.burstiness); set("suppression", t.suppression);
+    set("agc", t.agc); set("bufferSlip", t.bufferSlip); set("bandwidthSwitch", t.bandwidthSwitch);
+    set("comfortNoise", t.comfortNoise); set("outGain", t.outputGain); set("ceiling", t.ceiling); set("macroLink", 0.0f);
+}
+
+std::array<float, 64> ConferenceEngineAudioProcessor::outputTrace() const noexcept
+{
+    std::array<float, 64> result {};
+    for (std::size_t i = 0; i < result.size(); ++i) result[i] = trace[i].load(std::memory_order_relaxed);
+    return result;
+}
+
+float ConferenceEngineAudioProcessor::packetDurationSeconds(double bpm) const noexcept
+{
+    if (value("packetLengthSync") > 0.5f)
+        return lost_audio::core::tempoDivisionMilliseconds(bpm, (int) value("packetLengthDivision")) * 0.001f;
+    return value("packetDurationMs") * 0.001f;
+}
+
+float ConferenceEngineAudioProcessor::robotDurationSeconds(double bpm) const noexcept
+{
+    if (value("robotLengthSync") > 0.5f)
+        return lost_audio::core::tempoDivisionMilliseconds(bpm, (int) value("robotLengthDivision")) * 0.001f;
+    return value("robotDurationMs") * 0.001f;
+}
+
+lost_audio::core::ConferenceParameters ConferenceEngineAudioProcessor::readParameters(double bpm) const noexcept
+{
+    lost_audio::core::ConferenceParameters p;
+    p.mode = (lost_audio::core::ConferenceMode) juce::jlimit(0, 3, (int) std::lround(value("mode")));
+    p.concealment = (lost_audio::core::ConferenceConcealment) juce::jlimit(0, 3, (int) std::lround(value("concealMode")));
+    p.inputGain = juce::Decibels::decibelsToGain(value("inputGain")); p.mix = clamp01(value("mix"));
+    const auto legacy = legacyMacrosActive();
+    const auto t = lost_audio::core::mapConferenceMacros(p.mode, value("bandwidth"), value("codec"), value("dropouts"), value("jitter"), value("robot"), value("noise"));
+    p.highPassHz = legacy ? t.highPassHz : value("hpHz"); p.lowPassHz = legacy ? t.lowPassHz : value("lpHz");
+    p.midHumpDb = legacy ? t.midHumpDb : value("midHumpDb"); p.midFrequencyHz = legacy ? t.midFrequencyHz : value("midFreq");
+    p.packetLoss = legacy ? t.packetLoss : value("packetLoss"); p.packetMs = legacy ? t.packetMs : value("packetMs");
+    p.repeatMs = legacy ? t.repeatMs : value("repeatMs"); p.jitterMs = legacy ? t.jitterMs : value("jitterMs");
+    p.jitterRate = legacy ? t.jitterRate : value("jitterRate"); p.gate = legacy ? t.gate : value("gate");
+    p.bits = legacy ? t.bits : (int) std::lround(value("bits")); p.converterRateHz = legacy ? t.converterRateHz : value("rate");
+    p.robot = legacy ? t.robot : value("robot"); p.noise = legacy ? t.noise : value("noise");
+    p.burstiness = legacy ? t.burstiness : value("burstiness"); p.suppression = legacy ? t.suppression : value("suppression");
+    p.agc = legacy ? t.agc : value("agc"); p.bufferSlip = legacy ? t.bufferSlip : value("bufferSlip");
+    p.bandwidthSwitch = legacy ? t.bandwidthSwitch : value("bandwidthSwitch"); p.comfortNoise = legacy ? t.comfortNoise : value("comfortNoise");
+    p.outputGain = legacy ? juce::jlimit(0.0f, 1.5f, t.outputGain * value("outGain") / 0.98f) : value("outGain");
+    p.ceiling = legacy ? t.ceiling : value("ceiling");
+    if (value("packetTempoSync") > 0.5f) p.packetLoss = 0.0f;
+    if (value("robotTempoSync") > 0.5f) p.robot = 0.0f;
+    if (value("jitterTempoSync") > 0.5f) p.jitterRate = lost_audio::core::tempoDivisionRateHz(bpm, (int) value("jitterDivision"));
+    return p;
 }
 
 const juce::String ConferenceEngineAudioProcessor::getName() const { return JucePlugin_Name; }
@@ -66,278 +163,113 @@ void ConferenceEngineAudioProcessor::setCurrentProgram(int) {}
 const juce::String ConferenceEngineAudioProcessor::getProgramName(int) { return {}; }
 void ConferenceEngineAudioProcessor::changeProgramName(int, const juce::String&) {}
 
-float ConferenceEngineAudioProcessor::nextWhite()
-{
-    return unif(rng) * 2.0f - 1.0f;
-}
-
 void ConferenceEngineAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
     juce::ignoreUnused(samplesPerBlock);
-
-    core.delay.assign((size_t) juce::jmax(256, (int) std::ceil(sampleRate * 0.012)), 0.0f);
-    core.di = 0;
-    core.jPhase = unif(rng) * juce::MathConstants<float>::twoPi;
-    core.jNoise = 0.0f;
-
-    core.ring.assign((size_t) juce::jmax(1024, (int) std::ceil(sampleRate * 0.4)), 0.0f);
-    core.ri = 0;
-
-    core.env = 0.0f;
-    core.gateGain = 1.0f;
-    core.packetRemain = 0;
-    core.packetTotal = 0;
-    core.inDrop = false;
-    core.dropFade = 0.0f;
-    core.lastGood = 0.0f;
-    core.dropStart = 0.0f;
-    core.hold = 0.0f;
-    core.holdPeriod = 1;
-    core.rateAcc = 0;
-
-    core.robotRemain = 0;
-    core.robotLen = 0;
-    core.robotI = 0;
-    core.robotBuf.assign((size_t) juce::jmax(64, (int) std::ceil(sampleRate * 0.09)), 0.0f);
-
-    updateFilters(sampleRate);
+    conferenceCore.prepare(sampleRate, (std::size_t) juce::jlimit(1, 2, getTotalNumInputChannels()));
+    conferenceCore.reset(0x636f6e66u); setLatencySamples(conferenceCore.latencySamples()); currentBpm = 120.0;
+    pendingPacketTrigger.store(false); pendingRobotTrigger.store(false);
+    for (auto& peak : inputPeaks) peak.store(0.0f); for (auto& peak : outputPeaks) peak.store(0.0f);
+    for (auto& point : trace) point.store(0.0f);
 }
 
 void ConferenceEngineAudioProcessor::releaseResources() {}
 
 bool ConferenceEngineAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const
 {
-    const auto in = layouts.getMainInputChannelSet();
-    const auto out = layouts.getMainOutputChannelSet();
-    if (in != out)
-        return false;
-    return in == juce::AudioChannelSet::mono() || in == juce::AudioChannelSet::stereo();
-}
-
-void ConferenceEngineAudioProcessor::updateFilters(double sampleRate)
-{
-    const auto hpHz = apvts.getRawParameterValue("hpHz")->load();
-    const auto lpHz = apvts.getRawParameterValue("lpHz")->load();
-    const auto midDb = apvts.getRawParameterValue("midHumpDb")->load();
-    const auto midFreq = apvts.getRawParameterValue("midFreq")->load();
-
-    auto hp = juce::dsp::IIR::Coefficients<float>::makeHighPass(sampleRate, clampf(hpHz, 10.0f, 20000.0f), 0.707f);
-    auto lp = juce::dsp::IIR::Coefficients<float>::makeLowPass(sampleRate, clampf(lpHz, 20.0f, 20000.0f), 0.85f);
-    auto hump = juce::dsp::IIR::Coefficients<float>::makePeakFilter(sampleRate, clampf(midFreq, 100.0f, 20000.0f), 1.25f, juce::Decibels::decibelsToGain(midDb));
-    auto dip = juce::dsp::IIR::Coefficients<float>::makePeakFilter(sampleRate, 650.0f, 0.9f, juce::Decibels::decibelsToGain(-0.35f * midDb));
-
-    tone.hp1.coefficients = hp;
-    tone.hp2.coefficients = hp;
-    tone.dip.coefficients = dip;
-    tone.hump.coefficients = hump;
-    tone.lp1.coefficients = lp;
-    tone.lp2.coefficients = lp;
-}
-
-float ConferenceEngineAudioProcessor::readDelay(float delaySamps) const
-{
-    const auto len = (int) core.delay.size();
-    const auto read = (float) core.di - delaySamps;
-    auto i0 = (int) std::floor(read);
-    while (i0 < 0)
-        i0 += len;
-    i0 %= len;
-    const auto i1 = (i0 + 1) % len;
-    const auto frac = read - std::floor(read);
-    return core.delay[(size_t) i0] * (1.0f - frac) + core.delay[(size_t) i1] * frac;
-}
-
-void ConferenceEngineAudioProcessor::startPacket(int packetSamps, float lossProb)
-{
-    core.packetTotal = juce::jmax(1, packetSamps);
-    core.packetRemain = core.packetTotal;
-    const auto wasDrop = core.inDrop;
-    core.inDrop = unif(rng) < lossProb;
-    if (core.inDrop)
-        core.dropStart = core.lastGood;
-    else if (wasDrop)
-        core.dropFade = 0.12f;
+    const auto input = layouts.getMainInputChannelSet();
+    return input == layouts.getMainOutputChannelSet()
+        && (input == juce::AudioChannelSet::mono() || input == juce::AudioChannelSet::stereo());
 }
 
 void ConferenceEngineAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
-    juce::ignoreUnused(midi);
-    juce::ScopedNoDenormals nd;
+    juce::ignoreUnused(midi); juce::ScopedNoDenormals noDenormals;
+    const auto channels = juce::jlimit(0, 2, getTotalNumInputChannels());
+    for (int channel = channels; channel < getTotalNumOutputChannels(); ++channel) buffer.clear(channel, 0, buffer.getNumSamples());
+    if (channels == 0 || getSampleRate() <= 0.0 || buffer.getNumSamples() <= 0) return;
+    for (int channel = 0; channel < channels; ++channel)
+        inputPeaks[(std::size_t) channel].store(buffer.getMagnitude(channel, 0, buffer.getNumSamples()), std::memory_order_relaxed);
+    if (channels == 1) inputPeaks[1].store(inputPeaks[0].load(std::memory_order_relaxed), std::memory_order_relaxed);
 
-    const auto inCh = getTotalNumInputChannels();
-    const auto outCh = getTotalNumOutputChannels();
-    for (int ch = inCh; ch < outCh; ++ch)
-        buffer.clear(ch, 0, buffer.getNumSamples());
-
-    updateFilters(getSampleRate());
-
-    const auto n = buffer.getNumSamples();
-    const auto sr = (float) getSampleRate();
-
-    const auto mode = juce::jlimit(0, 3, (int) std::lround(apvts.getRawParameterValue("mode")->load()));
-    const auto concealMode = juce::jlimit(0, 3, (int) std::lround(apvts.getRawParameterValue("concealMode")->load()));
-    const auto packetLoss = clampf(apvts.getRawParameterValue("packetLoss")->load(), 0.0f, 1.0f);
-    const auto packetMs = clampf(apvts.getRawParameterValue("packetMs")->load(), 4.0f, 240.0f);
-    const auto repeatMs = clampf(apvts.getRawParameterValue("repeatMs")->load(), 1.0f, 300.0f);
-    const auto jitterMs = clampf(apvts.getRawParameterValue("jitterMs")->load(), 0.0f, 3.0f);
-    const auto jitterRate = clampf(apvts.getRawParameterValue("jitterRate")->load(), 1.0f, 220.0f);
-    const auto gate = clampf(apvts.getRawParameterValue("gate")->load(), 0.0f, 1.0f);
-    const auto bits = juce::jlimit(4, 16, (int) std::lround(apvts.getRawParameterValue("bits")->load()));
-    const auto rateParam = clampf(apvts.getRawParameterValue("rate")->load(), 6000.0f, 48000.0f);
-    const auto robot = clampf(apvts.getRawParameterValue("robot")->load(), 0.0f, 1.0f);
-    const auto noise = clampf(apvts.getRawParameterValue("noise")->load(), 0.0f, 1.0f);
-    const auto ceiling = clampf(apvts.getRawParameterValue("ceiling")->load(), 0.2f, 1.0f);
-    const auto outGain = clampf(apvts.getRawParameterValue("outGain")->load(), 0.0f, 1.5f);
-
-    const auto modeLossScale = mode == 3 ? 1.35f : (mode == 2 ? 1.05f : (mode == 1 ? 0.95f : 1.0f));
-    const auto lossProb = clampf(packetLoss * modeLossScale, 0.0f, 1.0f);
-
-    const auto packetSamps = juce::jmax(1, (int) std::lround((packetMs / 1000.0f) * sr));
-    if (core.packetRemain <= 0 || core.packetTotal != packetSamps)
-        startPacket(packetSamps, lossProb);
-
-    const auto jDepth = (jitterMs / 1000.0f) * sr;
-    const auto jInc = (juce::MathConstants<float>::twoPi * jitterRate) / sr;
-
-    core.holdPeriod = juce::jmax(1, (int) std::lround(sr / juce::jmax(6000.0f, juce::jmin(sr, rateParam))));
-    const auto q = (float) std::pow(2.0, bits - 1);
-
-    const auto envAtk = std::exp(-1.0f / (0.003f * sr));
-    const auto envRel = std::exp(-1.0f / (0.06f * sr));
-    const auto gateThr = 0.002f + gate * gate * 0.06f;
-
-    const auto robotRate = 0.05f + robot * 1.25f;
-    const auto robotP = robotRate / sr;
-
-    auto* l = buffer.getWritePointer(0);
-    auto* r = buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : nullptr;
-
-    for (int i = 0; i < n; ++i)
+    bool playing = false, hasPpq = false; double bpm = currentBpm, ppq = 0.0;
+    if (auto* head = getPlayHead()) if (const auto position = head->getPosition())
     {
-        const auto inL = l[i];
-        const auto inR = r != nullptr ? r[i] : inL;
-        auto x = 0.5f * (inL + inR);
-
-        core.delay[(size_t) core.di] = x;
-        core.di = (core.di + 1) % (int) core.delay.size();
-
-        core.jNoise = 0.995f * core.jNoise + 0.005f * nextWhite();
-        const auto jMod = 0.65f + 0.35f * std::sin(core.jPhase);
-        core.jPhase += jInc;
-        if (core.jPhase > juce::MathConstants<float>::twoPi)
-            core.jPhase -= juce::MathConstants<float>::twoPi;
-        const auto jSamps = jDepth * (jMod + 0.25f * core.jNoise);
-        x = readDelay(juce::jmax(0.0f, jSamps));
-
-        x = tone.hp1.processSample(x);
-        x = tone.hp2.processSample(x);
-        x = tone.dip.processSample(x);
-        x = tone.hump.processSample(x);
-        x = tone.lp1.processSample(x);
-        x = tone.lp2.processSample(x);
-
-        const auto absx = std::abs(x);
-        const auto e = absx > core.env ? envAtk : envRel;
-        core.env = (1.0f - e) * absx + e * core.env;
-        const auto wantGate = core.env < gateThr ? 0.1f : 1.0f;
-        core.gateGain = 0.995f * core.gateGain + 0.005f * wantGate;
-        x *= core.gateGain;
-
-        if (robot > 0.0001f && core.robotRemain <= 0 && unif(rng) < robotP)
-        {
-            const auto durMs = 18.0f + robot * 90.0f;
-            core.robotLen = juce::jlimit(8, (int) core.robotBuf.size(), (int) std::lround((durMs / 1000.0f) * sr));
-            core.robotI = 0;
-            core.robotRemain = juce::jmax(8, (int) std::lround((float) core.robotLen * (1.2f + robot * 3.2f)));
-            for (int k = 0; k < core.robotLen; ++k)
-            {
-                const auto idx = (core.di - 1 - k + (int) core.delay.size()) % (int) core.delay.size();
-                core.robotBuf[(size_t) (core.robotLen - 1 - k)] = core.delay[(size_t) idx];
-            }
-        }
-        if (core.robotRemain > 0 && core.robotLen > 0)
-        {
-            x = core.robotBuf[(size_t) core.robotI];
-            core.robotI = (core.robotI + 1) % core.robotLen;
-            --core.robotRemain;
-        }
-
-        if (core.inDrop)
-        {
-            if (concealMode == 1)
-                x = 0.0f;
-            else if (concealMode == 3)
-            {
-                const auto back = juce::jmax(1, (int) std::lround((repeatMs / 1000.0f) * sr));
-                const auto idx = (core.ri - back + (int) core.ring.size()) % (int) core.ring.size();
-                x = core.ring[(size_t) idx];
-            }
-            else
-                x = core.lastGood;
-        }
-        else
-        {
-            core.lastGood = x;
-        }
-
-        --core.packetRemain;
-        if (core.packetRemain <= 0)
-            startPacket(packetSamps, lossProb);
-
-        if (!core.inDrop && core.dropFade > 0.0f)
-        {
-            const auto a = clampf(core.dropFade, 0.0f, 1.0f);
-            x = core.dropStart * (1.0f - a) + x * a;
-            core.dropFade += 0.08f;
-            if (core.dropFade >= 1.0f)
-                core.dropFade = 0.0f;
-        }
-
-        ++core.rateAcc;
-        if (core.rateAcc >= core.holdPeriod)
-        {
-            core.rateAcc = 0;
-            core.hold = x;
-        }
-        x = core.hold;
-
-        x = std::round(x * q) / q;
-        x += nextWhite() * (noise * (0.002f + (mode == 3 ? 0.002f : 0.001f)));
-
-        x *= outGain;
-        x = softClip(x);
-        x = clampf(x, -ceiling, ceiling);
-
-        l[i] = x;
-        if (r != nullptr)
-            r[i] = x;
-
-        core.ring[(size_t) core.ri] = x;
-        core.ri = (core.ri + 1) % (int) core.ring.size();
+        playing = position->getIsPlaying();
+        if (const auto hostBpm = position->getBpm()) bpm = *hostBpm;
+        if (const auto hostPpq = position->getPpqPosition()) { ppq = *hostPpq; hasPpq = true; }
     }
+    currentBpm = juce::jlimit(20.0, 400.0, bpm);
+    const auto sampleCount = buffer.getNumSamples();
+    lost_audio::core::TempoEventSchedule packetSchedule, robotSchedule;
+    if (playing && hasPpq && value("packetTempoSync") > 0.5f)
+        packetSchedule = lost_audio::core::tempoEventsInBlock(ppq, currentBpm, (int) value("packetDivision"), getSampleRate(), sampleCount);
+    if (playing && hasPpq && value("robotTempoSync") > 0.5f)
+        robotSchedule = lost_audio::core::tempoEventsInBlock(ppq, currentBpm, (int) value("robotDivision"), getSampleRate(), sampleCount);
+
+    std::array<int, 68> boundaries {}; int boundaryCount = 0;
+    boundaries[(std::size_t) boundaryCount++] = 0; boundaries[(std::size_t) boundaryCount++] = sampleCount;
+    for (std::size_t i = 0; i < packetSchedule.size; ++i) boundaries[(std::size_t) boundaryCount++] = packetSchedule.events[i].sampleOffset;
+    for (std::size_t i = 0; i < robotSchedule.size; ++i) boundaries[(std::size_t) boundaryCount++] = robotSchedule.events[i].sampleOffset;
+    std::sort(boundaries.begin(), boundaries.begin() + boundaryCount);
+    boundaryCount = (int) std::distance(boundaries.begin(), std::unique(boundaries.begin(), boundaries.begin() + boundaryCount));
+
+    auto firePacket = pendingPacketTrigger.exchange(false, std::memory_order_acq_rel);
+    auto fireRobot = pendingRobotTrigger.exchange(false, std::memory_order_acq_rel);
+    auto maxJitter = 0.0f, maxSuppression = 0.0f, maxAgc = 0.0f, maxComfort = 0.0f, maxLimiter = 0.0f;
+    const auto parameters = readParameters(currentBpm);
+    for (int boundary = 0; boundary < boundaryCount - 1; ++boundary)
+    {
+        const auto offset = boundaries[(std::size_t) boundary];
+        for (std::size_t i = 0; i < packetSchedule.size; ++i)
+            if (packetSchedule.events[i].sampleOffset == offset
+                && lost_audio::core::tempoEventDecision(packetSchedule.events[i].stepIndex, value("packetProbability"), 0x636f6e66504b54ull))
+                firePacket = true;
+        for (std::size_t i = 0; i < robotSchedule.size; ++i)
+            if (robotSchedule.events[i].sampleOffset == offset
+                && lost_audio::core::tempoEventDecision(robotSchedule.events[i].stepIndex, value("robotProbability"), 0x636f6e66524254ull))
+                fireRobot = true;
+        if (firePacket && !conferenceCore.packetLost()) conferenceCore.triggerPacketLoss(value("packetDepth"), packetDurationSeconds(currentBpm));
+        if (fireRobot && !conferenceCore.robotActive()) conferenceCore.triggerRobot(value("robotStrength"), robotDurationSeconds(currentBpm), value("robotGrainMs"));
+        firePacket = fireRobot = false;
+
+        const auto count = boundaries[(std::size_t) boundary + 1] - offset;
+        if (count <= 0) continue;
+        float* pointers[] { buffer.getWritePointer(0) + offset, channels > 1 ? buffer.getWritePointer(1) + offset : nullptr };
+        conferenceCore.process(pointers, (std::size_t) channels, (std::size_t) count, parameters);
+        maxJitter = std::max(maxJitter, conferenceCore.jitterActivity()); maxSuppression = std::max(maxSuppression, conferenceCore.suppressionActivity());
+        maxAgc = std::max(maxAgc, conferenceCore.agcActivity()); maxComfort = std::max(maxComfort, conferenceCore.comfortNoiseActivity());
+        maxLimiter = std::max(maxLimiter, conferenceCore.limiterActivity());
+    }
+
+    for (int channel = 0; channel < channels; ++channel)
+        outputPeaks[(std::size_t) channel].store(buffer.getMagnitude(channel, 0, sampleCount), std::memory_order_relaxed);
+    if (channels == 1) outputPeaks[1].store(outputPeaks[0].load(std::memory_order_relaxed), std::memory_order_relaxed);
+    for (int i = 0; i < (int) trace.size(); ++i)
+    {
+        const auto first = i * sampleCount / (int) trace.size(), last = juce::jmax(first + 1, (i + 1) * sampleCount / (int) trace.size());
+        trace[(std::size_t) i].store(buffer.getRMSLevel(0, first, juce::jmin(sampleCount, last) - first), std::memory_order_relaxed);
+    }
+    lossActive.store(conferenceCore.packetLost()); robotState.store(conferenceCore.robotActive());
+    slipState.store(conferenceCore.bufferSlipActive()); bandwidthState.store(conferenceCore.bandwidthCollapsed());
+    packetProgressMeter.store(conferenceCore.packetLossProgress()); robotProgressMeter.store(conferenceCore.robotProgress());
+    jitterMeter.store(maxJitter); suppressionMeter.store(maxSuppression); agcMeter.store(maxAgc);
+    comfortMeter.store(maxComfort); limiterMeter.store(maxLimiter);
 }
 
 bool ConferenceEngineAudioProcessor::hasEditor() const { return true; }
-
-juce::AudioProcessorEditor* ConferenceEngineAudioProcessor::createEditor()
-{
-    return new ConferenceEngineAudioProcessorEditor(*this);
-}
-
+juce::AudioProcessorEditor* ConferenceEngineAudioProcessor::createEditor() { return new ConferenceEngineAudioProcessorEditor(*this); }
 void ConferenceEngineAudioProcessor::getStateInformation(juce::MemoryBlock& dest)
 {
-    if (auto xml = apvts.copyState().createXml())
-        copyXmlToBinary(*xml, dest);
+    auto state = apvts.copyState(); state.setProperty("engineId", "conference", nullptr); state.setProperty("schemaVersion", 3, nullptr);
+    if (auto xml = state.createXml()) copyXmlToBinary(*xml, dest);
 }
-
 void ConferenceEngineAudioProcessor::setStateInformation(const void* data, int size)
 {
-    if (auto xml = getXmlFromBinary(data, size))
-        if (xml->hasTagName(apvts.state.getType()))
-            apvts.replaceState(juce::ValueTree::fromXml(*xml));
+    if (auto xml = getXmlFromBinary(data, size)) if (xml->hasTagName(apvts.state.getType()))
+    {
+        apvts.replaceState(juce::ValueTree::fromXml(*xml));
+        apvts.state.setProperty("engineId", "conference", nullptr); apvts.state.setProperty("schemaVersion", 3, nullptr);
+    }
 }
-
-juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
-{
-    return new ConferenceEngineAudioProcessor();
-}
+juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new ConferenceEngineAudioProcessor(); }

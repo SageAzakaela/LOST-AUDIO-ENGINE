@@ -13,8 +13,8 @@ if(NOT TARGET juce::juce_audio_utils)
 endif()
 
 juce_add_plugin(CDEngine
-  COMPANY_NAME "LostAudio"
-  BUNDLE_ID "com.lostaudio.cdengine"
+  COMPANY_NAME "B&E Digital"
+  BUNDLE_ID "com.lostaudio.cdengine" # Stable legacy identity; publisher is B&E Digital.
   IS_SYNTH FALSE
   NEEDS_MIDI_INPUT FALSE
   NEEDS_MIDI_OUTPUT FALSE
@@ -54,3 +54,13 @@ target_link_libraries(CDEngine
     juce::juce_recommended_lto_flags
     juce::juce_recommended_warning_flags
 )
+
+if(BUILD_TESTING)
+  add_executable(lost_audio_cd_canonical_state_tests tests/CanonicalStateTests.cpp)
+  target_include_directories(lost_audio_cd_canonical_state_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_BINARY_DIR}/CDEngine_artefacts/JuceLibraryCode
+  )
+  target_link_libraries(lost_audio_cd_canonical_state_tests PRIVATE CDEngine LostAudio::Core juce::juce_audio_plugin_client juce::juce_audio_utils juce::juce_dsp)
+  add_test(NAME lost_audio_cd_canonical_state_tests COMMAND lost_audio_cd_canonical_state_tests)
+endif()

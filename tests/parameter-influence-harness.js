@@ -1,12 +1,12 @@
 import { buildTapeGraph, defaultSettings as tapeDefaults } from "../tape-engine/src/audio/graph.js?v=20260827.21";
 import { buildTelevisionGraph, defaultSettings as televisionDefaults } from "../television-engine/src/audio/graph.js?v=20260827.2";
-import { buildOcclusionGraph, defaultSettings as occlusionDefaults } from "../occlusion-engine/src/audio/graph.js?v=20260827.19";
+import { buildOcclusionGraph, defaultSettings as occlusionDefaults } from "../occlusion-engine/src/audio/graph.js?v=20260828.20";
 import { buildTransmissionGraph, defaultSettings as transmissionDefaults } from "../src/audio/graph.js?v=20260827.4";
 import { buildCommsGraph, defaultSettings as commsDefaults } from "../comms-engine/src/audio/graph.js?v=20260827.26";
 import { buildConferenceGraph, defaultSettings as conferenceDefaults } from "../conference-engine/src/audio/graph.js?v=20260827.24";
 import { buildCartridgeGraph, defaultSettings as cartridgeDefaults } from "../cartridge-engine/src/audio/graph.js?v=20260827.26";
 import { buildCdGraph, defaultSettings as cdDefaults } from "../cd-engine/src/audio/graph.js?v=20260827.6";
-import { buildCamcorderGraph, defaultSettings as camcorderDefaults } from "../camcorder-engine/src/audio/graph.js?v=20260827.27";
+import { buildCamcorderGraph, defaultSettings as camcorderDefaults } from "../camcorder-engine/src/audio/graph.js?v=20260828.28";
 
 const sampleRate = 48000;
 const seconds = 1.5;

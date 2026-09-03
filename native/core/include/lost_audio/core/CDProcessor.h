@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cstddef>
@@ -75,11 +76,25 @@ public:
                  const CDParameters& parameters) noexcept;
     void triggerDamage(float strength = 1.0f) noexcept;
     void triggerSkip(float strength = 1.0f) noexcept;
+    void triggerMusicalSkip(float strength, int loopSamples, int durationSamples,
+                            bool restartActive = false) noexcept;
 
     [[nodiscard]] int latencySamples() const noexcept { return latencySamples_; }
     [[nodiscard]] float outputPeak() const noexcept { return outputPeak_; }
     [[nodiscard]] bool damageActive() const noexcept { return errorRemaining_ > 0; }
     [[nodiscard]] bool skipActive() const noexcept { return trackingRemaining_ > 0; }
+    [[nodiscard]] float discPhase() const noexcept { return discPhase_; }
+    [[nodiscard]] float damageProgress() const noexcept
+    {
+        return errorRemaining_ > 0 && errorTotal_ > 0
+            ? 1.0f - static_cast<float>(errorRemaining_) / static_cast<float>(errorTotal_) : 0.0f;
+    }
+    [[nodiscard]] float skipProgress() const noexcept
+    {
+        return trackingRemaining_ > 0 && trackingTotal_ > 0
+            ? 1.0f - static_cast<float>(trackingRemaining_) / static_cast<float>(trackingTotal_) : 0.0f;
+    }
+    [[nodiscard]] float servoActivity() const noexcept { return std::clamp(servoEnvelope_, 0.0f, 1.0f); }
 
 private:
     struct ChannelState
@@ -118,6 +133,9 @@ private:
     std::uint32_t randomState_ = 0x4344454eu;
     std::atomic<float> pendingDamage_ { 0.0f };
     std::atomic<float> pendingSkip_ { 0.0f };
+    std::atomic<int> pendingSkipLoopSamples_ { 0 };
+    std::atomic<int> pendingSkipDurationSamples_ { 0 };
+    std::atomic<bool> pendingSkipRestart_ { false };
 
     float jitterPhase_ = 0.0f;
     float jitterNoise_ = 0.0f;
@@ -135,6 +153,8 @@ private:
     int repeatPosition_ = 0;
     int repeatLength_ = 1;
     int trackingRemaining_ = 0;
+    int trackingTotal_ = 0;
+    int trackingFadeSamples_ = 0;
 
     float servoEnvelope_ = 0.0f;
     float servoSweep_ = 0.0f;

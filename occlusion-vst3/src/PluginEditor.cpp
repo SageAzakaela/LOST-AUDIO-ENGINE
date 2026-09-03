@@ -1,352 +1,76 @@
 #include "PluginEditor.h"
 
+#include <cmath>
+
 namespace
 {
-float clampf(float x, float lo, float hi)
-{
-    return juce::jlimit(lo, hi, x);
-}
-
-struct MaterialDefaults
-{
-    float lpMin;
-    float dipHz;
-    float dipDb;
-    float bumpHz;
-    float bumpDb;
-    float damp;
-    float leakBias;
+constexpr std::uint32_t ink=0xff090d0f,deep=0xff12191c,panel=0xff1b2528,line=0xff52676d,bone=0xffe9e8df,dim=0xff9baaad,cyan=0xff67dff0,amber=0xffffb95f,red=0xffff635c;
+juce::Font font(float s,bool b=false){return juce::Font(juce::FontOptions(s,b?juce::Font::bold:juce::Font::plain));}
+struct Setting{const char*id;float value;};struct Preset{const char*name;std::initializer_list<Setting>settings;};
+const Preset presetsData[] {
+ {"Next Room Drywall",{{"material",0},{"construction",1},{"distance",.38f},{"wall",.48f},{"sourceRoom",.34f},{"listenerRoom",.46f}}},
+ {"Through Brick",{{"material",1},{"construction",0},{"distance",.48f},{"wall",.78f},{"sourceRoom",.28f},{"listenerRoom",.42f}}},
+ {"Hollow Wood Wall",{{"material",2},{"construction",2},{"distance",.40f},{"wall",.62f},{"sourceRoom",.42f},{"listenerRoom",.50f}}},
+ {"Heavy Curtain",{{"material",3},{"construction",0},{"distance",.30f},{"wall",.48f},{"sourceRoom",.38f},{"listenerRoom",.36f}}},
+ {"Closed Interior Door",{{"material",4},{"construction",1},{"distance",.46f},{"wall",.66f},{"sourceRoom",.44f},{"listenerRoom",.52f}}},
+ {"Window Glass",{{"material",5},{"construction",3},{"distance",.34f},{"wall",.52f},{"sourceRoom",.32f},{"listenerRoom",.38f}}},
+ {"Metal Duct Panel",{{"material",6},{"construction",3},{"distance",.38f},{"wall",.58f},{"sourceRoom",.28f},{"listenerRoom",.48f}}},
+ {"Concrete Basement",{{"material",7},{"construction",0},{"distance",.62f},{"wall",.88f},{"sourceRoom",.52f},{"listenerRoom",.60f}}},
+ {"Loose Motel Wall",{{"material",0},{"construction",4},{"distance",.44f},{"wall",.55f},{"sourceRoom",.36f},{"listenerRoom",.54f}}},
+ {"Voice Behind Door",{{"material",4},{"construction",2},{"distance",.52f},{"wall",.70f},{"sourceRoom",.24f},{"listenerRoom",.40f}}},
+ {"Glass Control Room",{{"material",5},{"construction",0},{"distance",.28f},{"wall",.36f},{"sourceRoom",.58f},{"listenerRoom",.48f}}},
+ {"Warehouse Partition",{{"material",6},{"construction",2},{"distance",.58f},{"wall",.64f},{"sourceRoom",.72f},{"listenerRoom",.62f}}},
+ {"Thin Apartment Wall",{{"material",0},{"construction",1},{"distance",.34f},{"wall",.30f},{"sourceRoom",.48f},{"listenerRoom",.56f}}},
+ {"Wooden Floor Below",{{"material",2},{"construction",2},{"distance",.70f},{"wall",.74f},{"sourceRoom",.34f},{"listenerRoom",.66f}}},
+ {"Rattling Sheet Metal",{{"material",6},{"construction",4},{"distance",.30f},{"wall",.62f},{"sourceRoom",.24f},{"listenerRoom",.38f},{"rattle",.86f},{"looseness",.92f},{"resonance",.82f},{"cavity",.68f},{"smear",.74f},{"stereoMotion",.38f}}},
+ {"Buried In Concrete",{{"material",7},{"construction",0},{"distance",.82f},{"wall",.96f},{"sourceRoom",.22f},{"listenerRoom",.72f},{"limiter",.92f},{"ceiling",.84f},{"outGain",.92f}}},
+ {"PLAY - Guitar Behind Panel",{{"material",2},{"construction",3},{"distance",.28f},{"wall",.42f},{"sourceRoom",.22f},{"listenerRoom",.30f},{"resonance",.46f},{"cavity",.34f},{"rattle",.10f},{"mix",.74f},{"limiter",.92f},{"ceiling",.90f},{"outGain",.94f}}},
+ {"PLAY - Drum Room Boundary",{{"material",0},{"construction",1},{"distance",.34f},{"wall",.36f},{"sourceRoom",.48f},{"listenerRoom",.42f},{"roomMix",.38f},{"resonance",.32f},{"cavity",.24f},{"mix",.58f},{"limiter",.94f},{"ceiling",.88f},{"outGain",.94f}}},
+ {"PLAY - Binaural Synth Wall",{{"material",5},{"construction",3},{"distance",.30f},{"wall",.46f},{"sourceRoom",.34f},{"listenerRoom",.52f},{"stereoMotion",.46f},{"motionSync",1},{"motionDivision",1},{"resonance",.54f},{"cavity",.38f},{"mix",.70f},{"limiter",.92f},{"ceiling",.90f},{"outGain",.92f}}},
+ {"PLAY - Clocked Metal Strikes",{{"material",6},{"construction",4},{"distance",.24f},{"wall",.52f},{"sourceRoom",.18f},{"listenerRoom",.32f},{"resonance",.62f},{"cavity",.46f},{"rattle",.58f},{"looseness",.68f},{"strikeSync",1},{"strikeDivision",3},{"strikeProbability",.24f},{"strikeStrength",.42f},{"mix",.72f},{"limiter",.96f},{"ceiling",.86f},{"outGain",.90f}}}
 };
-
-MaterialDefaults getMaterialDefaults(int material)
-{
-    switch (material)
-    {
-        case 1: return { 1100.0f, 1650.0f, -3.0f, 420.0f, 1.8f, 0.75f, -0.05f }; // brick
-        case 2: return { 1500.0f, 1450.0f, -2.2f, 520.0f, 1.6f, 0.65f, 0.02f }; // wood
-        case 3: return { 2200.0f, 1800.0f, -1.2f, 360.0f, 0.9f, 0.55f, 0.18f }; // curtain
-        case 4: return { 1350.0f, 1550.0f, -2.6f, 380.0f, 1.4f, 0.72f, 0.08f }; // door
-        case 5: return { 2600.0f, 1250.0f, -1.0f, 900.0f, 1.2f, 0.45f, 0.25f }; // glass
-        default: return { 1800.0f, 1600.0f, -2.0f, 420.0f, 1.2f, 0.68f, 0.05f }; // drywall
-    }
+bool macroInput(const char*id){return juce::StringArray{"material","construction","distance","wall","sourceRoom","listenerRoom"}.contains(id);}
 }
 
-struct PresetDef
-{
-    const char* name;
-    std::initializer_list<std::pair<const char*, float>> values;
-};
+void OcclusionEngineAudioProcessorEditor::Panel::paint(juce::Graphics&g){auto b=getLocalBounds().toFloat().reduced(1);g.setColour(juce::Colour(panel));g.fillRoundedRectangle(b,7);g.setColour(juce::Colour(line));g.drawRoundedRectangle(b,7,1);g.setColour(juce::Colour(cyan));g.fillRect(b.getX()+11,b.getY()+11,23.0f,1.5f);g.setColour(juce::Colour(dim));g.setFont(font(9.2f,true));g.drawText(name,getLocalBounds().removeFromTop(32).withTrimmedLeft(41),juce::Justification::centredLeft);}
+OcclusionEngineAudioProcessorEditor::Knob::Knob(APVTS&s,const juce::String&id,const juce::String&t,std::function<void()>changed){label.setText(t,juce::dontSendNotification);label.setJustificationType(juce::Justification::centred);label.setColour(juce::Label::textColourId,juce::Colour(bone));label.setFont(font(9.2f,true));addAndMakeVisible(label);slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);slider.setTextBoxStyle(juce::Slider::TextBoxBelow,false,70,17);slider.setColour(juce::Slider::rotarySliderFillColourId,juce::Colour(cyan));slider.setColour(juce::Slider::rotarySliderOutlineColourId,juce::Colour(0xff425156));slider.setColour(juce::Slider::thumbColourId,juce::Colour(bone));slider.setColour(juce::Slider::textBoxTextColourId,juce::Colour(bone));slider.setColour(juce::Slider::textBoxBackgroundColourId,juce::Colour(ink));slider.setColour(juce::Slider::textBoxOutlineColourId,juce::Colour(line));slider.onDragStart=std::move(changed);addAndMakeVisible(slider);attachment=std::make_unique<APVTS::SliderAttachment>(s,id,slider);}
+void OcclusionEngineAudioProcessorEditor::Knob::resized(){auto a=getLocalBounds();label.setBounds(a.removeFromTop(17));slider.setBounds(a.reduced(1));}
+OcclusionEngineAudioProcessorEditor::Choice::Choice(APVTS&s,const juce::String&id,const juce::String&t,std::function<void()>changed){label.setText(t,juce::dontSendNotification);label.setColour(juce::Label::textColourId,juce::Colour(bone));label.setFont(font(9.2f,true));addAndMakeVisible(label);if(auto*p=dynamic_cast<juce::AudioParameterChoice*>(s.getParameter(id)))for(int i=0;i<p->choices.size();++i)combo.addItem(p->choices[i],i+1);combo.setColour(juce::ComboBox::backgroundColourId,juce::Colour(ink));combo.setColour(juce::ComboBox::textColourId,juce::Colour(bone));combo.setColour(juce::ComboBox::outlineColourId,juce::Colour(line));combo.onChange=std::move(changed);addAndMakeVisible(combo);attachment=std::make_unique<APVTS::ComboBoxAttachment>(s,id,combo);}
+void OcclusionEngineAudioProcessorEditor::Choice::resized(){auto a=getLocalBounds();label.setBounds(a.removeFromTop(17));combo.setBounds(a.removeFromTop(31).reduced(1));}
+OcclusionEngineAudioProcessorEditor::Toggle::Toggle(APVTS&s,const juce::String&id,const juce::String&t,std::function<void()>changed){setButtonText(t);setColour(juce::ToggleButton::textColourId,juce::Colour(bone));setColour(juce::ToggleButton::tickColourId,juce::Colour(cyan));onClick=std::move(changed);attachment=std::make_unique<APVTS::ButtonAttachment>(s,id,*this);}
 
-static const PresetDef kPresets[] = {
-    { "Subtle Room", { { "distance", 0.20f }, { "wall", 0.20f }, { "material", 0.0f }, { "sourceRoom", 0.25f }, { "listenerRoom", 0.35f }, { "leak", 0.12f }, { "roomMix", 0.14f }, { "predelayMs", 10.0f }, { "outGain", 1.0f } } },
-    { "Next Room", { { "distance", 0.45f }, { "wall", 0.55f }, { "material", 0.0f }, { "sourceRoom", 0.35f }, { "listenerRoom", 0.55f }, { "leak", 0.08f }, { "roomMix", 0.22f }, { "predelayMs", 12.0f }, { "outGain", 1.0f } } },
-    { "Behind Door", { { "distance", 0.40f }, { "wall", 0.60f }, { "material", 4.0f }, { "sourceRoom", 0.35f }, { "listenerRoom", 0.45f }, { "leak", 0.12f }, { "roomMix", 0.18f }, { "predelayMs", 9.0f }, { "outGain", 1.0f } } },
-    { "Brick Muffle", { { "distance", 0.55f }, { "wall", 0.75f }, { "material", 1.0f }, { "sourceRoom", 0.35f }, { "listenerRoom", 0.50f }, { "leak", 0.05f }, { "roomMix", 0.26f }, { "predelayMs", 14.0f }, { "outGain", 1.02f } } },
-    { "Curtain Leak", { { "distance", 0.35f }, { "wall", 0.25f }, { "material", 3.0f }, { "sourceRoom", 0.30f }, { "listenerRoom", 0.55f }, { "leak", 0.22f }, { "roomMix", 0.24f }, { "predelayMs", 16.0f }, { "outGain", 1.0f } } },
-};
+void OcclusionEngineAudioProcessorEditor::Boundary::state(float i,float o,float b,float rm,float l,float r,float lim,float ex,const std::array<float,64>&t,int m,int c){in=i;out=o;body=b;room=rm;leak=l;rattle=r;limit=lim;excite=ex;trace=t;material=m;construction=c;phase+=.035f;repaint();}
+void OcclusionEngineAudioProcessorEditor::Boundary::paint(juce::Graphics&g)
+{
+    auto b=getLocalBounds().toFloat().reduced(1);g.setColour(juce::Colour(0xff172126));g.fillRoundedRectangle(b,10);g.setColour(juce::Colour(line));g.drawRoundedRectangle(b,10,1.2f);auto scene=b.reduced(16).withTrimmedBottom(126);auto left=scene.removeFromLeft(scene.getWidth()*.34f),barrier=scene.removeFromLeft(scene.getWidth()*.32f),right=scene;g.setColour(juce::Colour(0xff091013));g.fillRoundedRectangle(left,5);g.fillRoundedRectangle(right,5);const std::uint32_t colors[]{0xff9a9387,0xff8f4f40,0xff946f42,0xff695e55,0xff7a513c,0xff74aab3,0xff818b91,0xff727574};g.setColour(juce::Colour(colors[juce::jlimit(0,7,material)]).brighter(excite*.35f));g.fillRect(barrier.reduced(barrier.getWidth()*.27f,2));g.setColour(juce::Colour(rattle>.01f?red:0x60404040));for(int y=(int)barrier.getY();y<barrier.getBottom();y+=10)g.drawHorizontalLine(y,barrier.getX(),barrier.getRight());
+    juce::Path wave;for(std::size_t i=0;i<trace.size();++i){const auto x=left.getX()+((float)i/(trace.size()-1))*left.getWidth(),y=left.getCentreY()-trace[i]*left.getHeight()*1.5f;if(i==0)wave.startNewSubPath(x,y);else wave.lineTo(x,y);}g.setColour(juce::Colour(amber));g.strokePath(wave,juce::PathStrokeType(1.3f));juce::Path transmitted;for(int x=0;x<(int)right.getWidth();++x){const auto n=(float)x/right.getWidth(),y=right.getCentreY()+std::sin(n*24+phase)*right.getHeight()*.18f*out*(1-n*.4f);if(x==0)transmitted.startNewSubPath(right.getX(),y);else transmitted.lineTo(right.getX()+x,y);}g.setColour(juce::Colour(cyan));g.strokePath(transmitted,juce::PathStrokeType(1.2f));const char*mats[]{"DRYWALL","BRICK","WOOD","CURTAIN","DOOR","GLASS","METAL","CONCRETE"};const char*builds[]{"SOLID","STUD","HOLLOW","PANEL","LOOSE"};g.setColour(juce::Colour(bone));g.setFont(font(9,true));g.drawText(mats[juce::jlimit(0,7,material)]+juce::String(" / ")+builds[juce::jlimit(0,4,construction)],barrier.toNearestInt(),juce::Justification::centred);
+    auto footer=b.reduced(16).removeFromBottom(108);const char*names[]{"SOURCE","BODY","ROOM","EDGE LEAK","HARDWARE","LIMITER"};const float values[]{in,body,room,leak,rattle,limit};for(int i=0;i<6;++i){auto row=footer.removeFromTop(17);g.setColour(juce::Colour(dim));g.setFont(font(8,true));g.drawText(names[i],row.removeFromLeft(68),juce::Justification::centredLeft);auto meter=row.reduced(1,5);g.setColour(juce::Colour(0xff39494e));g.fillRect(meter);g.setColour(juce::Colour(i==4&&rattle>.01f?red:i==0?amber:cyan));g.fillRect(meter.withWidth(meter.getWidth()*juce::jlimit(0.0f,1.0f,values[i]*3.0f)));}
 }
 
-OcclusionEngineAudioProcessorEditor::Knob::Knob(APVTS& state, const juce::String& paramID, const juce::String& text)
+OcclusionEngineAudioProcessorEditor::OcclusionEngineAudioProcessorEditor(OcclusionEngineAudioProcessor&o):AudioProcessorEditor(&o),processor(o),apvts(o.getAPVTS())
 {
-    label.setText(text, juce::dontSendNotification);
-    label.setJustificationType(juce::Justification::centred);
-    label.setColour(juce::Label::textColourId, juce::Colour(0xff9bd9ff));
-    addAndMakeVisible(label);
-
-    slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 66, 18);
-    slider.setColour(juce::Slider::thumbColourId, juce::Colour(0xff94d2ff));
-    slider.setColour(juce::Slider::rotarySliderFillColourId, juce::Colour(0xff5aa0c9));
-    slider.setColour(juce::Slider::rotarySliderOutlineColourId, juce::Colour(0xff2b3238));
-    slider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
-    slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colour(0xff3a3f45));
-    addAndMakeVisible(slider);
-
-    attachment = std::make_unique<APVTS::SliderAttachment>(state, paramID, slider);
+    setOpaque(true);brand.setText("B&E DIGITAL",juce::dontSendNotification);brand.setColour(juce::Label::textColourId,juce::Colour(cyan));brand.setFont(font(10,true));addAndMakeVisible(brand);title.setText("OCCLUSION ENGINE",juce::dontSendNotification);title.setColour(juce::Label::textColourId,juce::Colour(bone));title.setFont(font(27,true));addAndMakeVisible(title);subtitle.setText("MATERIAL BOUNDARY / RESONANT SPACE / V3 STEREO",juce::dontSendNotification);subtitle.setColour(juce::Label::textColourId,juce::Colour(dim));subtitle.setFont(font(10,true));addAndMakeVisible(subtitle);profile.setText("BOUNDARY PROFILE",juce::dontSendNotification);profile.setColour(juce::Label::textColourId,juce::Colour(dim));profile.setFont(font(9,true));addAndMakeVisible(profile);presets.addItem("Custom",1);for(int i=0;i<(int)std::size(presetsData);++i)presets.addItem(presetsData[i].name,i+2);const auto restoredPreset=apvts.state.getProperty("factoryPresetName","Custom").toString();auto restoredPresetId=1;for(int i=0;i<(int)std::size(presetsData);++i)if(restoredPreset==presetsData[i].name)restoredPresetId=i+2;presets.setSelectedId(restoredPresetId,juce::dontSendNotification);presets.onChange=[this]{if(presets.getSelectedId()>=2)preset(presets.getSelectedId()-2);};addAndMakeVisible(presets);
+    for(auto*b:{&simple,&advanced,&performer}){b->setColour(juce::TextButton::textColourOffId,juce::Colour(bone));addAndMakeVisible(*b);}simple.onClick=[this]{showMode(0);};advanced.onClick=[this]{showMode(1);};performer.onClick=[this]{showMode(2);};status.setColour(juce::Label::textColourId,juce::Colour(dim));status.setFont(font(9,true));status.setJustificationType(juce::Justification::centredRight);addAndMakeVisible(status);addAndMakeVisible(boundary);for(auto&page:pages)addAndMakeVisible(page);
+    for(auto*p:{&simpleBody,&simpleSpace,&simpleOutput})pages[0].addAndMakeVisible(*p);for(auto*p:{&tone,&body,&space,&leak,&detail,&safety})pages[1].addAndMakeVisible(*p);for(auto*p:{&conducted,&hardware,&motion,&performanceOutput})pages[2].addAndMakeVisible(*p);
+    choice(simpleBody,"material","MATERIAL","The boundary's spectral and modal fingerprint.");choice(simpleBody,"construction","CONSTRUCTION","Solid, framed, hollow, panel, or loose assembly.");knob(simpleBody,"wall","THICKNESS","Physical transmission loss and boundary-body weight.");knob(simpleBody,"distance","DISTANCE","Air path attenuation beyond the boundary.");knob(simpleBody,"lpHz","TRANSMISSION","Audible bandwidth through the boundary.");knob(simpleBody,"resonance","RESONANCE","Material modes excited by the signal.");knob(simpleBody,"cavity","CAVITY","Actual bounded cavity feedback and ring.");knob(simpleBody,"rattle","HARDWARE","Signal-excited loose hardware.");knob(simpleSpace,"sourceRoom","SOURCE ROOM","Reflections that strike the source side.");knob(simpleSpace,"listenerRoom","LISTENER ROOM","Reflections heard on the listener side.");knob(simpleSpace,"roomMix","ROOM SOUND","Combined reflection level.");knob(simpleSpace,"stereoMotion","STEREO MOTION","Binaural listener-side path movement.");knob(simpleOutput,"inputGain","INPUT dB","Input trim.");knob(simpleOutput,"mix","MIX","Dry/wet boundary balance.");knob(simpleOutput,"outGain","OUTPUT","Final output trim.");knob(simpleOutput,"limiter","PROTECTION","Continuous output protection.");
+    knob(tone,"hpHz","HIGH-PASS","Finite-panel low cutoff.");knob(tone,"lpHz","LOW-PASS","Material transmission ceiling.");knob(tone,"dipHz","ABSORB Hz","Material absorption center.");knob(tone,"dipDb","ABSORB dB","Absorption depth.");knob(tone,"bumpHz","BODY Hz","Boundary body center.");knob(tone,"bumpDb","BODY dB","Boundary body gain.");knob(body,"resonance","MODES","Material resonant modes.");knob(body,"cavity","CAVITY","Bounded construction-cavity feedback.");knob(body,"rattle","RATTLE","Signal-excited hardware chatter.");knob(body,"looseness","LOOSENESS","Rattle sensitivity and decay.");knob(space,"sourceRoom","SOURCE ROOM","Source-side early reflections.");knob(space,"listenerRoom","LISTENER ROOM","Listener-side early reflections.");knob(space,"roomMix","ROOM MIX","Reflection level.");knob(space,"predelayMs","PREDELAY","Listener reflection arrival.");knob(space,"roomSize","ROOM SIZE","Reflection spacing.");knob(space,"damp","DAMPING","Room and feedback high-frequency loss.");knob(leak,"leak","EDGE LEAK","Band-limited path around the barrier.");knob(leak,"leakTone","LEAK TONE","Leak articulation.");knob(leak,"smear","SMEAR","Short multipath blur.");knob(leak,"stereoMotion","MOTION","Stereo listener motion depth.");knob(detail,"dipQ","ABSORB Q","Absorption width.");knob(detail,"bumpQ","BODY Q","Body resonance width.");knob(detail,"motionRateHz","MOTION Hz","Free-running motion rate.");knob(safety,"inputGain","INPUT dB","Input trim.");knob(safety,"mix","MIX","Dry/wet balance.");knob(safety,"limiter","LIMITER","Output protection.");knob(safety,"ceiling","CEILING","Output ceiling.");knob(safety,"outGain","OUTPUT","Final trim.");
+    toggle(conducted,"exciteSync","CLOCK EXCITATION","Trigger boundary excitation from the DAW clock.");choice(conducted,"exciteDivision","GRID","Excitation trigger grid.");knob(conducted,"exciteProbability","PROBABILITY","Chance per grid event.");knob(conducted,"exciteStrength","STRENGTH","Energy conducted into the boundary.");knob(conducted,"exciteDurationMs","FREE LENGTH","Free excitation duration.");toggle(conducted,"exciteLengthSync","CLOCK LENGTH","Quantize excitation length.");choice(conducted,"exciteLengthDivision","LENGTH GRID","Clocked excitation duration.");exciteButton.onClick=[this]{processor.triggerBoundary();};exciteButton.setTooltip("Conduct a bounded impulse into the resonant material body.");conducted.addAndMakeVisible(exciteButton);items[&conducted].push_back(&exciteButton);
+    toggle(hardware,"strikeSync","CLOCK STRIKES","Trigger loose hardware from the DAW clock.");choice(hardware,"strikeDivision","GRID","Hardware strike grid.");knob(hardware,"strikeProbability","PROBABILITY","Chance per grid event.");knob(hardware,"strikeStrength","STRENGTH","Strike energy.");strikeButton.onClick=[this]{processor.triggerHardware();};strikeButton.setTooltip("Manually strike the boundary hardware.");hardware.addAndMakeVisible(strikeButton);items[&hardware].push_back(&strikeButton);
+    knob(motion,"stereoMotion","DEPTH","Listener-side stereo path movement.");knob(motion,"motionRateHz","FREE RATE","Free motion rate.");toggle(motion,"motionSync","CLOCK MOTION","Make one motion cycle match the selected grid.");choice(motion,"motionDivision","CYCLE","Clocked stereo motion cycle.");knob(performanceOutput,"mix","MIX","Dry/wet performance balance.");knob(performanceOutput,"limiter","LIMITER","Continuous safety.");knob(performanceOutput,"ceiling","CEILING","Maximum output.");knob(performanceOutput,"outGain","OUTPUT","Final trim.");
+    setResizable(true,true);setResizeLimits(980,660,1600,1000);setSize(1120,720);showMode(0);startTimerHz(30);
 }
 
-void OcclusionEngineAudioProcessorEditor::Knob::resized()
-{
-    auto area = getLocalBounds();
-    label.setBounds(area.removeFromTop(20));
-    slider.setBounds(area.reduced(2));
-}
-
-OcclusionEngineAudioProcessorEditor::Choice::Choice(APVTS& state, const juce::String& paramID, const juce::String& text)
-{
-    label.setText(text, juce::dontSendNotification);
-    label.setColour(juce::Label::textColourId, juce::Colour(0xff9bd9ff));
-    addAndMakeVisible(label);
-
-    if (auto* p = dynamic_cast<juce::AudioParameterChoice*>(state.getParameter(paramID)))
-        for (int i = 0; i < p->choices.size(); ++i)
-            combo.addItem(p->choices[i], i + 1);
-
-    combo.setColour(juce::ComboBox::backgroundColourId, juce::Colour(0xff1f2326));
-    combo.setColour(juce::ComboBox::textColourId, juce::Colours::white);
-    combo.setColour(juce::ComboBox::outlineColourId, juce::Colour(0xff3a3f45));
-    addAndMakeVisible(combo);
-    attachment = std::make_unique<APVTS::ComboBoxAttachment>(state, paramID, combo);
-}
-
-void OcclusionEngineAudioProcessorEditor::Choice::resized()
-{
-    auto area = getLocalBounds();
-    label.setBounds(area.removeFromTop(18));
-    combo.setBounds(area.reduced(1));
-}
-
-OcclusionEngineAudioProcessorEditor::OcclusionEngineAudioProcessorEditor(OcclusionEngineAudioProcessor& p)
-    : AudioProcessorEditor(&p), processor(p), apvts(p.getAPVTS())
-{
-    title.setText("Occlusion Engine", juce::dontSendNotification);
-    title.setFont(juce::Font(juce::FontOptions(30.0f, juce::Font::bold)));
-    title.setColour(juce::Label::textColourId, juce::Colour(0xffdff3ff));
-    addAndMakeVisible(title);
-
-    subtitle.setText("Wall / Distance Simulator", juce::dontSendNotification);
-    subtitle.setColour(juce::Label::textColourId, juce::Colour(0xff8aa4b5));
-    addAndMakeVisible(subtitle);
-
-    presetLabel.setText("Preset", juce::dontSendNotification);
-    presetLabel.setColour(juce::Label::textColourId, juce::Colour(0xff9bd9ff));
-    addAndMakeVisible(presetLabel);
-
-    presetBox.addItem("Custom", 1);
-    for (int i = 0; i < (int) std::size(kPresets); ++i)
-        presetBox.addItem(kPresets[i].name, i + 2);
-    presetBox.onChange = [this]() {
-        const auto id = presetBox.getSelectedId();
-        if (id >= 2)
-            applyPreset(id - 2);
-    };
-    presetBox.setSelectedId(1, juce::dontSendNotification);
-    presetBox.setTooltip("Occlusion scene presets for fast setup.");
-    addAndMakeVisible(presetBox);
-
-    tabs.setOutline(0);
-    tabs.setTabBarDepth(34);
-    tabs.addTab("Macro", juce::Colour(0xff2c3640), &macroPage, true);
-    tabs.addTab("Tone", juce::Colour(0xff2c3640), &tonePage, true);
-    tabs.addTab("Room", juce::Colour(0xff2c3640), &roomPage, true);
-    tabs.addTab("Mix", juce::Colour(0xff2c3640), &mixPage, true);
-    addAndMakeVisible(tabs);
-
-    addKnob(macroPage, "distance", "Distance", "How far source is from listener through occluding space.");
-    addKnob(macroPage, "wall", "Wall", "How dense/thick the barrier is.");
-    addChoice(macroPage, "material", "Material", "Barrier type that shifts leak, tonal dip and damping.");
-    addKnob(macroPage, "sourceRoom", "Source Rm", "Room contribution on source side.");
-    addKnob(macroPage, "listenerRoom", "Listener Rm", "Room contribution on listener side.");
-
-    addKnob(tonePage, "hpHz", "HP", "Low cut caused by wall coupling and distance.");
-    addKnob(tonePage, "lpHz", "LP", "High-frequency rolloff from occlusion.");
-    addKnob(tonePage, "dipHz", "Dip Hz", "Presence notch center from material absorption.");
-    addKnob(tonePage, "dipDb", "Dip dB", "Depth of the occlusion notch.");
-    addKnob(tonePage, "dipQ", "Dip Q", "Width of the presence notch.");
-    addKnob(tonePage, "bumpHz", "Bump Hz", "Low-mid wall resonance center.");
-    addKnob(tonePage, "bumpDb", "Bump dB", "Amount of wall resonance bloom.");
-    addKnob(tonePage, "bumpQ", "Bump Q", "Width of resonance bump.");
-
-    addKnob(roomPage, "roomMix", "Room Mix", "Blend of filtered direct vs room return.");
-    addKnob(roomPage, "predelayMs", "Predelay", "Arrival delay before room reflections.");
-    addKnob(roomPage, "roomSize", "Room Size", "Approximate room volume/decay behavior.");
-    addKnob(roomPage, "damp", "Damp", "HF damping in reflections.");
-
-    addKnob(mixPage, "leak", "Leak", "Unoccluded bleed around/through material.");
-    addKnob(mixPage, "outGain", "Out Gain", "Final output trim.");
-
-    setResizable(false, false);
-    setSize(860, 540);
-
-    lastDistance = getParamValue("distance");
-    lastWall = getParamValue("wall");
-    lastMaterial = (int) getParamValue("material");
-    lastSourceRoom = getParamValue("sourceRoom");
-    lastListenerRoom = getParamValue("listenerRoom");
-
-    startTimerHz(18);
-}
-
-OcclusionEngineAudioProcessorEditor::~OcclusionEngineAudioProcessorEditor() {}
-
-void OcclusionEngineAudioProcessorEditor::addKnob(juce::Component& page, const juce::String& id, const juce::String& text, const juce::String& hint)
-{
-    auto c = std::make_unique<Knob>(apvts, id, text);
-    c->setHint(hint);
-    page.addAndMakeVisible(*c);
-    pageItems[&page].push_back(c.get());
-    knobs.push_back(std::move(c));
-}
-
-void OcclusionEngineAudioProcessorEditor::addChoice(juce::Component& page, const juce::String& id, const juce::String& text, const juce::String& hint)
-{
-    auto c = std::make_unique<Choice>(apvts, id, text);
-    c->setHint(hint);
-    page.addAndMakeVisible(*c);
-    pageItems[&page].push_back(c.get());
-    choices.push_back(std::move(c));
-}
-
-void OcclusionEngineAudioProcessorEditor::layoutPage(juce::Component& page, int columns)
-{
-    auto area = page.getLocalBounds().reduced(10);
-    auto& items = pageItems[&page];
-    if (items.empty())
-        return;
-
-    const auto count = (int) items.size();
-    const auto cols = juce::jmax(1, columns);
-    const auto rows = juce::jmax(1, (count + cols - 1) / cols);
-    const auto cellW = area.getWidth() / cols;
-    const auto cellH = area.getHeight() / rows;
-
-    for (int i = 0; i < count; ++i)
-    {
-        const auto r = i / cols;
-        const auto c = i % cols;
-        auto cell = juce::Rectangle<int>(area.getX() + c * cellW, area.getY() + r * cellH, cellW, cellH).reduced(6);
-        items[(size_t) i]->setBounds(cell);
-    }
-}
-
-void OcclusionEngineAudioProcessorEditor::setParamValue(const juce::String& id, float plainValue)
-{
-    if (auto* p = apvts.getParameter(id))
-        p->setValueNotifyingHost(p->convertTo0to1(plainValue));
-}
-
-float OcclusionEngineAudioProcessorEditor::getParamValue(const juce::String& id) const
-{
-    if (auto* v = apvts.getRawParameterValue(id))
-        return v->load();
-    return 0.0f;
-}
-
-void OcclusionEngineAudioProcessorEditor::applyMacroTargets(float distance, float wall, int material, float sourceRoom, float listenerRoom)
-{
-    const auto dist = clampf(distance, 0.0f, 1.0f);
-    const auto wal = clampf(wall, 0.0f, 1.0f);
-    const auto srcRoom = clampf(sourceRoom, 0.0f, 1.0f);
-    const auto lisRoom = clampf(listenerRoom, 0.0f, 1.0f);
-
-    const auto m = getMaterialDefaults(juce::jlimit(0, 5, material));
-    const auto d = std::pow(dist, 1.15f);
-    const auto w = std::pow(wal, 1.2f);
-    const auto room = clampf(0.45f * srcRoom + 0.55f * lisRoom, 0.0f, 1.0f);
-
-    const auto hpHz = 35.0f + d * 75.0f + w * 45.0f;
-    const auto lpHzRaw = 16000.0f - (d * 5500.0f + w * 9500.0f);
-    const auto lpMin = m.lpMin + w * 250.0f;
-    const auto lpHz = juce::jmax(lpMin, lpHzRaw);
-
-    const auto dipDb = m.dipDb - w * 1.8f;
-    const auto bumpDb = m.bumpDb + w * 2.2f;
-    const auto dipHz = m.dipHz + (0.5f - room) * 140.0f;
-    const auto bumpHz = m.bumpHz + (0.5f - room) * 120.0f;
-
-    const auto leak = clampf(0.03f + (1.0f - w) * 0.18f + m.leakBias, 0.0f, 1.0f);
-    const auto roomMix = clampf(0.08f + room * 0.32f + d * 0.18f, 0.0f, 1.0f);
-    const auto predelayMs = std::round(6.0f + room * 26.0f + d * 10.0f);
-    const auto damp = clampf(m.damp + room * 0.12f, 0.0f, 1.0f);
-    const auto roomSize = clampf(room, 0.0f, 1.0f);
-    const auto outGain = std::round((1.0f - d * 0.18f) * 100.0f) / 100.0f;
-
-    setParamValue("hpHz", hpHz);
-    setParamValue("lpHz", lpHz);
-    setParamValue("dipHz", dipHz);
-    setParamValue("dipDb", dipDb);
-    setParamValue("bumpHz", bumpHz);
-    setParamValue("bumpDb", bumpDb);
-    setParamValue("leak", leak);
-    setParamValue("roomMix", roomMix);
-    setParamValue("predelayMs", predelayMs);
-    setParamValue("damp", damp);
-    setParamValue("roomSize", roomSize);
-    setParamValue("outGain", outGain);
-}
-
-void OcclusionEngineAudioProcessorEditor::applyPreset(int idx)
-{
-    if (idx < 0 || idx >= (int) std::size(kPresets))
-        return;
-
-    suppressMacros = true;
-    for (const auto& kv : kPresets[(size_t) idx].values)
-        setParamValue(kv.first, kv.second);
-    suppressMacros = false;
-
-    lastDistance = getParamValue("distance");
-    lastWall = getParamValue("wall");
-    lastMaterial = (int) getParamValue("material");
-    lastSourceRoom = getParamValue("sourceRoom");
-    lastListenerRoom = getParamValue("listenerRoom");
-}
-
-void OcclusionEngineAudioProcessorEditor::timerCallback()
-{
-    if (suppressMacros)
-        return;
-
-    const auto dist = getParamValue("distance");
-    const auto wall = getParamValue("wall");
-    const auto material = (int) getParamValue("material");
-    const auto srcRoom = getParamValue("sourceRoom");
-    const auto lisRoom = getParamValue("listenerRoom");
-
-    if (std::abs(dist - lastDistance) > 0.0005f
-        || std::abs(wall - lastWall) > 0.0005f
-        || material != lastMaterial
-        || std::abs(srcRoom - lastSourceRoom) > 0.0005f
-        || std::abs(lisRoom - lastListenerRoom) > 0.0005f)
-    {
-        suppressMacros = true;
-        applyMacroTargets(dist, wall, material, srcRoom, lisRoom);
-        suppressMacros = false;
-
-        lastDistance = dist;
-        lastWall = wall;
-        lastMaterial = material;
-        lastSourceRoom = srcRoom;
-        lastListenerRoom = lisRoom;
-        presetBox.setSelectedId(1, juce::dontSendNotification);
-    }
-}
-
-void OcclusionEngineAudioProcessorEditor::paint(juce::Graphics& g)
-{
-    juce::ColourGradient grad(juce::Colour(0xff131920), 0.0f, 0.0f, juce::Colour(0xff1f2b34), 0.0f, (float) getHeight(), false);
-    g.setGradientFill(grad);
-    g.fillAll();
-
-    auto header = getLocalBounds().removeFromTop(82).reduced(8, 8);
-    g.setColour(juce::Colour(0xff1f2832));
-    g.fillRoundedRectangle(header.toFloat(), 10.0f);
-    g.setColour(juce::Colour(0xff556676));
-    g.drawRoundedRectangle(header.toFloat(), 10.0f, 1.2f);
-
-    g.setColour(juce::Colour(0xffa5e3ff));
-    g.fillRoundedRectangle((float) header.getRight() - 300.0f, (float) header.getY() + 10.0f, 278.0f, 48.0f, 8.0f);
-    g.setColour(juce::Colour(0xff275565));
-    g.drawRoundedRectangle(juce::Rectangle<float>((float) header.getRight() - 300.0f, (float) header.getY() + 10.0f, 278.0f, 48.0f), 8.0f, 1.0f);
-}
-
-void OcclusionEngineAudioProcessorEditor::resized()
-{
-    auto area = getLocalBounds().reduced(10);
-    auto header = area.removeFromTop(74);
-
-    auto left = header.removeFromLeft(420);
-    title.setBounds(left.removeFromTop(42).withTrimmedLeft(18));
-    subtitle.setBounds(left.withTrimmedLeft(20));
-
-    auto right = header.withTrimmedLeft(26);
-    presetLabel.setBounds(right.removeFromTop(18));
-    presetBox.setBounds(right.removeFromTop(30).removeFromLeft(230));
-
-    tabs.setBounds(area);
-
-    layoutPage(macroPage, 3);
-    layoutPage(tonePage, 4);
-    layoutPage(roomPage, 4);
-    layoutPage(mixPage, 3);
-}
+OcclusionEngineAudioProcessorEditor::~OcclusionEngineAudioProcessorEditor(){stopTimer();}
+OcclusionEngineAudioProcessorEditor::Knob* OcclusionEngineAudioProcessorEditor::knob(Panel&p,const char*id,const char*t,const char*h){const auto surfaceMacro=(&p==&simpleBody||&p==&simpleSpace)&&macroInput(id);auto x=std::make_unique<Knob>(apvts,id,t,[this,surfaceMacro]{if(surfaceMacro&&!suppress)set("macroLink",1);else if(processor.legacyMacrosActive())processor.materialiseLegacyMacros();custom();});x->hint(h);auto*r=x.get();p.addAndMakeVisible(*r);items[&p].push_back(r);knobs.push_back(std::move(x));return r;}
+OcclusionEngineAudioProcessorEditor::Choice* OcclusionEngineAudioProcessorEditor::choice(Panel&p,const char*id,const char*t,const char*h){const auto surfaceMacro=(&p==&simpleBody||&p==&simpleSpace)&&macroInput(id);auto x=std::make_unique<Choice>(apvts,id,t,[this,surfaceMacro]{if(surfaceMacro&&!suppress)set("macroLink",1);else if(processor.legacyMacrosActive())processor.materialiseLegacyMacros();custom();});x->hint(h);auto*r=x.get();p.addAndMakeVisible(*r);items[&p].push_back(r);choices.push_back(std::move(x));return r;}
+OcclusionEngineAudioProcessorEditor::Toggle* OcclusionEngineAudioProcessorEditor::toggle(Panel&p,const char*id,const char*t,const char*h){auto x=std::make_unique<Toggle>(apvts,id,t,[this]{if(processor.legacyMacrosActive())processor.materialiseLegacyMacros();custom();});x->setTooltip(h);auto*r=x.get();p.addAndMakeVisible(*r);items[&p].push_back(r);toggles.push_back(std::move(x));return r;}
+void OcclusionEngineAudioProcessorEditor::layout(Panel&p,int cols){auto a=p.contentBounds();auto&v=items[&p];const auto rows=juce::jmax(1,((int)v.size()+cols-1)/cols),w=a.getWidth()/cols,h=a.getHeight()/rows;for(int i=0;i<(int)v.size();++i)v[i]->setBounds(a.getX()+(i%cols)*w,a.getY()+(i/cols)*h,w,h);}
+void OcclusionEngineAudioProcessorEditor::showMode(int next){mode=juce::jlimit(0,2,next);for(int i=0;i<3;++i)pages[i].setVisible(i==mode);simple.setToggleState(mode==0,juce::dontSendNotification);advanced.setToggleState(mode==1,juce::dontSendNotification);performer.setToggleState(mode==2,juce::dontSendNotification);resized();}
+void OcclusionEngineAudioProcessorEditor::set(const char*id,float v){if(auto*p=apvts.getParameter(id))p->setValueNotifyingHost(p->convertTo0to1(v));}
+float OcclusionEngineAudioProcessorEditor::get(const char*id)const{if(auto*p=apvts.getRawParameterValue(id))return p->load();return 0;}
+void OcclusionEngineAudioProcessorEditor::reset(){for(auto*p:processor.getParameters())p->setValueNotifyingHost(p->getDefaultValue());}
+void OcclusionEngineAudioProcessorEditor::preset(int i){if(i<0||i>=(int)std::size(presetsData))return;suppress=true;reset();for(const auto&s:presetsData[i].settings)if(macroInput(s.id))set(s.id,s.value);set("macroLink",1);processor.materialiseLegacyMacros();for(const auto&s:presetsData[i].settings)if(!macroInput(s.id)&&juce::String(s.id)!="macroLink")set(s.id,s.value);set("macroLink",0);apvts.state.setProperty("factoryPresetName",presetsData[i].name,nullptr);suppress=false;}
+void OcclusionEngineAudioProcessorEditor::custom(){if(!suppress){presets.setSelectedId(1,juce::dontSendNotification);apvts.state.setProperty("factoryPresetName","Custom",nullptr);}}
+void OcclusionEngineAudioProcessorEditor::timerCallback(){boundary.state((processor.inputPeak(0)+processor.inputPeak(1))*.5f,(processor.outputPeak(0)+processor.outputPeak(1))*.5f,processor.bodyActivity(),processor.roomActivity(),processor.leakActivity(),processor.rattleActivity(),processor.limiterActivity(),processor.excitationProgress(),processor.outputTrace(),(int)get("material"),(int)get("construction"));status.setText(processor.excitationActive()?"BOUNDARY EXCITATION CONDUCTED":processor.rattleActivity()>.01f?"LOOSE HARDWARE ACTIVE":"V3 STEREO / PHYSICAL SIGNAL PATH",juce::dontSendNotification);}
+void OcclusionEngineAudioProcessorEditor::paint(juce::Graphics&g){g.fillAll(juce::Colour(ink));auto b=getLocalBounds().toFloat().reduced(7);g.setColour(juce::Colour(deep));g.fillRoundedRectangle(b,7);g.setColour(juce::Colour(line));g.drawRoundedRectangle(b,7,1);g.setColour(juce::Colour(cyan));g.fillRect(16.0f,7.0f,190.0f,2.0f);g.setColour(juce::Colour(amber));g.fillRect((float)getWidth()-206,7.0f,190.0f,2.0f);g.setColour(juce::Colour(0xff344348));g.fillRect(15,91,getWidth()-30,1);}
+void OcclusionEngineAudioProcessorEditor::resized(){auto a=getLocalBounds().reduced(16);auto header=a.removeFromTop(86);auto profileArea=header.removeFromRight(250);header.removeFromRight(10);auto navigation=header.removeFromRight(310);auto identity=header;brand.setBounds(identity.removeFromTop(17));title.setBounds(identity.removeFromTop(36));subtitle.setBounds(identity.removeFromTop(18));profile.setBounds(profileArea.removeFromTop(17));presets.setBounds(profileArea.removeFromTop(32));auto nav=navigation.removeFromBottom(34);simple.setBounds(nav.removeFromLeft(96));nav.removeFromLeft(5);advanced.setBounds(nav.removeFromLeft(96));nav.removeFromLeft(5);performer.setBounds(nav.removeFromLeft(106));status.setBounds(navigation);auto content=a.reduced(2);boundary.setBounds(content.removeFromLeft((int)(content.getWidth()*.36f)).reduced(3));for(auto&page:pages)page.setBounds(content.reduced(3));if(mode==0){auto p=pages[0].getLocalBounds();simpleBody.setBounds(p.removeFromTop((int)(p.getHeight()*.48f)).reduced(2));simpleSpace.setBounds(p.removeFromTop((int)(p.getHeight()*.52f)).reduced(2));simpleOutput.setBounds(p.reduced(2));layout(simpleBody,3);layout(simpleSpace,4);layout(simpleOutput,4);}else if(mode==1){auto p=pages[1].getLocalBounds();const auto w=p.getWidth()/3,h=p.getHeight()/2;Panel*all[]{&tone,&body,&space,&leak,&detail,&safety};for(int i=0;i<6;++i)all[i]->setBounds(p.getX()+(i%3)*w,p.getY()+(i/3)*h,w,h);layout(tone,3);layout(body,2);layout(space,3);layout(leak,2);layout(detail,2);layout(safety,3);}else{auto p=pages[2].getLocalBounds();const auto w=p.getWidth()/2,h=p.getHeight()/2;Panel*all[]{&conducted,&hardware,&motion,&performanceOutput};for(int i=0;i<4;++i)all[i]->setBounds(p.getX()+(i%2)*w,p.getY()+(i/2)*h,w,h);layout(conducted,3);layout(hardware,2);layout(motion,2);layout(performanceOutput,2);}}

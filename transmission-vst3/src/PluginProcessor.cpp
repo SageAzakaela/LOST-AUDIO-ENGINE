@@ -36,6 +36,8 @@ TransmissionEngineAudioProcessor::TransmissionEngineAudioProcessor()
                                      .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
       apvts(*this, nullptr, "PARAMS", createParameterLayout())
 {
+    apvts.state.setProperty("engineId", "transmission", nullptr);
+    apvts.state.setProperty("schemaVersion", 4, nullptr);
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout TransmissionEngineAudioProcessor::createParameterLayout()
@@ -46,24 +48,24 @@ juce::AudioProcessorValueTreeState::ParameterLayout TransmissionEngineAudioProce
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>("drive", "Drive", norm, 0.35f));
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>("badConnection", "Reception Damage", norm, 0.25f));
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>("noiseProfile", "Noise Profile", norm, 0.20f));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>("macroLink", "Surface Link", true));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>("macroLink", "Legacy Macro Link", false));
 
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("hpHz", "High-pass", juce::NormalisableRange<float>(40.0f, 1200.0f, 1.0f), 380.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("lpHz", "Low-pass", juce::NormalisableRange<float>(1200.0f, 16000.0f, 1.0f), 5200.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("midGainDb", "Mid Gain", juce::NormalisableRange<float>(-6.0f, 10.0f, 0.1f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("midFreq", "Mid Frequency", juce::NormalisableRange<float>(600.0f, 3500.0f, 1.0f), 1550.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("midQ", "Mid Q", juce::NormalisableRange<float>(0.4f, 5.0f, 0.01f), 1.2f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("boxDipDb", "Cabinet Dip", juce::NormalisableRange<float>(0.0f, 8.0f, 0.1f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("comp", "Compression", norm, 0.25f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("asym", "Asymmetry", norm, 0.10f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("hpHz", "High-pass", juce::NormalisableRange<float>(40.0f, 1200.0f, 1.0f), 354.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("lpHz", "Low-pass", juce::NormalisableRange<float>(1200.0f, 16000.0f, 1.0f), 6254.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("midGainDb", "Mid Gain", juce::NormalisableRange<float>(-6.0f, 10.0f, 0.1f), 3.1f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("midFreq", "Mid Frequency", juce::NormalisableRange<float>(600.0f, 3500.0f, 1.0f), 1608.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("midQ", "Mid Q", juce::NormalisableRange<float>(0.4f, 5.0f, 0.01f), 1.70f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("boxDipDb", "Cabinet Dip", juce::NormalisableRange<float>(0.0f, 8.0f, 0.1f), 1.2f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("comp", "Compression", norm, 0.408f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("asym", "Asymmetry", norm, 0.21f));
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>("crush", "Converter Loss", norm, 0.0f));
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>("wowDepth", "Carrier Drift", norm, 0.25f));
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>("dropRate", "Drop Rate", norm, 0.25f));
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>("dropDepth", "Drop Depth", norm, 0.35f));
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>("crackle", "Interference", norm, 0.25f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("lfoRate", "Drift Rate", juce::NormalisableRange<float>(0.1f, 6.0f, 0.01f), 0.7f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("lfoRate", "Drift Rate", juce::NormalisableRange<float>(0.1f, 6.0f, 0.01f), 0.85f));
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>("noiseColor", "Noise Color", norm, 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("hiss", "Hiss", norm, 0.2f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("hiss", "Hiss", norm, 0.19f));
     parameters.push_back(std::make_unique<juce::AudioParameterInt>("passes", "Generations", 1, 6, 1));
 
     parameters.push_back(std::make_unique<juce::AudioParameterBool>("walkieMode", "Squelch Gate", false));
@@ -83,7 +85,101 @@ juce::AudioProcessorValueTreeState::ParameterLayout TransmissionEngineAudioProce
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>("inputGain", "Input Gain", juce::NormalisableRange<float>(-24.0f, 24.0f, 0.1f), 0.0f));
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>("mix", "Mix", norm, 1.0f));
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>("outGain", "Output Gain", juce::NormalisableRange<float>(0.0f, 1.5f, 0.01f), 0.92f));
+    // Appended V3 timing controls preserve all existing automation indices.
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>("tuningSync", "Search Tempo Sync", false));
+    parameters.push_back(std::make_unique<juce::AudioParameterChoice>("tuningDivision", "Search Division",
+        juce::StringArray { "1 Bar", "1/2", "1/4", "1/8", "1/16", "1/32", "1/4T", "1/8T", "1/16T", "1/8D", "1/16D" }, 3));
+    const juce::StringArray divisions { "1 Bar", "1/2", "1/4", "1/8", "1/16", "1/32", "1/4T", "1/8T", "1/16T", "1/8D", "1/16D" };
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("tuningProbability", "Search Probability", norm, 0.75f));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>("tuningLengthSync", "Sync Search Length", false));
+    parameters.push_back(std::make_unique<juce::AudioParameterChoice>("tuningLengthDivision", "Search Length", divisions, 4));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>("dropoutTempoSync", "Clock Sync Dropouts", false));
+    parameters.push_back(std::make_unique<juce::AudioParameterChoice>("dropoutDivision", "Dropout Grid", divisions, 2));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("dropoutProbability", "Dropout Probability", norm, 0.35f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("dropoutStrength", "Dropout Strength", norm, 0.68f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("dropoutDurationMs", "Dropout Duration", juce::NormalisableRange<float>(5.0f, 600.0f, 1.0f), 80.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>("dropoutLengthSync", "Sync Dropout Length", false));
+    parameters.push_back(std::make_unique<juce::AudioParameterChoice>("dropoutLengthDivision", "Dropout Length", divisions, 4));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>("carrierTempoSync", "Clock Sync Carrier", false));
+    parameters.push_back(std::make_unique<juce::AudioParameterChoice>("carrierDivision", "Carrier Cycle", divisions, 0));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("ceiling", "Safety Ceiling", juce::NormalisableRange<float>(0.2f, 1.0f, 0.001f), 0.95f));
     return { parameters.begin(), parameters.end() };
+}
+
+float TransmissionEngineAudioProcessor::value(const char* id) const noexcept
+{
+    if (const auto* raw = apvts.getRawParameterValue(id)) return raw->load(std::memory_order_relaxed);
+    return 0.0f;
+}
+
+bool TransmissionEngineAudioProcessor::legacyMacrosActive() const noexcept { return value("macroLink") > 0.5f; }
+
+void TransmissionEngineAudioProcessor::materialiseLegacyMacros()
+{
+    if (!legacyMacrosActive()) return;
+    const auto targets = lost_audio::core::mapTransmissionMacros(value("bandwidth"), value("drive"), value("badConnection"), value("noiseProfile"));
+    const auto set = [this] (const char* id, float plain)
+    {
+        if (auto* parameter = apvts.getParameter(id)) parameter->setValueNotifyingHost(parameter->convertTo0to1(plain));
+    };
+    set("hpHz", targets.highPassHz); set("lpHz", targets.lowPassHz); set("midGainDb", targets.midGainDb);
+    set("midFreq", targets.midFrequencyHz); set("midQ", targets.midQ); set("boxDipDb", targets.boxDipDb);
+    set("asym", targets.asymmetry); set("comp", targets.compression); set("wowDepth", targets.wowDepth);
+    set("dropRate", targets.dropoutRate); set("dropDepth", targets.dropoutDepth); set("crackle", targets.crackle);
+    set("lfoRate", targets.lfoRateHz); set("noiseColor", targets.noiseColor); set("hiss", targets.hiss);
+    set("macroLink", 0.0f);
+}
+
+float TransmissionEngineAudioProcessor::inputPeak(int channel) const noexcept
+{
+    return inputPeaks[(size_t) juce::jlimit(0, 1, channel)].load(std::memory_order_relaxed);
+}
+
+float TransmissionEngineAudioProcessor::outputPeakForChannel(int channel) const noexcept
+{
+    return outputPeaks[(size_t) juce::jlimit(0, 1, channel)].load(std::memory_order_relaxed);
+}
+
+std::array<float, 64> TransmissionEngineAudioProcessor::outputTrace() const noexcept
+{
+    std::array<float, 64> result {};
+    for (size_t index = 0; index < result.size(); ++index) result[index] = trace[index].load(std::memory_order_relaxed);
+    return result;
+}
+
+float TransmissionEngineAudioProcessor::dropoutDurationSeconds(double bpm) const noexcept
+{
+    if (value("dropoutLengthSync") > 0.5f)
+        return lost_audio::core::tempoDivisionMilliseconds(bpm, (int) value("dropoutLengthDivision")) * 0.001f;
+    return value("dropoutDurationMs") * 0.001f;
+}
+
+void TransmissionEngineAudioProcessor::triggerDropout() noexcept
+{
+    transmissionCore.triggerDropout(value("dropoutStrength"), dropoutDurationSeconds(currentBpm));
+}
+
+lost_audio::core::TransmissionParameters TransmissionEngineAudioProcessor::readParameters(double bpm) const noexcept
+{
+    lost_audio::core::TransmissionParameters p;
+    const auto legacy = legacyMacrosActive();
+    const auto targets = lost_audio::core::mapTransmissionMacros(value("bandwidth"), value("drive"), value("badConnection"), value("noiseProfile"));
+    p.highPassHz = legacy ? targets.highPassHz : value("hpHz"); p.lowPassHz = legacy ? targets.lowPassHz : value("lpHz");
+    p.midGainDb = legacy ? targets.midGainDb : value("midGainDb"); p.midFrequencyHz = legacy ? targets.midFrequencyHz : value("midFreq");
+    p.midQ = legacy ? targets.midQ : value("midQ"); p.boxDipDb = legacy ? targets.boxDipDb : value("boxDipDb");
+    p.drive = clamp01(value("drive")); p.asymmetry = legacy ? targets.asymmetry : value("asym");
+    p.compression = legacy ? targets.compression : value("comp"); p.crush = value("crush");
+    p.wowDepth = legacy ? targets.wowDepth : value("wowDepth"); p.dropoutRate = legacy ? targets.dropoutRate : value("dropRate");
+    p.dropoutDepth = legacy ? targets.dropoutDepth : value("dropDepth"); p.crackle = legacy ? targets.crackle : value("crackle");
+    p.lfoRateHz = legacy ? targets.lfoRateHz : value("lfoRate"); p.noise = value("noiseProfile");
+    p.noiseColor = legacy ? targets.noiseColor : value("noiseColor"); p.hiss = legacy ? targets.hiss : value("hiss");
+    p.passes = juce::jlimit(1, 6, (int) value("passes")); p.walkieEnabled = value("walkieMode") > 0.5f;
+    p.walkieThresholdDb = value("walkieThresholdDb"); p.walkieMinSilenceMs = value("walkieMinSilenceMs");
+    p.walkieClickMs = value("walkieClickMs"); p.walkieClickLevel = value("walkieClickLevel"); p.walkieDispatchMode = value("walkieFx") > 0.5f;
+    p.inputGain = juce::Decibels::decibelsToGain(value("inputGain")); p.mix = value("mix"); p.outputGain = value("outGain"); p.ceiling = value("ceiling");
+    if (value("dropoutTempoSync") > 0.5f) p.dropoutRate = 0.0f;
+    if (value("carrierTempoSync") > 0.5f) p.lfoRateHz = lost_audio::core::tempoDivisionRateHz(bpm, (int) value("carrierDivision"));
+    return p;
 }
 
 const juce::String TransmissionEngineAudioProcessor::getName() const { return JucePlugin_Name; }
@@ -146,7 +242,24 @@ void TransmissionEngineAudioProcessor::prepareToPlay(double sampleRate, int samp
     tuningSampleIndex = 0;
     tuningFilterIc1 = tuningFilterIc2 = 0.0f;
     transportWasPlaying = false;
+    lastTuningTempoStep = -1;
+    fallbackTuningTempoStep = 0;
+    lastTuningDivision = -1;
+    tuningTempoFallbackSamples = 0;
+    lastHostPpq = 0.0;
+    currentBpm = 120.0;
+    hostTuningWasPlaying = false;
+    lastDropoutTempoStep = -1;
+    fallbackDropoutTempoStep = 0;
+    lastDropoutDivision = -1;
+    dropoutTempoFallbackSamples = 0;
+    lastDropoutHostPpq = 0.0;
+    hostDropoutWasPlaying = false;
+    pendingTuningTrigger.store(false);
     outputPeak.store(0.0f, std::memory_order_relaxed);
+    for (auto& meter : inputPeaks) meter.store(0.0f);
+    for (auto& meter : outputPeaks) meter.store(0.0f);
+    for (auto& point : trace) point.store(0.0f);
 }
 
 void TransmissionEngineAudioProcessor::releaseResources() {}
@@ -209,7 +322,7 @@ float TransmissionEngineAudioProcessor::nextTuningSample(float sampleRate, const
         tuningRemaining = tuningCooldownRemaining = 0;
         return 0.0f;
     }
-    if (tuningRemaining <= 0 && p.mode == 1 && isPlaying && tuningCooldownRemaining <= 0)
+    if (tuningRemaining <= 0 && p.mode == 1 && isPlaying && !p.tempoSync && tuningCooldownRemaining <= 0)
     {
         const auto ratePerSecond = 0.08f + 5.5f * p.amount * p.amount;
         if (nextRandom() < ratePerSecond / sampleRate) triggerTuningEvent(sampleRate, p);
@@ -264,73 +377,154 @@ void TransmissionEngineAudioProcessor::processBlock(juce::AudioBuffer<float>& bu
     for (int channel = inputChannels; channel < outputChannels; ++channel) buffer.clear(channel, 0, buffer.getNumSamples());
     if (inputChannels == 0 || getSampleRate() <= 0.0) return;
 
+    for (int channel = 0; channel < inputChannels; ++channel)
+        inputPeaks[(size_t) channel].store(buffer.getMagnitude(channel, 0, buffer.getNumSamples()), std::memory_order_relaxed);
+    if (inputChannels == 1) inputPeaks[1].store(inputPeaks[0].load(std::memory_order_relaxed), std::memory_order_relaxed);
+
     bool isPlaying = false;
+    bool hasPpq = false;
+    double bpm = currentBpm;
+    double ppq = 0.0;
     if (auto* transportHead = getPlayHead())
-        if (const auto position = transportHead->getPosition()) isPlaying = position->getIsPlaying();
+        if (const auto position = transportHead->getPosition())
+        {
+            isPlaying = position->getIsPlaying();
+            if (const auto hostBpm = position->getBpm()) bpm = *hostBpm;
+            if (const auto hostPpq = position->getPpqPosition()) { ppq = *hostPpq; hasPpq = true; }
+        }
+    currentBpm = juce::jlimit(20.0, 400.0, bpm);
     const auto transportEdge = isPlaying != transportWasPlaying;
     transportWasPlaying = isPlaying;
 
     TuningParameters tuning;
-    tuning.enabled = apvts.getRawParameterValue("tuningEnable")->load() > 0.5f;
-    tuning.mode = juce::jlimit(0, 1, (int) apvts.getRawParameterValue("tuningMode")->load());
-    tuning.source = juce::jlimit(0, 7, (int) apvts.getRawParameterValue("tuningSource")->load());
-    tuning.amount = clamp01(apvts.getRawParameterValue("tuningAmount")->load());
-    tuning.snippetMs = apvts.getRawParameterValue("tuningSnippetMs")->load();
-    tuning.cutDepth = clamp01(apvts.getRawParameterValue("tuningCutDepth")->load());
+    tuning.enabled = value("tuningEnable") > 0.5f;
+    tuning.mode = juce::jlimit(0, 1, (int) value("tuningMode"));
+    tuning.source = juce::jlimit(0, 7, (int) value("tuningSource"));
+    tuning.amount = clamp01(value("tuningAmount"));
+    tuning.snippetMs = value("tuningLengthSync") > 0.5f
+        ? lost_audio::core::tempoDivisionMilliseconds(currentBpm, (int) value("tuningLengthDivision"))
+        : value("tuningSnippetMs");
+    tuning.cutDepth = clamp01(value("tuningCutDepth"));
+    tuning.tempoSync = value("tuningSync") > 0.5f;
+    tuning.probability = value("tuningProbability");
     if (!tuning.enabled) tuningRemaining = tuningCooldownRemaining = 0;
     else if (tuning.mode == 0 && transportEdge) triggerTuningEvent((float) getSampleRate(), tuning);
 
+    const auto makeSchedule = [&] (bool sync, int division, int& fallbackSamples,
+                                   std::int64_t& fallbackStep, std::int64_t& lastStep,
+                                   int& lastDivision, double& previousPpq, bool& wasPlaying)
+    {
+        lost_audio::core::TempoEventSchedule schedule;
+        if (!sync || !isPlaying)
+        {
+            lastStep = -1; lastDivision = -1; fallbackSamples = 0; fallbackStep = 0; wasPlaying = false;
+            return schedule;
+        }
+        if (hasPpq)
+        {
+            if (!wasPlaying || ppq < previousPpq - 1.0e-7) lastStep = -1;
+            if (division != lastDivision) { lastStep = -1; lastDivision = division; }
+            schedule = lost_audio::core::tempoEventsInBlock(ppq, currentBpm, division, getSampleRate(), buffer.getNumSamples());
+            previousPpq = ppq; wasPlaying = true;
+            return schedule;
+        }
+        const auto interval = juce::jmax(1, (int) std::lround(
+            lost_audio::core::tempoDivisionMilliseconds(currentBpm, division) * 0.001 * getSampleRate()));
+        auto offset = fallbackSamples;
+        while (offset < buffer.getNumSamples() && schedule.size < lost_audio::core::TempoEventSchedule::capacity)
+        {
+            if (offset >= 0) schedule.events[schedule.size++] = { offset, fallbackStep++ };
+            offset += interval;
+        }
+        fallbackSamples = offset - buffer.getNumSamples(); lastStep = -1; lastDivision = division; wasPlaying = true;
+        return schedule;
+    };
+
+    const auto tuningDivision = juce::jlimit(0, 10, (int) value("tuningDivision"));
+    auto tuningEvents = makeSchedule(tuning.enabled && tuning.mode == 1 && tuning.tempoSync,
+        tuningDivision, tuningTempoFallbackSamples, fallbackTuningTempoStep,
+        lastTuningTempoStep, lastTuningDivision, lastHostPpq, hostTuningWasPlaying);
+    const auto dropoutDivision = juce::jlimit(0, 10, (int) value("dropoutDivision"));
+    auto dropoutEvents = makeSchedule(value("dropoutTempoSync") > 0.5f, dropoutDivision,
+        dropoutTempoFallbackSamples, fallbackDropoutTempoStep, lastDropoutTempoStep,
+        lastDropoutDivision, lastDropoutHostPpq, hostDropoutWasPlaying);
+
+    if (pendingTuningTrigger.exchange(false, std::memory_order_acq_rel) && tuning.enabled && tuningRemaining <= 0)
+        triggerTuningEvent((float) getSampleRate(), tuning);
+
     std::array<float*, 2> writePointers { nullptr, nullptr };
     for (int channel = 0; channel < inputChannels; ++channel) writePointers[(std::size_t) channel] = buffer.getWritePointer(channel);
+    size_t tuningEventIndex = 0;
+    auto measuredTuning = 0.0f;
     for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
     {
+        while (tuningEventIndex < tuningEvents.size && tuningEvents.events[tuningEventIndex].sampleOffset == sample)
+        {
+            const auto event = tuningEvents.events[tuningEventIndex++];
+            if ((!hasPpq || event.stepIndex != lastTuningTempoStep) && tuningRemaining <= 0
+                && lost_audio::core::tempoEventDecision(event.stepIndex, tuning.probability, 0x74756e65ull))
+            {
+                triggerTuningEvent((float) getSampleRate(), tuning);
+            }
+            if (hasPpq) lastTuningTempoStep = event.stepIndex;
+        }
         float duck = 1.0f;
         const auto artifact = nextTuningSample((float) getSampleRate(), tuning, isPlaying, duck);
+        measuredTuning = juce::jmax(measuredTuning, std::abs(artifact));
         for (int channel = 0; channel < inputChannels; ++channel)
             writePointers[(std::size_t) channel][sample] = juce::jlimit(-1.0f, 1.0f, writePointers[(std::size_t) channel][sample] * duck + artifact);
     }
 
-    lost_audio::core::TransmissionParameters parameters;
-    const auto macroTargets = lost_audio::core::mapTransmissionMacros(
-        apvts.getRawParameterValue("bandwidth")->load(),
-        apvts.getRawParameterValue("drive")->load(),
-        apvts.getRawParameterValue("badConnection")->load(),
-        apvts.getRawParameterValue("noiseProfile")->load());
-    const auto surfaceLinked = apvts.getRawParameterValue("macroLink")->load() > 0.5f;
-    parameters.highPassHz = surfaceLinked ? macroTargets.highPassHz : apvts.getRawParameterValue("hpHz")->load();
-    parameters.lowPassHz = surfaceLinked ? macroTargets.lowPassHz : apvts.getRawParameterValue("lpHz")->load();
-    parameters.midGainDb = surfaceLinked ? macroTargets.midGainDb : apvts.getRawParameterValue("midGainDb")->load();
-    parameters.midFrequencyHz = surfaceLinked ? macroTargets.midFrequencyHz : apvts.getRawParameterValue("midFreq")->load();
-    parameters.midQ = surfaceLinked ? macroTargets.midQ : apvts.getRawParameterValue("midQ")->load();
-    parameters.boxDipDb = surfaceLinked ? macroTargets.boxDipDb : apvts.getRawParameterValue("boxDipDb")->load();
-    parameters.drive = clamp01(apvts.getRawParameterValue("drive")->load());
-    parameters.asymmetry = surfaceLinked ? macroTargets.asymmetry : apvts.getRawParameterValue("asym")->load();
-    parameters.compression = surfaceLinked ? macroTargets.compression : apvts.getRawParameterValue("comp")->load();
-    parameters.crush = apvts.getRawParameterValue("crush")->load();
-    parameters.wowDepth = surfaceLinked ? macroTargets.wowDepth : apvts.getRawParameterValue("wowDepth")->load();
-    parameters.dropoutRate = surfaceLinked ? macroTargets.dropoutRate : apvts.getRawParameterValue("dropRate")->load();
-    parameters.dropoutDepth = surfaceLinked ? macroTargets.dropoutDepth : apvts.getRawParameterValue("dropDepth")->load();
-    parameters.crackle = surfaceLinked ? macroTargets.crackle : apvts.getRawParameterValue("crackle")->load();
-    parameters.lfoRateHz = surfaceLinked ? macroTargets.lfoRateHz : apvts.getRawParameterValue("lfoRate")->load();
-    parameters.noise = apvts.getRawParameterValue("noiseProfile")->load();
-    parameters.noiseColor = surfaceLinked ? macroTargets.noiseColor : apvts.getRawParameterValue("noiseColor")->load();
-    parameters.hiss = surfaceLinked ? macroTargets.hiss : apvts.getRawParameterValue("hiss")->load();
-    parameters.passes = juce::jlimit(1, 6, (int) apvts.getRawParameterValue("passes")->load());
-    parameters.walkieEnabled = apvts.getRawParameterValue("walkieMode")->load() > 0.5f;
-    parameters.walkieThresholdDb = apvts.getRawParameterValue("walkieThresholdDb")->load();
-    parameters.walkieMinSilenceMs = apvts.getRawParameterValue("walkieMinSilenceMs")->load();
-    parameters.walkieClickMs = apvts.getRawParameterValue("walkieClickMs")->load();
-    parameters.walkieClickLevel = apvts.getRawParameterValue("walkieClickLevel")->load();
-    parameters.walkieDispatchMode = apvts.getRawParameterValue("walkieFx")->load() > 0.5f;
-    parameters.inputGain = juce::Decibels::decibelsToGain(apvts.getRawParameterValue("inputGain")->load());
-    parameters.mix = apvts.getRawParameterValue("mix")->load();
-    parameters.outputGain = apvts.getRawParameterValue("outGain")->load();
-    transmissionCore.process(writePointers.data(), (std::size_t) inputChannels, (std::size_t) buffer.getNumSamples(), parameters);
+    const auto parameters = readParameters(currentBpm);
+    const auto processRange = [&] (int start, int length)
+    {
+        if (length <= 0) return;
+        std::array<float*, 2> rangePointers { nullptr, nullptr };
+        for (int channel = 0; channel < inputChannels; ++channel) rangePointers[(size_t) channel] = writePointers[(size_t) channel] + start;
+        transmissionCore.process(rangePointers.data(), (size_t) inputChannels, (size_t) length, parameters);
+    };
+    auto cursor = 0;
+    for (size_t index = 0; index < dropoutEvents.size; ++index)
+    {
+        const auto event = dropoutEvents.events[index];
+        if (hasPpq && event.stepIndex == lastDropoutTempoStep) continue;
+        processRange(cursor, event.sampleOffset - cursor); cursor = event.sampleOffset;
+        if (!transmissionCore.dropoutActive()
+            && lost_audio::core::tempoEventDecision(event.stepIndex, value("dropoutProbability"), 0x7472616eull))
+            transmissionCore.triggerDropout(value("dropoutStrength"), dropoutDurationSeconds(currentBpm));
+        if (hasPpq) lastDropoutTempoStep = event.stepIndex;
+    }
+    processRange(cursor, buffer.getNumSamples() - cursor);
+
+    carrierTelemetry.store(transmissionCore.carrierDisplacementMs(), std::memory_order_relaxed);
+    dropoutState.store(transmissionCore.dropoutActive(), std::memory_order_relaxed);
+    dropoutTelemetry.store(transmissionCore.dropoutProgress(), std::memory_order_relaxed);
+    compressionTelemetry.store(transmissionCore.compressionReduction(), std::memory_order_relaxed);
+    noiseTelemetry.store(transmissionCore.noiseActivity(), std::memory_order_relaxed);
+    interferenceTelemetry.store(transmissionCore.crackleActivity(), std::memory_order_relaxed);
+    squelchState.store(transmissionCore.squelchClosed(), std::memory_order_relaxed);
+    squelchTelemetry.store(transmissionCore.squelchEventActivity(), std::memory_order_relaxed);
+    limiterTelemetry.store(transmissionCore.limiterActivity(), std::memory_order_relaxed);
+    tuningState.store(tuningRemaining > 0, std::memory_order_relaxed);
+    tuningTelemetry.store(tuningRemaining > 0 && tuningTotal > 0 ? 1.0f - (float) tuningRemaining / (float) tuningTotal : measuredTuning, std::memory_order_relaxed);
+    tuningAsset.store(tuning.source == 0 ? 0 : tuningSampleIndex + 1, std::memory_order_relaxed);
 
     float peak = 0.0f;
     for (int channel = 0; channel < inputChannels; ++channel)
-        peak = juce::jmax(peak, buffer.getMagnitude(channel, 0, buffer.getNumSamples()));
+    {
+        const auto channelPeak = buffer.getMagnitude(channel, 0, buffer.getNumSamples());
+        outputPeaks[(size_t) channel].store(channelPeak, std::memory_order_relaxed);
+        peak = juce::jmax(peak, channelPeak);
+    }
+    if (inputChannels == 1) outputPeaks[1].store(outputPeaks[0].load(std::memory_order_relaxed), std::memory_order_relaxed);
     outputPeak.store(juce::jlimit(0.0f, 1.0f, peak), std::memory_order_relaxed);
+    for (size_t point = 0; point < trace.size(); ++point)
+    {
+        const auto sample = juce::jlimit(0, buffer.getNumSamples() - 1, (int) std::floor((double) point * buffer.getNumSamples() / trace.size()));
+        auto sampleValue = 0.0f;
+        for (int channel = 0; channel < inputChannels; ++channel) sampleValue += buffer.getSample(channel, sample);
+        trace[point].store(sampleValue / (float) inputChannels, std::memory_order_relaxed);
+    }
 }
 
 bool TransmissionEngineAudioProcessor::hasEditor() const { return true; }
@@ -340,14 +534,19 @@ void TransmissionEngineAudioProcessor::getStateInformation(juce::MemoryBlock& de
 {
     auto state = apvts.copyState();
     state.setProperty("engineId", "transmission", nullptr);
-    state.setProperty("schemaVersion", 2, nullptr);
+    state.setProperty("schemaVersion", 4, nullptr);
     if (auto xml = state.createXml()) copyXmlToBinary(*xml, destination);
 }
 
 void TransmissionEngineAudioProcessor::setStateInformation(const void* data, int size)
 {
     if (auto xml = getXmlFromBinary(data, size))
-        if (xml->hasTagName(apvts.state.getType())) apvts.replaceState(juce::ValueTree::fromXml(*xml));
+        if (xml->hasTagName(apvts.state.getType()))
+        {
+            apvts.replaceState(juce::ValueTree::fromXml(*xml));
+            apvts.state.setProperty("engineId", "transmission", nullptr);
+            apvts.state.setProperty("schemaVersion", 4, nullptr);
+        }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new TransmissionEngineAudioProcessor(); }

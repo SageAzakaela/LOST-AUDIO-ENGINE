@@ -1,4 +1,4 @@
-const WORKLET_URL = new URL("./camcorder-processor.js?v=20260827.27", import.meta.url);
+const WORKLET_URL = new URL("./camcorder-processor.js?v=20260828.28", import.meta.url);
 
 function now(ctx) {
   return ctx.currentTime;
@@ -81,6 +81,7 @@ export async function buildCamcorderGraph(ctx, { seed }) {
   await ensureWorklet(ctx);
   const input = new GainNode(ctx, { gain: 1 });
   const wind = new GainNode(ctx, { gain: 0 });
+  const camera = new GainNode(ctx, { gain: 0.1 });
 
   const hp = new BiquadFilterNode(ctx, { type: "highpass", Q: 0.707, frequency: 55 });
   const lp1 = new BiquadFilterNode(ctx, { type: "lowpass", Q: 0.85, frequency: 9200 });
@@ -120,6 +121,7 @@ export async function buildCamcorderGraph(ctx, { seed }) {
   lp2.connect(processor);
   processor.connect(postSum);
   wind.connect(windHp);
+  camera.connect(windHp);
   windHp.connect(windLp);
   windLp.connect(windComp);
   windComp.connect(postSum);
@@ -207,8 +209,9 @@ export async function buildCamcorderGraph(ctx, { seed }) {
   return {
     input,
     wind,
+    camera,
     output: out,
-    nodes: { input, wind, windHp, windLp, windComp, postSum, safetyPre, safetyClip, safetyPost, hp, box, dip, lp1, lp2, processor, out },
+    nodes: { input, wind, camera, windHp, windLp, windComp, postSum, safetyPre, safetyClip, safetyPost, hp, box, dip, lp1, lp2, processor, out },
     reset,
     applySettings,
   };

@@ -18,8 +18,8 @@ if(NOT TARGET lost_audio_core)
 endif()
 
 juce_add_plugin(CommsEngine
-  COMPANY_NAME "LostAudio"
-  BUNDLE_ID "com.lostaudio.commsengine"
+  COMPANY_NAME "B&E Digital"
+  BUNDLE_ID "com.lostaudio.commsengine" # Stable legacy identity; publisher is B&E Digital.
   IS_SYNTH FALSE
   NEEDS_MIDI_INPUT FALSE
   NEEDS_MIDI_OUTPUT FALSE

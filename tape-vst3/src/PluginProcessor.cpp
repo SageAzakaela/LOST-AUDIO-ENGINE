@@ -41,6 +41,8 @@ TapeEngineAudioProcessor::TapeEngineAudioProcessor()
       apvts(*this, nullptr, "PARAMS", createParameterLayout()),
       rng(0x74617065)
 {
+    apvts.state.setProperty("engineId", "tape", nullptr);
+    apvts.state.setProperty("schemaVersion", 5, nullptr);
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout TapeEngineAudioProcessor::createParameterLayout()
@@ -53,29 +55,104 @@ juce::AudioProcessorValueTreeState::ParameterLayout TapeEngineAudioProcessor::cr
     p.push_back(std::make_unique<juce::AudioParameterFloat>("wow", "Wow", n01, 0.25f));
     p.push_back(std::make_unique<juce::AudioParameterFloat>("glitch", "Glitch", n01, 0.18f));
 
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("hpHz", "High-pass", juce::NormalisableRange<float>(10.0f, 240.0f, 1.0f), 35.0f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("lpHz", "Low-pass", juce::NormalisableRange<float>(1200.0f, 22000.0f, 1.0f), 11000.0f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("headBumpDb", "Head Bump dB", juce::NormalisableRange<float>(0.0f, 12.0f, 0.1f), 2.2f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("headBumpHz", "Head Bump Hz", juce::NormalisableRange<float>(30.0f, 220.0f, 1.0f), 85.0f));
+    // The original four macros remain at their historical indices so old
+    // sessions load exactly. New sessions author the resolved DSP state below.
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("hpHz", "High-pass", juce::NormalisableRange<float>(10.0f, 240.0f, 1.0f), 54.0f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("lpHz", "Low-pass", juce::NormalisableRange<float>(1200.0f, 22000.0f, 1.0f), 12759.0f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("headBumpDb", "Head Bump dB", juce::NormalisableRange<float>(0.0f, 12.0f, 0.1f), 2.95f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("headBumpHz", "Head Bump Hz", juce::NormalisableRange<float>(30.0f, 220.0f, 1.0f), 82.0f));
 
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("speed", "Speed", juce::NormalisableRange<float>(0.5f, 2.0f, 0.001f), 1.0f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("wowDepthMs", "Wow Depth", juce::NormalisableRange<float>(0.0f, 20.0f, 0.1f), 3.5f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("speed", "Speed", juce::NormalisableRange<float>(0.5f, 2.0f, 0.001f), 0.992f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("wowDepthMs", "Wow Depth", juce::NormalisableRange<float>(0.0f, 20.0f, 0.1f), 3.3f));
     p.push_back(std::make_unique<juce::AudioParameterFloat>("flutterDepthMs", "Flutter Depth", juce::NormalisableRange<float>(0.0f, 10.0f, 0.1f), 1.2f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("drive", "Drive", n01, 0.35f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("comp", "Compression", n01, 0.28f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("hiss", "Hiss", n01, 0.12f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("hum", "Hum", n01, 0.05f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("dropout", "Dropout", n01, 0.18f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("dropoutMs", "Dropout Length", juce::NormalisableRange<float>(1.0f, 400.0f, 1.0f), 38.0f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("ceiling", "Ceiling", juce::NormalisableRange<float>(0.2f, 1.0f, 0.001f), 0.92f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("outGain", "Output Gain", juce::NormalisableRange<float>(0.0f, 1.5f, 0.01f), 0.98f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("drive", "Drive", n01, 0.42f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("comp", "Compression", n01, 0.255f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("hiss", "Hiss", n01, 0.102f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("hum", "Hum", n01, 0.030f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("dropout", "Dropout", n01, 0.078f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("dropoutMs", "Dropout Length", juce::NormalisableRange<float>(1.0f, 400.0f, 1.0f), 32.0f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("ceiling", "Ceiling", juce::NormalisableRange<float>(0.2f, 1.0f, 0.001f), 0.904f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("outGain", "Output Gain", juce::NormalisableRange<float>(0.0f, 1.5f, 0.01f), 1.01f));
 
     p.push_back(std::make_unique<juce::AudioParameterBool>("sfxEnable", "SFX Enable", false));
     p.push_back(std::make_unique<juce::AudioParameterChoice>("sfxBank", "SFX Bank", juce::StringArray { "Cassette", "VHS" }, 0));
     p.push_back(std::make_unique<juce::AudioParameterChoice>("sfxMode", "SFX Mode", juce::StringArray { "Bed", "Edges", "Sequence" }, 0));
     p.push_back(std::make_unique<juce::AudioParameterFloat>("sfxLevel", "SFX Level", n01, 0.22f));
 
+    // Appended to preserve the indices of every parameter shipped before V3.
+    // Surface mode is evaluated in the processor so host automation works even
+    // when the editor is closed. Moving an Advanced control disables the link.
+    p.push_back(std::make_unique<juce::AudioParameterBool>("macroLink", "Legacy Macro Link", false));
+
+    // Appended so existing host automation and saved states keep their indices.
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("mix", "Mix", n01, 1.0f));
+
+    // V5 performer parameters are append-only for host automation compatibility.
+    const juce::StringArray divisions { "1 Bar", "1/2", "1/4", "1/8", "1/16", "1/32", "1/4T", "1/8T", "1/16T", "1/8D", "1/16D" };
+    p.push_back(std::make_unique<juce::AudioParameterBool>("dropoutTempoSync", "Clock Sync Dropouts", false));
+    p.push_back(std::make_unique<juce::AudioParameterChoice>("dropoutDivision", "Dropout Trigger Grid", divisions, 2));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("dropoutProbability", "Dropout Probability", n01, 0.45f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("dropoutStrength", "Dropout Strength", n01, 0.72f));
+    p.push_back(std::make_unique<juce::AudioParameterBool>("dropoutLengthSync", "Sync Dropout Length", false));
+    p.push_back(std::make_unique<juce::AudioParameterChoice>("dropoutLengthDivision", "Dropout Length", divisions, 4));
+    p.push_back(std::make_unique<juce::AudioParameterBool>("wowTempoSync", "Clock Sync Wow", false));
+    p.push_back(std::make_unique<juce::AudioParameterChoice>("wowDivision", "Wow Cycle", divisions, 0));
+    p.push_back(std::make_unique<juce::AudioParameterBool>("flutterTempoSync", "Clock Sync Flutter", false));
+    p.push_back(std::make_unique<juce::AudioParameterChoice>("flutterDivision", "Flutter Cycle", divisions, 5));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("transportDrift", "Transport Drift", n01, 0.25f));
+
     return { p.begin(), p.end() };
+}
+
+float TapeEngineAudioProcessor::value(const char* id) const noexcept
+{
+    if (const auto* raw = apvts.getRawParameterValue(id))
+        return raw->load(std::memory_order_relaxed);
+    return 0.0f;
+}
+
+bool TapeEngineAudioProcessor::legacyMacrosActive() const noexcept
+{
+    return value("macroLink") > 0.5f;
+}
+
+void TapeEngineAudioProcessor::materialiseLegacyMacros()
+{
+    if (!legacyMacrosActive())
+        return;
+    const auto targets = lost_audio::core::mapTapeMacros(value("quality"), value("age"), value("wow"), value("glitch"));
+    const auto set = [this] (const char* id, float plain)
+    {
+        if (auto* parameter = apvts.getParameter(id))
+            parameter->setValueNotifyingHost(parameter->convertTo0to1(plain));
+    };
+    set("hpHz", targets.highPassHz); set("lpHz", targets.lowPassHz);
+    set("headBumpDb", targets.headBumpDb); set("headBumpHz", targets.headBumpHz);
+    set("speed", targets.speed); set("wowDepthMs", targets.wowDepthMs);
+    set("flutterDepthMs", targets.flutterDepthMs); set("drive", targets.drive);
+    set("comp", targets.compression); set("hiss", targets.hiss); set("hum", targets.hum);
+    set("dropout", targets.dropout); set("dropoutMs", targets.dropoutMs);
+    set("ceiling", targets.ceiling);
+    set("outGain", clampf(targets.outputGain * value("outGain") / 0.98f, 0.0f, 1.5f));
+    set("macroLink", 0.0f);
+}
+
+float TapeEngineAudioProcessor::inputPeak(int channel) const noexcept
+{
+    return inputPeaks[(size_t) juce::jlimit(0, 1, channel)].load(std::memory_order_relaxed);
+}
+
+float TapeEngineAudioProcessor::outputPeakForChannel(int channel) const noexcept
+{
+    return outputPeaks[(size_t) juce::jlimit(0, 1, channel)].load(std::memory_order_relaxed);
+}
+
+std::array<float, 64> TapeEngineAudioProcessor::outputTrace() const noexcept
+{
+    std::array<float, 64> result {};
+    for (size_t index = 0; index < result.size(); ++index)
+        result[index] = trace[index].load(std::memory_order_relaxed);
+    return result;
 }
 
 const juce::String TapeEngineAudioProcessor::getName() const { return JucePlugin_Name; }
@@ -273,10 +350,14 @@ float TapeEngineAudioProcessor::processSfxSample(float signalAbs, float sampleRa
 
 void TapeEngineAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
-    juce::ignoreUnused(samplesPerBlock);
     tapeCore.prepare(sampleRate, (std::size_t) juce::jlimit(1, 2, getTotalNumInputChannels()));
     tapeCore.reset(0x74617065u);
     setLatencySamples(tapeCore.latencySamples());
+    alignedDry.setSize(2, juce::jmax(1, samplesPerBlock), false, false, true);
+    const auto dryDelayLength = (std::size_t) juce::jmax(2, tapeCore.latencySamples() + 1);
+    for (auto& delay : dryDelay)
+        delay.assign(dryDelayLength, 0.0f);
+    dryWriteIndex = 0;
     for (auto& filters : tone)
     {
         filters.hp.reset();
@@ -286,6 +367,17 @@ void TapeEngineAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBl
     }
     initSfx(sampleRate);
     updateToneFilters();
+    currentBpm = 120.0;
+    lastTempoStep = -1;
+    fallbackTempoStep = 0;
+    lastTempoDivision = -1;
+    tempoFallbackSamples = 0;
+    lastHostPpq = 0.0;
+    hostTempoWasPlaying = false;
+    pendingMechanismTrigger.store(false);
+    for (auto& meter : inputPeaks) meter.store(0.0f);
+    for (auto& meter : outputPeaks) meter.store(0.0f);
+    for (auto& point : trace) point.store(0.0f);
 }
 
 void TapeEngineAudioProcessor::releaseResources() {}
@@ -305,10 +397,22 @@ void TapeEngineAudioProcessor::updateToneFilters()
     if (sr <= 1000.0)
         return;
 
-    const auto hpHz = apvts.getRawParameterValue("hpHz")->load();
-    const auto lpHz = apvts.getRawParameterValue("lpHz")->load();
-    const auto bumpDb = apvts.getRawParameterValue("headBumpDb")->load();
-    const auto bumpHz = apvts.getRawParameterValue("headBumpHz")->load();
+    auto hpHz = apvts.getRawParameterValue("hpHz")->load();
+    auto lpHz = apvts.getRawParameterValue("lpHz")->load();
+    auto bumpDb = apvts.getRawParameterValue("headBumpDb")->load();
+    auto bumpHz = apvts.getRawParameterValue("headBumpHz")->load();
+    if (apvts.getRawParameterValue("macroLink")->load() > 0.5f)
+    {
+        const auto targets = lost_audio::core::mapTapeMacros(
+            apvts.getRawParameterValue("quality")->load(),
+            apvts.getRawParameterValue("age")->load(),
+            apvts.getRawParameterValue("wow")->load(),
+            apvts.getRawParameterValue("glitch")->load());
+        hpHz = targets.highPassHz;
+        lpHz = targets.lowPassHz;
+        bumpDb = targets.headBumpDb;
+        bumpHz = targets.headBumpHz;
+    }
 
     auto hp = juce::dsp::IIR::Coefficients<float>::makeHighPass(sr, hpHz, 0.707f);
     auto lp = juce::dsp::IIR::Coefficients<float>::makeLowPass(sr, lpHz, 0.85f);
@@ -323,63 +427,226 @@ void TapeEngineAudioProcessor::updateToneFilters()
     }
 }
 
+lost_audio::core::TapeParameters TapeEngineAudioProcessor::readParameters(double bpm) const noexcept
+{
+    lost_audio::core::TapeParameters parameters;
+    parameters.wowAmount = legacyMacrosActive() ? value("wow") : value("transportDrift");
+    if (legacyMacrosActive())
+    {
+        const auto targets = lost_audio::core::mapTapeMacros(value("quality"), value("age"), parameters.wowAmount, value("glitch"));
+        parameters.speed = targets.speed;
+        parameters.wowDepthMs = targets.wowDepthMs;
+        parameters.flutterDepthMs = targets.flutterDepthMs;
+        parameters.drive = targets.drive;
+        parameters.compression = targets.compression;
+        parameters.hiss = targets.hiss;
+        parameters.hum = targets.hum;
+        parameters.dropout = targets.dropout;
+        parameters.dropoutMs = targets.dropoutMs;
+        parameters.ceiling = targets.ceiling;
+        parameters.outputGain = clampf(targets.outputGain * value("outGain") / 0.98f, 0.0f, 1.5f);
+    }
+    else
+    {
+        parameters.speed = value("speed");
+        parameters.wowDepthMs = value("wowDepthMs");
+        parameters.flutterDepthMs = value("flutterDepthMs");
+        parameters.drive = value("drive");
+        parameters.compression = value("comp");
+        parameters.hiss = value("hiss");
+        parameters.hum = value("hum");
+        parameters.dropout = value("dropout");
+        parameters.dropoutMs = value("dropoutMs");
+        parameters.ceiling = value("ceiling");
+        parameters.outputGain = value("outGain");
+    }
+    if (value("dropoutTempoSync") > 0.5f)
+        parameters.dropout = 0.0f;
+    if (value("wowTempoSync") > 0.5f)
+        parameters.wowRateHz = lost_audio::core::tempoDivisionRateHz(bpm, (int) value("wowDivision"));
+    if (value("flutterTempoSync") > 0.5f)
+        parameters.flutterRateHz = lost_audio::core::tempoDivisionRateHz(bpm, (int) value("flutterDivision"));
+    return parameters;
+}
+
+float TapeEngineAudioProcessor::dropoutDurationSeconds(double bpm) const noexcept
+{
+    if (value("dropoutLengthSync") > 0.5f)
+        return lost_audio::core::tempoDivisionMilliseconds(bpm, (int) value("dropoutLengthDivision")) * 0.001f;
+    return value("dropoutMs") * 0.001f;
+}
+
+void TapeEngineAudioProcessor::triggerDropout() noexcept
+{
+    tapeCore.triggerDropout(value("dropoutStrength"), dropoutDurationSeconds(currentBpm));
+}
+
 void TapeEngineAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
     juce::ignoreUnused(midi);
     juce::ScopedNoDenormals nd;
 
-    const auto inCh = getTotalNumInputChannels();
+    const auto inCh = juce::jlimit(0, 2, getTotalNumInputChannels());
     const auto outCh = getTotalNumOutputChannels();
     for (int ch = inCh; ch < outCh; ++ch)
         buffer.clear(ch, 0, buffer.getNumSamples());
+    if (inCh == 0 || buffer.getNumSamples() == 0)
+        return;
+
+    for (int ch = 0; ch < inCh; ++ch)
+        inputPeaks[(size_t) ch].store(buffer.getMagnitude(ch, 0, buffer.getNumSamples()), std::memory_order_relaxed);
+    if (inCh == 1)
+        inputPeaks[1].store(inputPeaks[0].load(std::memory_order_relaxed), std::memory_order_relaxed);
 
     updateToneFilters();
 
     const auto sr = (float) getSampleRate();
-    const auto glitch = clampf(apvts.getRawParameterValue("glitch")->load(), 0.0f, 1.0f);
+    const auto glitch = clampf(value("glitch"), 0.0f, 1.0f);
 
-    const auto sfxEnable = apvts.getRawParameterValue("sfxEnable")->load() > 0.5f;
-    const auto sfxBank = juce::jlimit(0, 1, (int) apvts.getRawParameterValue("sfxBank")->load());
-    const auto sfxMode = (SfxMode) juce::jlimit(0, 2, (int) apvts.getRawParameterValue("sfxMode")->load());
-    const auto sfxLevel = clampf(apvts.getRawParameterValue("sfxLevel")->load(), 0.0f, 1.0f);
+    bool isPlaying = false;
+    bool hasPpq = false;
+    auto bpm = currentBpm;
+    auto ppq = 0.0;
+    if (auto* hostPlayHead = getPlayHead())
+        if (const auto position = hostPlayHead->getPosition())
+        {
+            isPlaying = position->getIsPlaying();
+            if (const auto hostBpm = position->getBpm()) bpm = *hostBpm;
+            if (const auto hostPpq = position->getPpqPosition()) { ppq = *hostPpq; hasPpq = true; }
+        }
+    currentBpm = juce::jlimit(20.0, 400.0, bpm);
+
+    const auto tempoSync = value("dropoutTempoSync") > 0.5f;
+    const auto division = juce::jlimit(0, 10, (int) value("dropoutDivision"));
+    const auto usingHostSchedule = tempoSync && isPlaying && hasPpq;
+    lost_audio::core::TempoEventSchedule events;
+    if (!tempoSync || !isPlaying)
+    {
+        lastTempoStep = -1;
+        lastTempoDivision = -1;
+        tempoFallbackSamples = 0;
+        fallbackTempoStep = 0;
+        hostTempoWasPlaying = false;
+    }
+    else if (usingHostSchedule)
+    {
+        if (!hostTempoWasPlaying || ppq < lastHostPpq - 1.0e-7)
+            lastTempoStep = -1;
+        if (division != lastTempoDivision)
+        {
+            lastTempoStep = -1;
+            lastTempoDivision = division;
+        }
+        events = lost_audio::core::tempoEventsInBlock(ppq, currentBpm, division, getSampleRate(), buffer.getNumSamples());
+        lastHostPpq = ppq;
+        hostTempoWasPlaying = true;
+    }
+    else
+    {
+        const auto interval = juce::jmax(1, (int) std::lround(
+            lost_audio::core::tempoDivisionMilliseconds(currentBpm, division) * 0.001 * getSampleRate()));
+        auto offset = tempoFallbackSamples;
+        while (offset < buffer.getNumSamples() && events.size < lost_audio::core::TempoEventSchedule::capacity)
+        {
+            if (offset >= 0)
+                events.events[events.size++] = { offset, fallbackTempoStep++ };
+            offset += interval;
+        }
+        tempoFallbackSamples = offset - buffer.getNumSamples();
+        lastTempoStep = -1;
+        lastTempoDivision = division;
+        hostTempoWasPlaying = true;
+    }
+
+    const auto sfxEnable = value("sfxEnable") > 0.5f;
+    const auto sfxBank = juce::jlimit(0, 1, (int) value("sfxBank"));
+    const auto sfxMode = (SfxMode) juce::jlimit(0, 2, (int) value("sfxMode"));
+    const auto sfxLevel = clampf(value("sfxLevel"), 0.0f, 1.0f);
 
     std::array<float*, 2> writePtrs { nullptr, nullptr };
-    for (int ch = 0; ch < inCh && ch < 2; ++ch)
+    for (int ch = 0; ch < inCh; ++ch)
         writePtrs[(size_t) ch] = buffer.getWritePointer(ch);
+
+    const auto sampleCount = buffer.getNumSamples();
+    if (alignedDry.getNumSamples() < sampleCount)
+        alignedDry.setSize(2, sampleCount, false, false, true);
+    const auto dryDelayLength = dryDelay[0].size();
+    const auto dryLatency = (std::size_t) juce::jlimit(0, (int) dryDelayLength - 1, tapeCore.latencySamples());
+    for (int i = 0; i < sampleCount; ++i)
+    {
+        const auto readIndex = (dryWriteIndex + dryDelayLength - dryLatency) % dryDelayLength;
+        for (int ch = 0; ch < inCh; ++ch)
+        {
+            dryDelay[(size_t) ch][dryWriteIndex] = writePtrs[(size_t) ch][i];
+            alignedDry.setSample(ch, i, dryDelay[(size_t) ch][readIndex]);
+        }
+        dryWriteIndex = (dryWriteIndex + 1) % dryDelayLength;
+    }
+
+    if (pendingMechanismTrigger.exchange(false, std::memory_order_acq_rel) && sfxEnable)
+    {
+        const auto useStart = unif(rng) < 0.6f;
+        const auto& pool = useStart ? startByBank[(size_t) sfxBank] : endByBank[(size_t) sfxBank];
+        const auto poolIndex = juce::jlimit(0, (int) pool.size() - 1,
+                                           (int) std::floor(unif(rng) * (float) pool.size()));
+        startSfxVoice(pool[(size_t) poolIndex], 0.75f + sfxLevel * 0.5f);
+    }
 
     // Mechanical beds and edge events are decoded by the JUCE adapter, then
     // enter the same point as the browser graph's SFX input: immediately
     // before the portable transport/nonlinear processor.
+    auto measuredMechanism = 0.0f;
     for (int i = 0; i < buffer.getNumSamples(); ++i)
     {
         float inAbs = 0.0f;
-        for (int ch = 0; ch < inCh && ch < 2; ++ch)
+        for (int ch = 0; ch < inCh; ++ch)
             inAbs += std::abs(writePtrs[(size_t) ch][i]);
-        inAbs /= juce::jmax(1, juce::jmin(inCh, 2));
+        inAbs /= juce::jmax(1, inCh);
 
         const auto sfx = processSfxSample(inAbs, sr, glitch, sfxEnable, sfxBank, sfxMode, sfxLevel);
-        for (int ch = 0; ch < inCh && ch < 2; ++ch)
+        measuredMechanism = juce::jmax(measuredMechanism, std::abs(sfx));
+        for (int ch = 0; ch < inCh; ++ch)
             writePtrs[(size_t) ch][i] += sfx;
     }
 
-    lost_audio::core::TapeParameters parameters;
-    parameters.speed = apvts.getRawParameterValue("speed")->load();
-    parameters.wowDepthMs = apvts.getRawParameterValue("wowDepthMs")->load();
-    parameters.flutterDepthMs = apvts.getRawParameterValue("flutterDepthMs")->load();
-    parameters.wowAmount = apvts.getRawParameterValue("wow")->load();
-    parameters.drive = apvts.getRawParameterValue("drive")->load();
-    parameters.compression = apvts.getRawParameterValue("comp")->load();
-    parameters.hiss = apvts.getRawParameterValue("hiss")->load();
-    parameters.hum = apvts.getRawParameterValue("hum")->load();
-    parameters.dropout = apvts.getRawParameterValue("dropout")->load();
-    parameters.dropoutMs = apvts.getRawParameterValue("dropoutMs")->load();
-    parameters.ceiling = apvts.getRawParameterValue("ceiling")->load();
-    parameters.outputGain = apvts.getRawParameterValue("outGain")->load();
-    tapeCore.process(writePtrs.data(), (std::size_t) juce::jlimit(0, 2, inCh), (std::size_t) buffer.getNumSamples(), parameters);
+    const auto parameters = readParameters(currentBpm);
+    const auto processRange = [&] (int start, int length)
+    {
+        if (length <= 0) return;
+        std::array<float*, 2> rangePointers { nullptr, nullptr };
+        for (int channel = 0; channel < inCh; ++channel)
+            rangePointers[(size_t) channel] = writePtrs[(size_t) channel] + start;
+        tapeCore.process(rangePointers.data(), (size_t) inCh, (size_t) length, parameters);
+    };
+
+    auto cursor = 0;
+    for (size_t index = 0; index < events.size; ++index)
+    {
+        const auto event = events.events[index];
+        if (usingHostSchedule && event.stepIndex == lastTempoStep)
+            continue;
+        processRange(cursor, event.sampleOffset - cursor);
+        cursor = event.sampleOffset;
+        if (!tapeCore.dropoutActive()
+            && lost_audio::core::tempoEventDecision(event.stepIndex, value("dropoutProbability"), 0x74617065ull))
+            tapeCore.triggerDropout(value("dropoutStrength"), dropoutDurationSeconds(currentBpm));
+        if (usingHostSchedule)
+            lastTempoStep = event.stepIndex;
+    }
+    processRange(cursor, buffer.getNumSamples() - cursor);
+
+    modulationTelemetry.store(std::abs(tapeCore.modulationDisplacementMs()), std::memory_order_relaxed);
+    dropoutState.store(tapeCore.dropoutActive(), std::memory_order_relaxed);
+    dropoutTelemetry.store(tapeCore.dropoutProgress(), std::memory_order_relaxed);
+    compressionTelemetry.store(tapeCore.compressionReduction(), std::memory_order_relaxed);
+    saturationTelemetry.store(tapeCore.saturationActivity(), std::memory_order_relaxed);
+    noiseTelemetry.store(tapeCore.noiseActivity(), std::memory_order_relaxed);
+    mechanismTelemetry.store(measuredMechanism, std::memory_order_relaxed);
+    limiterTelemetry.store(tapeCore.limiterActivity(), std::memory_order_relaxed);
 
     // Web Audio places the cabinet filters after the worklet. Retaining JUCE's
     // filters here keeps the adapter thin while matching that topology.
-    for (int ch = 0; ch < inCh && ch < 2; ++ch)
+    for (int ch = 0; ch < inCh; ++ch)
     {
         auto& filters = tone[(size_t) ch];
         auto* samples = writePtrs[(size_t) ch];
@@ -392,10 +659,40 @@ void TapeEngineAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
         }
     }
 
+    const auto mix = clampf(value("mix"), 0.0f, 1.0f);
+    if (mix < 0.99999f)
+        for (int ch = 0; ch < inCh; ++ch)
+        {
+            auto* wet = writePtrs[(size_t) ch];
+            const auto* dry = alignedDry.getReadPointer(ch);
+            for (int i = 0; i < sampleCount; ++i)
+            {
+                const auto dryOutput = dry[i] * parameters.outputGain;
+                wet[i] = clampf(dryOutput + (wet[i] - dryOutput) * mix,
+                                -parameters.ceiling, parameters.ceiling);
+            }
+        }
+
     float blockPeak = 0.0f;
-    for (int ch = 0; ch < inCh && ch < 2; ++ch)
-        blockPeak = juce::jmax(blockPeak, buffer.getMagnitude(ch, 0, buffer.getNumSamples()));
+    for (int ch = 0; ch < inCh; ++ch)
+    {
+        const auto peak = buffer.getMagnitude(ch, 0, buffer.getNumSamples());
+        outputPeaks[(size_t) ch].store(peak, std::memory_order_relaxed);
+        blockPeak = juce::jmax(blockPeak, peak);
+    }
+    if (inCh == 1)
+        outputPeaks[1].store(outputPeaks[0].load(std::memory_order_relaxed), std::memory_order_relaxed);
     outputPeak.store(juce::jlimit(0.0f, 1.0f, blockPeak), std::memory_order_relaxed);
+
+    for (size_t point = 0; point < trace.size(); ++point)
+    {
+        const auto sample = juce::jlimit(0, buffer.getNumSamples() - 1,
+            (int) std::floor((double) point * (double) buffer.getNumSamples() / (double) trace.size()));
+        auto valueAtPoint = 0.0f;
+        for (int channel = 0; channel < inCh; ++channel)
+            valueAtPoint += buffer.getSample(channel, sample);
+        trace[point].store(valueAtPoint / (float) inCh, std::memory_order_relaxed);
+    }
 }
 
 bool TapeEngineAudioProcessor::hasEditor() const { return true; }
@@ -409,7 +706,7 @@ void TapeEngineAudioProcessor::getStateInformation(juce::MemoryBlock& dest)
 {
     auto state = apvts.copyState();
     state.setProperty("engineId", "tape", nullptr);
-    state.setProperty("schemaVersion", 2, nullptr);
+    state.setProperty("schemaVersion", 5, nullptr);
     if (auto xml = state.createXml())
         copyXmlToBinary(*xml, dest);
 }
@@ -423,7 +720,7 @@ void TapeEngineAudioProcessor::setStateInformation(const void* data, int size)
             // stable, so they migrate losslessly into the shared-core adapter.
             apvts.replaceState(juce::ValueTree::fromXml(*xml));
             apvts.state.setProperty("engineId", "tape", nullptr);
-            apvts.state.setProperty("schemaVersion", 2, nullptr);
+            apvts.state.setProperty("schemaVersion", 5, nullptr);
         }
 }
 

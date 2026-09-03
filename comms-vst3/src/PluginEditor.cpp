@@ -44,6 +44,10 @@ const PresetDefinition presets[] = {
     { "Emergency Paging", { { "mode", 4.0f }, { "bandwidth", 0.48f }, { "drive", 0.48f }, { "glitch", 0.12f }, { "noise", 0.22f }, { "character", 0.82f }, { "distance", 0.58f }, { "alarmTone", 1.0f }, { "macroLink", 1.0f } } },
     { "Damaged Copper", { { "mode", 0.0f }, { "bandwidth", 0.20f }, { "drive", 0.72f }, { "glitch", 0.46f }, { "noise", 0.58f }, { "character", 0.86f }, { "distance", 0.08f }, { "macroLink", 1.0f } } },
     { "Diegetic Extreme", { { "mode", 2.0f }, { "bandwidth", 0.18f }, { "drive", 0.78f }, { "glitch", 0.68f }, { "noise", 0.52f }, { "character", 0.98f }, { "distance", 0.74f }, { "macroLink", 1.0f } } },
+    { "PLAY - Telephone Vocal Insert", { { "mode", 0 }, { "bandwidth", .54f }, { "drive", .22f }, { "glitch", .01f }, { "noise", .025f }, { "character", .58f }, { "distance", .02f }, { "macroLink", 1 }, { "mix", .78f }, { "ceiling", .90f }, { "outGain", .96f } } },
+    { "PLAY - PA Guitar Cabinet", { { "mode", 3 }, { "bandwidth", .52f }, { "drive", .46f }, { "glitch", .015f }, { "noise", .02f }, { "character", .76f }, { "distance", .34f }, { "macroLink", 1 }, { "mix", .72f }, { "ceiling", .88f }, { "outGain", .92f } } },
+    { "PLAY - Intercom Drum Parallel", { { "mode", 2 }, { "bandwidth", .38f }, { "drive", .34f }, { "glitch", .03f }, { "noise", .025f }, { "character", .68f }, { "distance", .18f }, { "macroLink", 1 }, { "mix", .56f }, { "ceiling", .88f }, { "outGain", .94f } } },
+    { "PLAY - Cell Synth Echo", { { "mode", 1 }, { "bandwidth", .46f }, { "drive", .24f }, { "glitch", .08f }, { "noise", .018f }, { "character", .28f }, { "distance", .04f }, { "macroLink", 1 }, { "echoMix", .22f }, { "echoMs", 188 }, { "echoFb", .24f }, { "mix", .68f }, { "ceiling", .90f }, { "outGain", .94f } } },
 };
 }
 
@@ -339,7 +343,7 @@ CommsEngineAudioProcessorEditor::CommsEngineAudioProcessorEditor(CommsEngineAudi
 {
     setLookAndFeel(&lookAndFeel);
     setOpaque(true);
-    brandLabel.setText("B&E DIGITAL / LOST AUDIO", juce::dontSendNotification);
+    brandLabel.setText("B&E DIGITAL", juce::dontSendNotification);
     brandLabel.setFont(uiFont(10.5f, true));
     brandLabel.setColour(juce::Label::textColourId, juce::Colour(cyan));
     addAndMakeVisible(brandLabel);
@@ -361,7 +365,10 @@ CommsEngineAudioProcessorEditor::CommsEngineAudioProcessorEditor(CommsEngineAudi
     {
         if (const auto selected = presetBox.getSelectedId(); selected >= 2) applyPreset(selected - 2);
     };
-    presetBox.setSelectedId(1, juce::dontSendNotification);
+    const auto restoredPreset = apvts.state.getProperty("factoryPresetName", "Custom").toString();
+    auto restoredPresetId = 1;
+    for (int i = 0; i < (int) std::size(presets); ++i) if (restoredPreset == presets[i].name) restoredPresetId = i + 2;
+    presetBox.setSelectedId(restoredPresetId, juce::dontSendNotification);
     presetBox.setTooltip("Safe profiles for handsets, intercoms, PA systems, cellular paths and alarm panels.");
     addAndMakeVisible(presetBox);
 
@@ -440,7 +447,11 @@ CommsEngineAudioProcessorEditor::CommsEngineAudioProcessorEditor(CommsEngineAudi
             addKnob(searchPanel, "verbDamp", "Damping", "Room high-frequency absorption."),
             addKnob(searchPanel, "ceiling", "Ceiling", "Protected output ceiling.") }) linkedAdvancedControls.push_back(linked);
     addSwitch(searchPanel, "alarmTone", "Alarm Tone", "Enable the panel or paging alarm generator.");
-    addKnob(searchPanel, "toneMix", "Alarm Level", "Warning-tone contribution.");
+    linkedAdvancedControls.push_back(addKnob(searchPanel, "toneMix", "Alarm Level", "Warning-tone contribution."));
+
+    for (auto* control : linkedAdvancedControls)
+        if (auto* knob = dynamic_cast<Knob*>(control))
+            knob->setUserChange([this] { setParameter("macroLink", 0.0f); markCustom(); });
 
     setResizable(true, true);
     setResizeLimits(900, 620, 1600, 1000);
@@ -460,7 +471,7 @@ CommsEngineAudioProcessorEditor::Knob* CommsEngineAudioProcessorEditor::addKnob(
 {
     auto callback = [this, surfaceMacro]
     {
-        if (surfaceMacro) setParameter("macroLink", 1.0f);
+        if (surfaceMacro && !suppressPresetChanges) setParameter("macroLink", 1.0f);
         markCustom();
     };
     auto control = std::make_unique<Knob>(apvts, id, text, callback);
@@ -534,7 +545,11 @@ float CommsEngineAudioProcessorEditor::getParameter(const juce::String& id) cons
 
 void CommsEngineAudioProcessorEditor::markCustom()
 {
-    if (!suppressPresetChanges) presetBox.setSelectedId(1, juce::dontSendNotification);
+    if (!suppressPresetChanges)
+    {
+        presetBox.setSelectedId(1, juce::dontSendNotification);
+        apvts.state.setProperty("factoryPresetName", "Custom", nullptr);
+    }
 }
 
 void CommsEngineAudioProcessorEditor::applyPreset(int index)
@@ -542,19 +557,30 @@ void CommsEngineAudioProcessorEditor::applyPreset(int index)
     if (index < 0 || index >= (int) std::size(presets)) return;
     suppressPresetChanges = true;
     for (auto* parameter : processor.getParameters()) parameter->setValueNotifyingHost(parameter->getDefaultValue());
-    for (const auto& [id, value] : presets[(std::size_t) index].values) setParameter(id, value);
+    for (const auto& [id, value] : presets[(std::size_t) index].values) if (juce::String(id) != "macroLink") setParameter(id, value);
+    setParameter("macroLink", 1.0f);
+    processor.materialiseLegacyMacros();
+    for (const auto& [id, value] : presets[(std::size_t) index].values)
+    {
+        const auto name = juce::String(id);
+        if (name != "mode" && name != "bandwidth" && name != "drive" && name != "glitch"
+            && name != "noise" && name != "character" && name != "distance" && name != "macroLink")
+            setParameter(id, value);
+    }
+    setParameter("macroLink", 0.0f);
+    apvts.state.setProperty("factoryPresetName", presets[(std::size_t) index].name, nullptr);
     suppressPresetChanges = false;
 }
 
 void CommsEngineAudioProcessorEditor::timerCallback()
 {
     const auto linked = getParameter("macroLink") > 0.5f;
-    for (auto* control : linkedAdvancedControls) control->setEnabled(!linked);
+    for (auto* control : linkedAdvancedControls) control->setEnabled(true);
     consoleDisplay.setState(processor.getOutputPeak(), (int) getParameter("mode"),
                             getParameter("glitch"), getParameter("distance"),
                             getParameter("alarmTone") > 0.5f);
     consoleDisplay.advance();
-    statusLabel.setText(linked ? "SURFACE LINK  /  PROTECTED COMMS PATH"
+    statusLabel.setText(linked ? "SURFACE LINK  /  TURN A DETAIL TO EDIT"
                                : "ADVANCED CIRCUIT  /  DIRECT HARDWARE CONTROL",
                         juce::dontSendNotification);
 }

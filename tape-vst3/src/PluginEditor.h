@@ -46,13 +46,20 @@ private:
     {
     public:
         void paint(juce::Graphics&) override;
-        void setMotion(float newMotion);
-        void setOutputLevel(float newLevel);
+        void setState(std::array<float, 64> waveform, float inputLeft, float inputRight,
+                      float outputLeft, float outputRight, float modulationMs,
+                      float dropoutProgress, bool dropoutActive, float compression,
+                      float saturation, float noise, float mechanism, float limiter,
+                      int machine);
 
     private:
         float phase = 0.0f;
-        float motion = 0.25f;
-        float outputLevel = 0.0f;
+        std::array<float, 64> trace {};
+        std::array<float, 2> input {}, output {};
+        float modulation = 0.0f, dropout = 0.0f, compression = 0.0f;
+        float saturation = 0.0f, noise = 0.0f, mechanism = 0.0f, limiter = 0.0f;
+        bool dropoutOn = false;
+        int machine = 0;
     };
 
     class Knob final : public juce::Component
@@ -61,6 +68,7 @@ private:
         Knob(APVTS& state, const juce::String& paramID, const juce::String& text);
         void resized() override;
         void setHint(const juce::String& hint);
+        void setUserChange(std::function<void()> userChange) { slider.onDragStart = std::move(userChange); }
 
     private:
         juce::Label label;
@@ -74,6 +82,7 @@ private:
         Switch(APVTS& state, const juce::String& paramID, const juce::String& text);
         void resized() override;
         void setHint(const juce::String& hint);
+        void setUserChange(std::function<void()> userChange) { button.onClick = std::move(userChange); }
 
     private:
         juce::ToggleButton button;
@@ -86,6 +95,7 @@ private:
         Choice(APVTS& state, const juce::String& paramID, const juce::String& text);
         void resized() override;
         void setHint(const juce::String& hint);
+        void setUserChange(std::function<void()> userChange) { combo.onChange = std::move(userChange); }
 
     private:
         juce::Label label;
@@ -93,19 +103,18 @@ private:
         std::unique_ptr<APVTS::ComboBoxAttachment> attachment;
     };
 
-    void addKnob(Panel&, const juce::String& id, const juce::String& text, const juce::String& hint);
+    Knob* addKnob(Panel&, const juce::String& id, const juce::String& text, const juce::String& hint);
     void addSwitch(Panel&, const juce::String& id, const juce::String& text, const juce::String& hint);
     void addChoice(Panel&, const juce::String& id, const juce::String& text, const juce::String& hint);
     void layoutPanel(Panel&, int columns);
-    void showAdvanced(bool shouldShowAdvanced);
+    enum class EditorMode { simple, advanced, performer };
+    void showMode(EditorMode);
 
     void setParamValue(const juce::String& id, float plainValue);
     float getParamValue(const juce::String& id) const;
-    void applyMacroQuality(float quality);
-    void applyMacroAge(float age);
-    void applyMacroWow(float wow);
-    void applyMacroGlitch(float glitch);
+    void resetParameters();
     void applyPreset(int idx);
+    void markCustom();
     void timerCallback() override;
 
     TapeEngineAudioProcessor& processor;
@@ -117,33 +126,32 @@ private:
     juce::Label subtitle;
     juce::Label presetLabel;
     juce::ComboBox presetBox;
-    juce::TextButton surfaceButton { "SURFACE" };
+    juce::TextButton surfaceButton { "SIMPLE" };
     juce::TextButton advancedButton { "ADVANCED" };
+    juce::TextButton performerButton { "PERFORMER" };
     juce::Label statusLabel;
     juce::TooltipWindow tooltipWindow { this, 850 };
 
-    juce::Component surfacePage;
-    juce::Component advancedPage;
+    juce::Component surfacePage, advancedPage, performerPage;
     DeckDisplay deckDisplay;
-    Panel macroPanel { "CHARACTER" };
-    Panel surfaceOutputPanel { "DECK OUTPUT" };
+    Panel simpleCharacterPanel { "TAPE CHARACTER" };
+    Panel simpleMotionPanel { "TRANSPORT + OUTPUT" };
     Panel tonePanel { "01 / HEAD + BANDWIDTH" };
     Panel transportPanel { "02 / TRANSPORT" };
     Panel texturePanel { "03 / TAPE BODY" };
     Panel deckPanel { "04 / MECHANISM" };
+    Panel performerMotionPanel { "CLOCKED TRANSPORT" };
+    Panel performerDamagePanel { "DROPOUT PERFORMANCE" };
+    Panel performerDeckPanel { "MACHINE LAYER" };
+    Panel performerOutputPanel { "SAFE OUTPUT" };
+    juce::TextButton dropoutButton { "TRIGGER DROPOUT" };
+    juce::TextButton mechanismButton { "TRIGGER MECHANISM" };
 
     std::vector<std::unique_ptr<Knob>> knobs;
     std::vector<std::unique_ptr<Switch>> switches;
     std::vector<std::unique_ptr<Choice>> choices;
     std::unordered_map<Panel*, std::vector<juce::Component*>> panelItems;
-
-    bool suppressMacros = false;
-    bool showingAdvanced = false;
-    float displayLevel = 0.0f;
-    float lastQuality = 0.55f;
-    float lastAge = 0.35f;
-    float lastWow = 0.25f;
-    float lastGlitch = 0.18f;
+    EditorMode currentMode = EditorMode::simple;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TapeEngineAudioProcessorEditor)
 };

@@ -43,8 +43,8 @@ private:
     {
     public:
         void setState(float leftIn, float rightIn, float leftOut, float rightOut,
-                      float rotation, float damage, float stereoLink, bool damaged, bool skipping);
-        void advance();
+                      float discPhase, float damage, float stereoLink, bool damaged, bool skipping,
+                      float damageProgress, float skipProgress, float servoActivity);
         void paint(juce::Graphics&) override;
     private:
         std::array<float, 2> input { 0.0f, 0.0f };
@@ -53,6 +53,9 @@ private:
         float speed = 5.2f;
         float damageAmount = 0.2f;
         float linkAmount = 1.0f;
+        float damageEventProgress = 0.0f;
+        float skipEventProgress = 0.0f;
+        float servo = 0.0f;
         bool damageActive = false;
         bool skipActive = false;
     };
@@ -96,7 +99,8 @@ private:
     Switch* addSwitch(Panel&, const juce::String&, const juce::String&, const juce::String&, bool linked = false);
     Choice* addChoice(Panel&, const juce::String&, const juce::String&, const juce::String&, bool linked = false);
     void layoutPanel(Panel&, int columns);
-    void showAdvanced(bool);
+    enum class EditorMode { simple, advanced, performer };
+    void showMode(EditorMode);
     void applyPreset(int);
     void resetParameters();
     void setParameter(const juce::String&, float);
@@ -114,21 +118,27 @@ private:
     juce::Label subtitleLabel;
     juce::Label profileLabel;
     juce::ComboBox presetBox;
-    juce::TextButton surfaceButton { "SURFACE" };
+    juce::TextButton simpleButton { "SIMPLE" };
     juce::TextButton advancedButton { "ADVANCED" };
+    juce::TextButton performerButton { "PERFORMER" };
     juce::Label statusLabel;
 
-    juce::Component surfacePage;
+    juce::Component simplePage;
     juce::Component advancedPage;
+    juce::Component performerPage;
     DiscDisplay discDisplay;
-    Panel characterPanel { "DISC CHARACTER" };
-    Panel deckPanel { "DECK OUTPUT" };
+    Panel characterPanel { "DAMAGE & TRACKING" };
+    Panel deckPanel { "DECK & OUTPUT" };
     Panel decoderPanel { "DECODER" };
     Panel burstPanel { "SECTOR DAMAGE" };
     Panel trackingPanel { "TRACKING" };
     Panel mechanicsPanel { "TRANSPORT" };
     Panel stereoPanel { "STEREO OUTPUT" };
     Panel protectionPanel { "PROTECTION" };
+    Panel performanceEventPanel { "EVENT SHAPE" };
+    Panel performanceClockPanel { "CLOCK & TRIGGER" };
+    Panel performanceTrackingPanel { "SKIP & RECOVERY" };
+    Panel performanceOutputPanel { "PERFORMANCE SAFETY" };
     juce::TextButton damageButton { "TRIGGER DAMAGE" };
     juce::TextButton skipButton { "TRIGGER SKIP" };
 
@@ -137,7 +147,7 @@ private:
     std::vector<std::unique_ptr<Choice>> choices;
     std::unordered_map<Panel*, std::vector<juce::Component*>> panelItems;
     std::vector<juce::Component*> linkedControls;
-    bool showingAdvanced = false;
+    EditorMode editorMode = EditorMode::simple;
     bool suppressPresetChanges = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(CDEngineAudioProcessorEditor)

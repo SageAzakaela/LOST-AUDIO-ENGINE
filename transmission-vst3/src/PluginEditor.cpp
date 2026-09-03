@@ -44,6 +44,10 @@ const PresetDefinition presets[] = {
     { "Analog Horror", { { "bandwidth", 0.20f }, { "drive", 0.70f }, { "badConnection", 0.70f }, { "noiseProfile", 0.65f }, { "macroLink", 1.0f }, { "crush", 0.48f }, { "tuningEnable", 1.0f }, { "tuningMode", 1.0f }, { "tuningAmount", 0.75f }, { "tuningCutDepth", 0.88f }, { "passes", 4.0f }, { "outGain", 0.78f } } },
     { "Numbers Station", { { "bandwidth", 0.28f }, { "drive", 0.25f }, { "badConnection", 0.28f }, { "noiseProfile", 0.22f }, { "macroLink", 1.0f }, { "tuningEnable", 1.0f }, { "tuningMode", 1.0f }, { "tuningSource", 1.0f }, { "tuningAmount", 0.32f }, { "tuningSnippetMs", 280.0f }, { "tuningCutDepth", 0.64f }, { "passes", 2.0f }, { "outGain", 0.90f } } },
     { "Ghost Carrier", { { "bandwidth", 0.38f }, { "drive", 0.30f }, { "badConnection", 0.82f }, { "noiseProfile", 0.48f }, { "macroLink", 1.0f }, { "tuningEnable", 1.0f }, { "tuningMode", 1.0f }, { "tuningSource", 0.0f }, { "tuningAmount", 0.64f }, { "tuningSnippetMs", 360.0f }, { "tuningCutDepth", 0.92f }, { "passes", 3.0f }, { "outGain", 0.82f } } },
+    { "PLAY - Guitar Radio Cab", { { "bandwidth", .38f }, { "drive", .30f }, { "badConnection", .03f }, { "noiseProfile", .035f }, { "macroLink", 1.0f }, { "passes", 1.0f }, { "mix", .78f }, { "ceiling", .90f }, { "outGain", .96f } } },
+    { "PLAY - Drum Dispatch", { { "bandwidth", .27f }, { "drive", .46f }, { "badConnection", .08f }, { "noiseProfile", .04f }, { "macroLink", 1.0f }, { "dropoutTempoSync", 1.0f }, { "dropoutDivision", 3.0f }, { "dropoutProbability", .28f }, { "dropoutStrength", .42f }, { "dropoutLengthSync", 1.0f }, { "dropoutLengthDivision", 5.0f }, { "mix", .84f }, { "ceiling", .88f }, { "outGain", .92f } } },
+    { "PLAY - Synth Carrier Pulse", { { "bandwidth", .42f }, { "drive", .22f }, { "badConnection", .10f }, { "noiseProfile", .03f }, { "macroLink", 1.0f }, { "tuningEnable", 1.0f }, { "tuningMode", 1.0f }, { "tuningAmount", .30f }, { "tuningSync", 1.0f }, { "tuningDivision", 4.0f }, { "tuningProbability", .36f }, { "tuningLengthSync", 1.0f }, { "tuningLengthDivision", 5.0f }, { "mix", .72f }, { "ceiling", .90f }, { "outGain", .94f } } },
+    { "PLAY - Vocal Broadcast Parallel", { { "bandwidth", .64f }, { "drive", .18f }, { "badConnection", .015f }, { "noiseProfile", .02f }, { "macroLink", 1.0f }, { "passes", 1.0f }, { "mix", .52f }, { "ceiling", .92f }, { "outGain", .98f } } },
 };
 }
 
@@ -116,8 +120,9 @@ void TransmissionEngineAudioProcessorEditor::ReceiverLookAndFeel::drawToggleButt
     g.setColour(juce::Colour(button.getToggleState() ? cyan : dimBone));
     g.fillEllipse(knobX, toggle.getY() + 3.0f, 10.0f, 10.0f);
     g.setColour(button.findColour(juce::ToggleButton::textColourId));
-    g.setFont(uiFont(10.5f, true));
-    g.drawText(button.getButtonText(), 45, 0, button.getWidth() - 48, button.getHeight(), juce::Justification::centredLeft);
+    g.setFont(uiFont(8.7f, true));
+    g.drawFittedText(button.getButtonText(), 41, 0, button.getWidth() - 43, button.getHeight(),
+                     juce::Justification::centredLeft, 1, 0.78f);
 }
 
 void TransmissionEngineAudioProcessorEditor::ReceiverLookAndFeel::drawComboBox(
@@ -161,20 +166,22 @@ juce::Rectangle<int> TransmissionEngineAudioProcessorEditor::Panel::contentBound
 }
 
 void TransmissionEngineAudioProcessorEditor::ReceiverDisplay::setState(
-    float signal, float newBandwidth, float newDamage, bool squelch, bool searching)
+    std::array<float, 64> waveform, float inputLeft, float inputRight,
+    float outputLeft, float outputRight, float carrierMs, bool dropoutActive,
+    float dropoutProgress, float compressionValue, float noiseValue,
+    float interferenceValue, bool squelchClosedValue, float squelchEventValue,
+    bool tuningActive, float tuningProgress, int tuningAssetValue,
+    float limiterValue, int generationCount)
 {
-    signalLevel += (juce::jlimit(0.0f, 1.0f, signal) - signalLevel) * 0.22f;
-    bandwidth = juce::jlimit(0.0f, 1.0f, newBandwidth);
-    damage = juce::jlimit(0.0f, 1.0f, newDamage);
-    squelchEnabled = squelch;
-    searchEnabled = searching;
-    repaint();
-}
-
-void TransmissionEngineAudioProcessorEditor::ReceiverDisplay::advance()
-{
-    phase += 0.035f + damage * 0.08f;
+    trace = waveform; input = { inputLeft, inputRight }; output = { outputLeft, outputRight };
+    carrier = carrierMs; dropoutOn = dropoutActive; dropout = dropoutProgress;
+    compression = compressionValue; noise = noiseValue; interference = interferenceValue;
+    squelchClosed = squelchClosedValue; squelchEvent = squelchEventValue;
+    tuningOn = tuningActive; tuning = tuningProgress; tuningAsset = tuningAssetValue;
+    limiter = limiterValue; generations = generationCount;
+    phase += 0.025f + juce::jmin(0.12f, std::abs(carrierMs) * 0.04f);
     if (phase > juce::MathConstants<float>::twoPi) phase -= juce::MathConstants<float>::twoPi;
+    repaint();
 }
 
 void TransmissionEngineAudioProcessorEditor::ReceiverDisplay::paint(juce::Graphics& g)
@@ -203,14 +210,16 @@ void TransmissionEngineAudioProcessorEditor::ReceiverDisplay::paint(juce::Graphi
         g.drawVerticalLine((int) x, tuner.getBottom() - (major ? 29.0f : 19.0f), tuner.getBottom() - 9.0f);
         if (major) g.drawText(marks[i / 4], (int) x - 18, (int) tuner.getY() + 9, 36, 14, juce::Justification::centred);
     }
-    const auto jitter = std::sin(phase * 2.7f) * damage * 0.035f;
-    const auto needlePosition = juce::jlimit(0.03f, 0.97f, 0.18f + bandwidth * 0.64f + jitter);
+    const auto needlePosition = juce::jlimit(0.03f, 0.97f,
+        tuningOn ? tuning : 0.5f + carrier * 0.12f);
     const auto needleX = tuner.getX() + tuner.getWidth() * needlePosition;
     g.setColour(juce::Colour(danger));
     g.fillRect(needleX - 1.0f, tuner.getY() + 6.0f, 2.0f, tuner.getHeight() - 12.0f);
     g.setColour(juce::Colour(bone));
     g.setFont(uiFont(10.0f, true));
-    g.drawText("AM  /  LOST BAND", tuner.toNearestInt().withTrimmedTop((int) tuner.getHeight() - 22), juce::Justification::centred);
+    const char* assets[] { "SYNTH SWEEP", "DISPATCH", "TUNING 1", "TUNING 2", "TUNING 3", "TUNING 4", "TUNING 5" };
+    g.drawText(tuningOn ? assets[juce::jlimit(0, 6, tuningAsset)] : "AM  /  LOST BAND",
+               tuner.toNearestInt().withTrimmedTop((int) tuner.getHeight() - 22), juce::Justification::centred);
 
     auto lower = face.reduced(14.0f).withTrimmedTop(face.getHeight() * 0.47f);
     auto meterRow = lower.removeFromTop(70.0f);
@@ -224,14 +233,15 @@ void TransmissionEngineAudioProcessorEditor::ReceiverDisplay::paint(juce::Graphi
     const auto meterArea = meter.reduced(14.0f, 20.0f).withTrimmedTop(6.0f);
     g.setColour(juce::Colour(0xff36372e));
     g.fillRect(meterArea);
+    const auto signalLevel = juce::jlimit(0.0f, 1.0f, (output[0] + output[1]) * 1.5f);
     g.setColour(signalLevel > 0.82f ? juce::Colour(danger) : juce::Colour(0xff72b66a));
-    g.fillRect(meterArea.withWidth(meterArea.getWidth() * juce::jlimit(0.0f, 1.0f, signalLevel)));
+    g.fillRect(meterArea.withWidth(meterArea.getWidth() * signalLevel));
 
     auto lamps = meterRow.withTrimmedLeft(10.0f);
     const struct { const char* text; bool on; std::uint32_t colour; } indicators[] {
         { "CARRIER", signalLevel > 0.015f, signalGreen },
-        { "SQUELCH", squelchEnabled, cyan },
-        { "SEARCH", searchEnabled, amber },
+        { "SQUELCH", squelchClosed, cyan },
+        { "SEARCH", tuningOn, amber },
     };
     for (const auto& indicator : indicators)
     {
@@ -243,12 +253,32 @@ void TransmissionEngineAudioProcessorEditor::ReceiverDisplay::paint(juce::Graphi
         g.drawText(indicator.text, row.toNearestInt().withTrimmedLeft(16), juce::Justification::centredLeft);
     }
 
-    auto grill = face.withTrimmedTop(face.getHeight() * 0.72f).reduced(18.0f, 6.0f);
-    g.setColour(juce::Colour(0xff0b0e0b));
-    for (int row = 0; row < 4; ++row)
-        for (int column = 0; column < 22; ++column)
-            g.fillEllipse(grill.getX() + column * (grill.getWidth() / 22.0f),
-                          grill.getY() + row * 10.0f, 4.0f, 4.0f);
+    auto scope = face.withTrimmedTop(face.getHeight() * 0.70f).reduced(14.0f, 4.0f);
+    auto waveformArea = scope.removeFromTop(scope.getHeight() * 0.43f);
+    g.setColour(juce::Colour(ink)); g.fillRoundedRectangle(waveformArea, 3.0f);
+    juce::Path wave;
+    for (size_t index = 0; index < trace.size(); ++index)
+    {
+        const auto x = waveformArea.getX() + waveformArea.getWidth() * (float) index / (float) (trace.size() - 1);
+        const auto y = waveformArea.getCentreY() - juce::jlimit(-1.0f, 1.0f, trace[index]) * waveformArea.getHeight() * 0.42f;
+        if (index == 0) wave.startNewSubPath(x, y); else wave.lineTo(x, y);
+    }
+    g.setColour(juce::Colour(dropoutOn ? danger : signalGreen)); g.strokePath(wave, juce::PathStrokeType(dropoutOn ? 2.4f : 1.3f));
+    const char* names[] { "IN", "OUT", "CARRIER", "DROPOUT", "LEVELER", "NOISE", "RF HIT", "SQUELCH", "LIMIT" };
+    const float values[] { (input[0]+input[1])*1.5f, signalLevel, std::abs(carrier)/2.2f,
+        dropoutOn ? juce::jmax(.08f,dropout) : 0.0f, compression*2.5f, noise*20.0f,
+        interference*5.0f, squelchEvent, limiter*3.0f };
+    const auto rowHeight = scope.getHeight() / 9.0f;
+    for (int index = 0; index < 9; ++index)
+    {
+        auto row = scope.removeFromTop(rowHeight); g.setColour(juce::Colour(dimBone)); g.setFont(uiFont(7.8f,true));
+        g.drawText(names[index], row.removeFromLeft(58.0f), juce::Justification::centredLeft);
+        auto bar = row.reduced(1.0f, juce::jmax(1.0f,rowHeight*.24f)); g.setColour(juce::Colour(ink)); g.fillRect(bar);
+        g.setColour(juce::Colour(index==3?danger:(index>=6?amber:signalGreen)));
+        g.fillRect(bar.withWidth(bar.getWidth()*juce::jlimit(0.0f,1.0f,values[index])));
+    }
+    g.setColour(juce::Colour(dimBone)); g.setFont(uiFont(8.0f,true));
+    g.drawText("GENERATIONS " + juce::String(generations), face.toNearestInt().reduced(10,6), juce::Justification::bottomRight);
 }
 
 TransmissionEngineAudioProcessorEditor::Knob::Knob(
@@ -325,7 +355,7 @@ TransmissionEngineAudioProcessorEditor::TransmissionEngineAudioProcessorEditor(T
 {
     setLookAndFeel(&lookAndFeel);
     setOpaque(true);
-    brandLabel.setText("B&E DIGITAL / LOST AUDIO", juce::dontSendNotification);
+    brandLabel.setText("B&E DIGITAL", juce::dontSendNotification);
     brandLabel.setFont(uiFont(10.5f, true));
     brandLabel.setColour(juce::Label::textColourId, juce::Colour(cyan));
     addAndMakeVisible(brandLabel);
@@ -333,7 +363,7 @@ TransmissionEngineAudioProcessorEditor::TransmissionEngineAudioProcessorEditor(T
     titleLabel.setFont(uiFont(27.0f, true));
     titleLabel.setColour(juce::Label::textColourId, juce::Colour(bone));
     addAndMakeVisible(titleLabel);
-    subtitleLabel.setText("BROADCAST SIGNAL WEATHERING / V2", juce::dontSendNotification);
+    subtitleLabel.setText("BROADCAST SIGNAL WEATHERING / V4 STEREO", juce::dontSendNotification);
     subtitleLabel.setFont(uiFont(10.0f, true));
     subtitleLabel.setColour(juce::Label::textColourId, juce::Colour(dimBone));
     addAndMakeVisible(subtitleLabel);
@@ -347,90 +377,153 @@ TransmissionEngineAudioProcessorEditor::TransmissionEngineAudioProcessorEditor(T
     {
         if (const auto selected = presetBox.getSelectedId(); selected >= 2) applyPreset(selected - 2);
     };
-    presetBox.setSelectedId(1, juce::dontSendNotification);
+    const auto restoredPreset = apvts.state.getProperty("factoryPresetName", "Custom").toString();
+    auto restoredPresetId = 1;
+    for (int i = 0; i < (int) std::size(presets); ++i) if (restoredPreset == presets[i].name) restoredPresetId = i + 2;
+    presetBox.setSelectedId(restoredPresetId, juce::dontSendNotification);
     presetBox.setTooltip("Safe factory receiver profiles from clean broadcast through stylized carrier failure.");
     addAndMakeVisible(presetBox);
 
-    for (auto* button : { &surfaceButton, &advancedButton })
+    for (auto* button : { &surfaceButton, &advancedButton, &performerButton })
     {
         button->setClickingTogglesState(false);
         button->setColour(juce::TextButton::textColourOffId, juce::Colour(bone));
         button->setColour(juce::TextButton::textColourOnId, juce::Colour(ink));
         addAndMakeVisible(*button);
     }
-    surfaceButton.onClick = [this] { showAdvanced(false); };
-    advancedButton.onClick = [this] { showAdvanced(true); };
+    surfaceButton.onClick = [this] { showMode(EditorMode::simple); };
+    advancedButton.onClick = [this] { showMode(EditorMode::advanced); };
+    performerButton.onClick = [this] { showMode(EditorMode::performer); };
     statusLabel.setFont(uiFont(9.5f, true));
     statusLabel.setColour(juce::Label::textColourId, juce::Colour(dimBone));
     statusLabel.setJustificationType(juce::Justification::centredRight);
     addAndMakeVisible(statusLabel);
 
+    addAndMakeVisible(receiverDisplay);
     addAndMakeVisible(surfacePage);
     addAndMakeVisible(advancedPage);
-    surfacePage.addAndMakeVisible(receiverDisplay);
+    addAndMakeVisible(performerPage);
     surfacePage.addAndMakeVisible(characterPanel);
     surfacePage.addAndMakeVisible(outputPanel);
     for (auto* panelComponent : { &tonePanel, &transmitterPanel, &receptionPanel, &noisePanel, &squelchPanel, &searchPanel })
         advancedPage.addAndMakeVisible(*panelComponent);
 
-    addKnob(characterPanel, "bandwidth", "Bandwidth", "Receiver passband from full broadcast to narrow communications audio.", true);
-    addKnob(characterPanel, "drive", "Transmitter", "Level-matched transmitter saturation and compression character.", true);
-    addKnob(characterPanel, "badConnection", "Reception", "Carrier drift, dropout and transient interference intensity.", true);
-    addKnob(characterPanel, "noiseProfile", "Air Noise", "Protected RF/static bed with linked hiss and color.", true);
+    addKnob(characterPanel, "hpHz", "Low Cut", "Receiver low-frequency boundary.");
+    addKnob(characterPanel, "lpHz", "Bandwidth", "Receiver high-frequency boundary.");
+    addKnob(characterPanel, "drive", "Transmitter", "Level-matched transmitter saturation.");
+    addKnob(characterPanel, "comp", "Leveler", "Broadcast compression and density.");
+    addKnob(characterPanel, "wowDepth", "Carrier Drift", "Actual carrier time displacement.");
+    addKnob(characterPanel, "dropRate", "Signal Loss", "Free-running carrier dropout rate.");
+    addKnob(characterPanel, "crackle", "RF Hits", "Short interference bursts.");
+    addKnob(characterPanel, "noiseProfile", "Air Noise", "Overall RF/static bed level.");
+    addKnob(characterPanel, "passes", "Generations", "Repeat the complete transmission path up to six times.");
     addKnob(outputPanel, "inputGain", "Input", "Trim before transmitter and receiver processing.");
     addKnob(outputPanel, "mix", "Mix", "Latency-aligned dry/wet balance.");
     addKnob(outputPanel, "outGain", "Output", "Final protected receiver output.");
-    addKnob(outputPanel, "passes", "Generations", "Repeat the complete transmission stage up to six times.");
+    addKnob(outputPanel, "ceiling", "Ceiling", "Hard safety ceiling.");
 
-    addSwitch(tonePanel, "macroLink", "Surface Link", "On: the four Surface controls drive a protected receiver model. Off: direct circuit controls are active.");
     for (auto* linked : {
             addKnob(tonePanel, "hpHz", "High-pass", "Direct receiver low-frequency cutoff."),
             addKnob(tonePanel, "lpHz", "Low-pass", "Direct receiver high-frequency cutoff."),
             addKnob(tonePanel, "midGainDb", "Presence", "Direct communications-band emphasis."),
             addKnob(tonePanel, "midFreq", "Presence Hz", "Center frequency for vocal presence."),
             addKnob(tonePanel, "midQ", "Presence Q", "Width of the presence resonance."),
-            addKnob(tonePanel, "boxDipDb", "Cabinet Dip", "Cardboard receiver-cabinet notch.") }) linkedAdvancedControls.push_back(linked);
+            addKnob(tonePanel, "boxDipDb", "Cabinet Dip", "Cardboard receiver-cabinet notch.") }) juce::ignoreUnused(linked);
 
     for (auto* linked : {
             addKnob(transmitterPanel, "comp", "Compression", "Direct transmitter leveler amount."),
-            addKnob(transmitterPanel, "asym", "Asymmetry", "Direct nonlinear bias." ) }) linkedAdvancedControls.push_back(linked);
+            addKnob(transmitterPanel, "asym", "Asymmetry", "Direct nonlinear bias." ) }) juce::ignoreUnused(linked);
     addKnob(transmitterPanel, "crush", "Converter Loss", "Quantization and sample-hold loss after saturation.");
     addKnob(transmitterPanel, "passes", "Generations", "Repeat the receiver chain.");
     addKnob(transmitterPanel, "inputGain", "Input", "Input trim before all processing.");
     addKnob(transmitterPanel, "mix", "Mix", "Latency-aligned dry/wet blend.");
     addKnob(transmitterPanel, "outGain", "Output", "Final output trim.");
+    addKnob(transmitterPanel, "ceiling", "Ceiling", "Hard output protection.");
 
     for (auto* linked : {
             addKnob(receptionPanel, "wowDepth", "Carrier Drift", "Causal time displacement, not tremolo."),
             addKnob(receptionPanel, "dropRate", "Drop Rate", "Frequency of carrier losses."),
             addKnob(receptionPanel, "dropDepth", "Drop Depth", "Depth of carrier losses."),
             addKnob(receptionPanel, "crackle", "Interference", "Short RF transient events."),
-            addKnob(receptionPanel, "lfoRate", "Drift Rate", "Carrier drift speed.") }) linkedAdvancedControls.push_back(linked);
+            addKnob(receptionPanel, "lfoRate", "Drift Rate", "Carrier drift speed.") }) juce::ignoreUnused(linked);
 
     for (auto* linked : {
             addKnob(noisePanel, "noiseColor", "Noise Color", "White-to-pink RF bed color."),
-            addKnob(noisePanel, "hiss", "Hiss", "High-frequency emphasis in the RF bed.") }) linkedAdvancedControls.push_back(linked);
+            addKnob(noisePanel, "hiss", "Hiss", "High-frequency emphasis in the RF bed.") }) juce::ignoreUnused(linked);
     addKnob(noisePanel, "noiseProfile", "Bed Level", "Overall protected RF/noise level.");
     addKnob(noisePanel, "crush", "Digital Loss", "Cheap converter degradation.");
 
-    addSwitch(squelchPanel, "walkieMode", "Squelch Gate", "Generate causal open/close events from input silence.");
+    addSwitch(squelchPanel, "walkieMode", "Gate", "Generate causal open/close events from input silence.");
     addChoice(squelchPanel, "walkieFx", "Event", "Short receiver click or dispatch two-tone event.");
     addKnob(squelchPanel, "walkieThresholdDb", "Threshold", "Input level used to detect gate changes.");
     addKnob(squelchPanel, "walkieMinSilenceMs", "Hold", "Silence required before closing the squelch.");
     addKnob(squelchPanel, "walkieClickMs", "Length", "Length of the click or dispatch event.");
     addKnob(squelchPanel, "walkieClickLevel", "Level", "Protected squelch-event level.");
 
-    addSwitch(searchPanel, "tuningEnable", "Search Events", "Enable edge or probabilistic tuning events.");
+    addSwitch(searchPanel, "tuningEnable", "Arm", "Enable edge or probabilistic tuning events.");
     addChoice(searchPanel, "tuningMode", "Mode", "Edges reacts to transport boundaries; Search generates events while playing.");
     addChoice(searchPanel, "tuningSource", "Source", "Synthesized carrier sweep or embedded tuning recording.");
     addKnob(searchPanel, "tuningAmount", "Activity", "Search strength and probability.");
     addKnob(searchPanel, "tuningSnippetMs", "Length", "Duration of each tuning event.");
     addKnob(searchPanel, "tuningCutDepth", "Signal Cut", "How deeply search events replace the program signal.");
+    addSwitch(searchPanel, "tuningSync", "Sync", "In Search mode, place tuning events on the host musical grid.");
+    addChoice(searchPanel, "tuningDivision", "Division", "Straight, triplet, dotted, or bar-length search spacing.");
+
+    for (auto* panelComponent : { &performerCarrierPanel, &performerDropoutPanel, &performerSearchPanel,
+                                  &performerSquelchPanel, &performerOutputPanel })
+        performerPage.addAndMakeVisible(*panelComponent);
+    addKnob(performerCarrierPanel, "wowDepth", "Carrier Drift", "Carrier displacement depth.");
+    addKnob(performerCarrierPanel, "lfoRate", "Free Rate", "Unclocked carrier motion rate.");
+    addSwitch(performerCarrierPanel, "carrierTempoSync", "Sync Carrier", "Lock carrier motion to host tempo.");
+    addChoice(performerCarrierPanel, "carrierDivision", "Carrier Cycle", "Musical length of one carrier cycle.");
+    addKnob(performerCarrierPanel, "passes", "Generations", "Number of complete transmission passes.");
+    addKnob(performerCarrierPanel, "drive", "Transmitter", "Saturation available for live performance.");
+
+    addKnob(performerDropoutPanel, "dropRate", "Free Loss", "Random carrier losses when clock sync is off.");
+    addKnob(performerDropoutPanel, "dropDepth", "Free Depth", "Depth of physical free-running losses.");
+    addSwitch(performerDropoutPanel, "dropoutTempoSync", "Sync Loss", "Replace random losses with host-grid events.");
+    addChoice(performerDropoutPanel, "dropoutDivision", "Trigger Grid", "When a carrier loss may start.");
+    addKnob(performerDropoutPanel, "dropoutProbability", "Probability", "Stable chance per grid step; no queue.");
+    addKnob(performerDropoutPanel, "dropoutStrength", "Drop Depth", "Depth of a conducted carrier loss.");
+    addKnob(performerDropoutPanel, "dropoutDurationMs", "Length ms", "Free/manual event length.");
+    addSwitch(performerDropoutPanel, "dropoutLengthSync", "Sync Len", "Use a musical carrier-loss duration.");
+    addChoice(performerDropoutPanel, "dropoutLengthDivision", "Drop Length", "Musical carrier-loss duration.");
+    dropoutButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff56201d));
+    dropoutButton.setTooltip("Trigger one bounded linked carrier loss immediately.");
+    dropoutButton.onClick = [this] { processor.triggerDropout(); };
+    performerDropoutPanel.addAndMakeVisible(dropoutButton); panelItems[&performerDropoutPanel].push_back(&dropoutButton);
+
+    addSwitch(performerSearchPanel, "tuningEnable", "Arm", "Enable tuning-search events.");
+    addChoice(performerSearchPanel, "tuningSource", "Source", "Synthesized sweep or captured tuning asset.");
+    addKnob(performerSearchPanel, "tuningAmount", "Activity", "Search-artifact level.");
+    addKnob(performerSearchPanel, "tuningCutDepth", "Signal Cut", "How deeply search replaces program audio.");
+    addSwitch(performerSearchPanel, "tuningSync", "Sync Search", "Place searches on the host grid.");
+    addChoice(performerSearchPanel, "tuningDivision", "Search Grid", "When a search may start.");
+    addKnob(performerSearchPanel, "tuningProbability", "Probability", "Stable chance per grid step.");
+    addKnob(performerSearchPanel, "tuningSnippetMs", "Length ms", "Free/manual search length.");
+    addSwitch(performerSearchPanel, "tuningLengthSync", "Sync Len", "Use a musical search duration.");
+    addChoice(performerSearchPanel, "tuningLengthDivision", "Search Length", "Musical search duration.");
+    searchButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff3c4123));
+    searchButton.setTooltip("Trigger one tuning search immediately.");
+    searchButton.onClick = [this] { processor.triggerTuningSearch(); };
+    performerSearchPanel.addAndMakeVisible(searchButton); panelItems[&performerSearchPanel].push_back(&searchButton);
+
+    addSwitch(performerSquelchPanel, "walkieMode", "Gate", "Generate receiver gate edge events from the input.");
+    addChoice(performerSquelchPanel, "walkieFx", "Gate Event", "Receiver click or dispatch tone.");
+    addKnob(performerSquelchPanel, "walkieThresholdDb", "Threshold", "Input gate threshold.");
+    addKnob(performerSquelchPanel, "walkieMinSilenceMs", "Hold", "Required silence before gate close.");
+    addKnob(performerSquelchPanel, "walkieClickMs", "Length", "Gate-event duration.");
+    addKnob(performerSquelchPanel, "walkieClickLevel", "Level", "Gate-event level.");
+
+    addKnob(performerOutputPanel, "inputGain", "Input", "Input trim.");
+    addKnob(performerOutputPanel, "mix", "Mix", "Latency-aligned dry/wet.");
+    addKnob(performerOutputPanel, "outGain", "Output", "Final output.");
+    addKnob(performerOutputPanel, "ceiling", "Ceiling", "Hard safety ceiling.");
 
     setResizable(true, true);
-    setResizeLimits(900, 620, 1600, 1000);
-    setSize(1100, 720);
-    showAdvanced(false);
+    setResizeLimits(980, 660, 1600, 1000);
+    setSize(1240, 760);
+    showMode(EditorMode::simple);
     startTimerHz(24);
 }
 
@@ -445,7 +538,8 @@ TransmissionEngineAudioProcessorEditor::Knob* TransmissionEngineAudioProcessorEd
 {
     auto callback = [this, surfaceMacro]
     {
-        if (surfaceMacro) setParameter("macroLink", 1.0f);
+        juce::ignoreUnused(surfaceMacro);
+        if (processor.legacyMacrosActive()) processor.materialiseLegacyMacros();
         markCustom();
     };
     auto control = std::make_unique<Knob>(apvts, id, text, callback);
@@ -496,13 +590,15 @@ void TransmissionEngineAudioProcessorEditor::layoutPanel(Panel& owner, int colum
                                              width, height);
 }
 
-void TransmissionEngineAudioProcessorEditor::showAdvanced(bool shouldShowAdvanced)
+void TransmissionEngineAudioProcessorEditor::showMode(EditorMode mode)
 {
-    showingAdvanced = shouldShowAdvanced;
-    surfacePage.setVisible(!showingAdvanced);
-    advancedPage.setVisible(showingAdvanced);
-    surfaceButton.setToggleState(!showingAdvanced, juce::dontSendNotification);
-    advancedButton.setToggleState(showingAdvanced, juce::dontSendNotification);
+    currentMode = mode;
+    surfacePage.setVisible(mode == EditorMode::simple);
+    advancedPage.setVisible(mode == EditorMode::advanced);
+    performerPage.setVisible(mode == EditorMode::performer);
+    surfaceButton.setToggleState(mode == EditorMode::simple, juce::dontSendNotification);
+    advancedButton.setToggleState(mode == EditorMode::advanced, juce::dontSendNotification);
+    performerButton.setToggleState(mode == EditorMode::performer, juce::dontSendNotification);
     resized();
 }
 
@@ -519,7 +615,11 @@ float TransmissionEngineAudioProcessorEditor::getParameter(const juce::String& i
 
 void TransmissionEngineAudioProcessorEditor::markCustom()
 {
-    if (!suppressPresetChanges) presetBox.setSelectedId(1, juce::dontSendNotification);
+    if (!suppressPresetChanges)
+    {
+        presetBox.setSelectedId(1, juce::dontSendNotification);
+        apvts.state.setProperty("factoryPresetName", "Custom", nullptr);
+    }
 }
 
 void TransmissionEngineAudioProcessorEditor::applyPreset(int index)
@@ -527,21 +627,31 @@ void TransmissionEngineAudioProcessorEditor::applyPreset(int index)
     if (index < 0 || index >= (int) std::size(presets)) return;
     suppressPresetChanges = true;
     for (auto* parameter : processor.getParameters()) parameter->setValueNotifyingHost(parameter->getDefaultValue());
-    for (const auto& [id, value] : presets[(std::size_t) index].values) setParameter(id, value);
+    for (const auto& [id, value] : presets[(std::size_t) index].values) if (juce::String(id) != "macroLink") setParameter(id, value);
+    setParameter("macroLink", 1.0f);
+    processor.materialiseLegacyMacros();
+    for (const auto& [id, value] : presets[(std::size_t) index].values)
+        if (juce::String(id) != "bandwidth" && juce::String(id) != "drive"
+            && juce::String(id) != "badConnection" && juce::String(id) != "noiseProfile"
+            && juce::String(id) != "macroLink")
+            setParameter(id, value);
+    setParameter("macroLink", 0.0f);
+    apvts.state.setProperty("factoryPresetName", presets[(std::size_t) index].name, nullptr);
     suppressPresetChanges = false;
 }
 
 void TransmissionEngineAudioProcessorEditor::timerCallback()
 {
-    const auto linked = getParameter("macroLink") > 0.5f;
-    for (auto* control : linkedAdvancedControls) control->setEnabled(!linked);
-    const auto squelch = getParameter("walkieMode") > 0.5f;
-    const auto searching = getParameter("tuningEnable") > 0.5f;
-    receiverDisplay.setState(processor.getOutputPeak(), getParameter("bandwidth"), getParameter("badConnection"), squelch, searching);
-    receiverDisplay.advance();
-    statusLabel.setText(linked ? "SURFACE LINK  /  PROTECTED SIGNAL PATH"
-                               : "ADVANCED CIRCUIT  /  DIRECT CONTROL",
-                        juce::dontSendNotification);
+    receiverDisplay.setState(processor.outputTrace(), processor.inputPeak(0), processor.inputPeak(1),
+        processor.outputPeakForChannel(0), processor.outputPeakForChannel(1), processor.carrierMeter(),
+        processor.dropoutIsActive(), processor.dropoutProgressMeter(), processor.compressionMeter(),
+        processor.noiseMeter(), processor.interferenceMeter(), processor.squelchIsClosed(),
+        processor.squelchEventMeter(), processor.tuningIsActive(), processor.tuningProgressMeter(),
+        processor.tuningAssetMeter(), processor.limiterMeter(), (int) getParameter("passes"));
+    if (processor.tuningIsActive()) statusLabel.setText("SEARCH ACTIVE  /  RECEIVER RETUNING", juce::dontSendNotification);
+    else if (processor.dropoutIsActive()) statusLabel.setText("CARRIER LOSS  /  LINKED RECOVERY", juce::dontSendNotification);
+    else if (processor.legacyMacrosActive()) statusLabel.setText("LEGACY SESSION  /  SOUND PRESERVED", juce::dontSendNotification);
+    else statusLabel.setText("CANONICAL DSP  /  ALL VIEWS SHARE ONE STATE", juce::dontSendNotification);
 }
 
 void TransmissionEngineAudioProcessorEditor::paint(juce::Graphics& g)
@@ -575,40 +685,36 @@ void TransmissionEngineAudioProcessorEditor::resized()
     surfaceButton.setBounds(modeRow.removeFromLeft(108).reduced(0, 4));
     modeRow.removeFromLeft(8);
     advancedButton.setBounds(modeRow.removeFromLeft(108).reduced(0, 4));
+    modeRow.removeFromLeft(8);
+    performerButton.setBounds(modeRow.removeFromLeft(118).reduced(0, 4));
     statusLabel.setBounds(modeRow);
     area.removeFromTop(6);
-    surfacePage.setBounds(area);
-    advancedPage.setBounds(area);
+    auto displayArea = area.removeFromLeft((int) std::round(area.getWidth() * 0.36f));
+    receiverDisplay.setBounds(displayArea.reduced(2).withTrimmedRight(6));
+    auto pageArea = area.reduced(2);
+    surfacePage.setBounds(pageArea); advancedPage.setBounds(pageArea); performerPage.setBounds(pageArea);
 
-    if (!showingAdvanced)
-    {
-        auto surface = surfacePage.getLocalBounds();
-        auto display = surface.removeFromLeft((int) std::round(surface.getWidth() * 0.56f));
-        receiverDisplay.setBounds(display.reduced(0, 4).withTrimmedRight(7));
-        auto controls = surface.withTrimmedLeft(7);
-        characterPanel.setBounds(controls.removeFromTop((int) std::round(controls.getHeight() * 0.62f)).withTrimmedBottom(6));
-        outputPanel.setBounds(controls.withTrimmedTop(6));
-        layoutPanel(characterPanel, 2);
-        layoutPanel(outputPanel, 4);
-    }
-    else
-    {
-        auto advanced = advancedPage.getLocalBounds();
-        const auto gap = 8;
-        const auto columnWidth = (advanced.getWidth() - gap * 2) / 3;
-        const auto rowHeight = (advanced.getHeight() - gap) / 2;
-        Panel* panels[] { &tonePanel, &transmitterPanel, &receptionPanel, &noisePanel, &squelchPanel, &searchPanel };
-        for (int index = 0; index < 6; ++index)
-        {
-            const auto column = index % 3;
-            const auto row = index / 3;
-            panels[index]->setBounds(column * (columnWidth + gap), row * (rowHeight + gap), columnWidth, rowHeight);
-        }
-        layoutPanel(tonePanel, 3);
-        layoutPanel(transmitterPanel, 4);
-        layoutPanel(receptionPanel, 3);
-        layoutPanel(noisePanel, 2);
-        layoutPanel(squelchPanel, 3);
-        layoutPanel(searchPanel, 3);
-    }
+    auto surface = surfacePage.getLocalBounds();
+    characterPanel.setBounds(surface.removeFromTop((int) std::round(surface.getHeight() * 0.68f)).reduced(2));
+    outputPanel.setBounds(surface.reduced(2)); layoutPanel(characterPanel, 3); layoutPanel(outputPanel, 4);
+
+    auto advanced = advancedPage.getLocalBounds();
+    const auto halfWidth = advanced.getWidth() / 2;
+    const auto thirdHeight = advanced.getHeight() / 3;
+    tonePanel.setBounds(0, 0, halfWidth, thirdHeight); transmitterPanel.setBounds(halfWidth, 0, advanced.getWidth()-halfWidth, thirdHeight);
+    receptionPanel.setBounds(0, thirdHeight, halfWidth, thirdHeight); noisePanel.setBounds(halfWidth, thirdHeight, advanced.getWidth()-halfWidth, thirdHeight);
+    squelchPanel.setBounds(0, thirdHeight*2, halfWidth, advanced.getHeight()-thirdHeight*2); searchPanel.setBounds(halfWidth, thirdHeight*2, advanced.getWidth()-halfWidth, advanced.getHeight()-thirdHeight*2);
+    layoutPanel(tonePanel, 3); layoutPanel(transmitterPanel, 4); layoutPanel(receptionPanel, 3);
+    layoutPanel(noisePanel, 2); layoutPanel(squelchPanel, 3); layoutPanel(searchPanel, 4);
+
+    auto performer = performerPage.getLocalBounds();
+    auto left = performer.removeFromLeft((int) std::round(performer.getWidth() * 0.48f));
+    performerCarrierPanel.setBounds(left.removeFromTop((int) std::round(left.getHeight() * 0.35f)).reduced(2));
+    performerDropoutPanel.setBounds(left.reduced(2));
+    const auto performerRightHeight = performer.getHeight();
+    performerSearchPanel.setBounds(performer.removeFromTop((int) std::round(performerRightHeight * 0.45f)).reduced(2));
+    performerSquelchPanel.setBounds(performer.removeFromTop((int) std::round(performerRightHeight * 0.30f)).reduced(2));
+    performerOutputPanel.setBounds(performer.reduced(2));
+    layoutPanel(performerCarrierPanel, 3); layoutPanel(performerDropoutPanel, 3);
+    layoutPanel(performerSearchPanel, 3); layoutPanel(performerSquelchPanel, 3); layoutPanel(performerOutputPanel, 4);
 }

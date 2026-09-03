@@ -157,6 +157,23 @@ int main()
     ok &= require(difference(manualLeft, manualRight) > 0.05f,
                   "manual repeat skips must read separate channel histories");
 
+    CDProcessor musicalSkip;
+    musicalSkip.prepare(sampleRate, 2);
+    musicalSkip.reset(101u);
+    CDParameters musicalSettings;
+    musicalSettings.errorRate = musicalSettings.scratchRate = musicalSettings.trackingRate = 0.0f;
+    musicalSettings.servoNoise = 0.0f;
+    std::vector<float> warmLeft(4096), warmRight(4096);
+    for (std::size_t i = 0; i < warmLeft.size(); ++i) { warmLeft[i]=inputSample(i,false); warmRight[i]=inputSample(i,true); }
+    float* warmChannels[] { warmLeft.data(), warmRight.data() };
+    musicalSkip.process(warmChannels,2,warmLeft.size(),musicalSettings);
+    musicalSkip.triggerMusicalSkip(.8f,240,960,false);
+    std::vector<float> firstLeft(300),firstRight(300);for(std::size_t i=0;i<firstLeft.size();++i){firstLeft[i]=inputSample(i+4096,false);firstRight[i]=inputSample(i+4096,true);}float* firstChannels[]{firstLeft.data(),firstRight.data()};musicalSkip.process(firstChannels,2,firstLeft.size(),musicalSettings);
+    ok &= require(musicalSkip.skipActive(), "musical skip must use its explicit bounded hold length");
+    musicalSkip.triggerMusicalSkip(.8f,240,960,false);
+    std::vector<float> finishLeft(700),finishRight(700);for(std::size_t i=0;i<finishLeft.size();++i){finishLeft[i]=inputSample(i+4396,false);finishRight[i]=inputSample(i+4396,true);}float* finishChannels[]{finishLeft.data(),finishRight.data()};musicalSkip.process(finishChannels,2,finishLeft.size(),musicalSettings);
+    ok &= require(!musicalSkip.skipActive(), "ignored retriggers must not queue another musical skip");
+
     const auto clean = lost_audio::core::mapCDMacros(0.95f, 0.02f, 0.01f, 0.02f);
     const auto ruined = lost_audio::core::mapCDMacros(0.12f, 0.88f, 0.82f, 0.76f);
     ok &= require(clean.errorRate < ruined.errorRate && clean.scratchAmount < ruined.scratchAmount,
@@ -167,6 +184,6 @@ int main()
                   "tracking and jitter macros must reach their dedicated mechanisms");
 
     if (!ok) return 1;
-    std::cout << "CD core passed: stereo-preserving latency, deterministic sector damage, queued manual skips, bounded output\n";
+    std::cout << "CD core passed: stereo-preserving latency, deterministic sector damage, queued initial skips, bounded musical skips, safe retriggers, bounded output\n";
     return 0;
 }

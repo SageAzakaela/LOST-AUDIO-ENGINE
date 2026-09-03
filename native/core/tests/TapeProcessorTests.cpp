@@ -104,12 +104,40 @@ int main()
     }
     ok &= require(peak <= damaged.ceiling + 1.0e-6f, "portable core must enforce its output ceiling");
 
+    TapeProcessor triggeredProcessor;
+    triggeredProcessor.prepare(48000.0, 2);
+    triggeredProcessor.reset(0x51a7eu);
+    TapeParameters triggeredParameters = neutral;
+    std::vector<float> triggeredLeft(12000, 0.3f);
+    std::vector<float> triggeredRight(12000, -0.3f);
+    float* triggeredChannels[] { triggeredLeft.data(), triggeredRight.data() };
+    triggeredProcessor.triggerDropout(0.8f, 0.05f);
+    triggeredProcessor.process(triggeredChannels, 2, 1024, triggeredParameters);
+    ok &= require(triggeredProcessor.dropoutActive(), "manual dropout must become active on the audio thread");
+    ok &= require(triggeredProcessor.dropoutProgress() > 0.0f, "manual dropout must publish progress telemetry");
+    triggeredProcessor.process(triggeredChannels, 2, 8000, triggeredParameters);
+    ok &= require(!triggeredProcessor.dropoutActive(), "manual dropout must finish within its requested duration");
+    double linkedDifference = 0.0;
+    for (std::size_t index = 0; index < 4096; ++index)
+        linkedDifference += std::abs(triggeredLeft[index] + triggeredRight[index]);
+    ok &= require(linkedDifference < 1.0e-3, "manual dropout must remain stereo-linked");
+
     const auto subtle = lost_audio::core::mapTapeMacros(0.72f, 0.18f, 0.14f, 0.06f);
     const auto destroyed = lost_audio::core::mapTapeMacros(0.08f, 0.82f, 0.92f, 0.62f);
     ok &= require(subtle.lowPassHz > destroyed.lowPassHz, "quality macro must change bandwidth");
     ok &= require(subtle.drive < destroyed.drive, "age macro must change saturation");
     ok &= require(subtle.wowDepthMs < destroyed.wowDepthMs, "wow macro must change modulation depth");
     ok &= require(subtle.dropout < destroyed.dropout, "glitch macro must change dropout severity");
+
+    TapeParameters oxide = neutral;
+    oxide.drive = 0.42f;
+    const auto cleanTone = render(128, 11u, neutral);
+    const auto oxideTone = render(128, 11u, oxide);
+    double oxideDifference = 0.0;
+    for (std::size_t i = 1024; i < cleanTone.size(); ++i)
+        oxideDifference += std::abs(cleanTone[i] - oxideTone[i]);
+    oxideDifference /= (cleanTone.size() - 1024);
+    ok &= require(oxideDifference > 0.004, "default oxide drive must add audible nonlinear character");
 
     if (!ok)
         return 1;

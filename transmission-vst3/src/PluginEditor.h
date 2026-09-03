@@ -47,16 +47,22 @@ private:
     class ReceiverDisplay final : public juce::Component
     {
     public:
-        void setState(float signal, float bandwidth, float damage, bool squelch, bool searching);
-        void advance();
+        void setState(std::array<float, 64> waveform, float inputLeft, float inputRight,
+                      float outputLeft, float outputRight, float carrierMs,
+                      bool dropoutActive, float dropoutProgress, float compression,
+                      float noise, float interference, bool squelchClosed,
+                      float squelchEvent, bool tuningActive, float tuningProgress,
+                      int tuningAsset, float limiter, int generations);
         void paint(juce::Graphics&) override;
     private:
-        float signalLevel = 0.0f;
-        float bandwidth = 0.45f;
-        float damage = 0.25f;
+        std::array<float, 64> trace {};
+        std::array<float, 2> input {}, output {};
+        float carrier = 0.0f, dropout = 0.0f, compression = 0.0f;
+        float noise = 0.0f, interference = 0.0f, squelchEvent = 0.0f;
+        float tuning = 0.0f, limiter = 0.0f;
         float phase = 0.0f;
-        bool squelchEnabled = false;
-        bool searchEnabled = false;
+        bool dropoutOn = false, squelchClosed = false, tuningOn = false;
+        int tuningAsset = 0, generations = 1;
     };
 
     class Knob final : public juce::Component
@@ -66,6 +72,7 @@ private:
              std::function<void()> userChange);
         void resized() override;
         void setHint(const juce::String& hint);
+        void setUserChange(std::function<void()> userChange) { slider.onDragStart = std::move(userChange); }
     private:
         juce::Label label;
         juce::Slider slider;
@@ -104,7 +111,8 @@ private:
     Choice* addChoice(Panel&, const juce::String& parameterId, const juce::String& text,
                       const juce::String& hint);
     void layoutPanel(Panel&, int columns);
-    void showAdvanced(bool shouldShowAdvanced);
+    enum class EditorMode { simple, advanced, performer };
+    void showMode(EditorMode);
     void applyPreset(int index);
     void setParameter(const juce::String& id, float plainValue);
     [[nodiscard]] float getParameter(const juce::String& id) const;
@@ -121,12 +129,12 @@ private:
     juce::Label subtitleLabel;
     juce::Label profileLabel;
     juce::ComboBox presetBox;
-    juce::TextButton surfaceButton { "SURFACE" };
+    juce::TextButton surfaceButton { "SIMPLE" };
     juce::TextButton advancedButton { "ADVANCED" };
+    juce::TextButton performerButton { "PERFORMER" };
     juce::Label statusLabel;
 
-    juce::Component surfacePage;
-    juce::Component advancedPage;
+    juce::Component surfacePage, advancedPage, performerPage;
     ReceiverDisplay receiverDisplay;
     Panel characterPanel { "SIGNAL CHARACTER" };
     Panel outputPanel { "RECEIVER OUTPUT" };
@@ -136,13 +144,19 @@ private:
     Panel noisePanel { "INTERFERENCE BED" };
     Panel squelchPanel { "SQUELCH GATE" };
     Panel searchPanel { "SEARCH EVENTS" };
+    Panel performerCarrierPanel { "CLOCKED CARRIER" };
+    Panel performerDropoutPanel { "CARRIER LOSS" };
+    Panel performerSearchPanel { "TUNING SEARCH" };
+    Panel performerSquelchPanel { "SQUELCH PERFORMANCE" };
+    Panel performerOutputPanel { "SAFE RECEIVER OUTPUT" };
+    juce::TextButton dropoutButton { "TRIGGER DROPOUT" };
+    juce::TextButton searchButton { "TRIGGER SEARCH" };
 
     std::vector<std::unique_ptr<Knob>> knobs;
     std::vector<std::unique_ptr<Switch>> switches;
     std::vector<std::unique_ptr<Choice>> choices;
     std::unordered_map<Panel*, std::vector<juce::Component*>> panelItems;
-    std::vector<juce::Component*> linkedAdvancedControls;
-    bool showingAdvanced = false;
+    EditorMode currentMode = EditorMode::simple;
     bool suppressPresetChanges = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TransmissionEngineAudioProcessorEditor)

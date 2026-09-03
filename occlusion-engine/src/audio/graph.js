@@ -183,7 +183,7 @@ function makeEarlyReflectionStage(ctx, baseTimesMs) {
     const filter = new BiquadFilterNode(ctx, { type: "lowpass", frequency: 4200, Q: 0.707 });
     const gain = new GainNode(ctx, { gain: 0 });
     input.connect(delay); delay.connect(filter); filter.connect(gain); gain.connect(sum);
-    return { delay, filter, gain, baseMs, weight: [0.2, 0.14, 0.1, 0.07][index] || 0.05 };
+    return { delay, filter, gain, baseMs, weight: [0.30, 0.22, 0.16, 0.11][index] || 0.08 };
   });
   input.connect(direct); direct.connect(sum); sum.connect(normalize);
 
@@ -195,12 +195,12 @@ function makeEarlyReflectionStage(ctx, baseTimesMs) {
     for (const tap of taps) {
       const delayMs = Math.min(75, Math.max(0.4, offsetMs + tap.baseMs * (0.72 + sz * 0.75)));
       rampParam(tap.delay.delayTime, delayMs / 1000, time, ramp);
-      rampParam(tap.filter.frequency, hzClamp(ctx, 900 + (1 - damp) * 7600, { min: 300 }), time, ramp);
+      rampParam(tap.filter.frequency, hzClamp(ctx, 650 + (1 - damp) * 9200, { min: 300 }), time, ramp);
       const gain = a * tap.weight;
       rampParam(tap.gain.gain, gain, time, ramp);
       tapPower += gain * gain;
     }
-    const directValue = 1 - a * 0.04;
+    const directValue = 1 - a * 0.10;
     rampParam(direct.gain, directValue, time, ramp);
     rampParam(normalize.gain, 1 / Math.sqrt(Math.max(0.72, directValue * directValue + tapPower)), time, ramp);
   }
@@ -356,10 +356,10 @@ export async function buildOcclusionGraph(ctx, { seed } = {}) {
     const roomSize = clamp01(pick("roomSize"));
     const predelayMs = Math.max(0, Math.min(28, Number(pick("predelayMs")) || 0));
     sourceRoom.apply(
-      { amount: roomMix * (0.35 + clamp01(s.sourceRoom) * 0.8), size: clamp01(s.sourceRoom), damping, offsetMs: 0 }, { time, ramp },
+      { amount: roomMix * clamp01(s.sourceRoom) * 1.45, size: clamp01(s.sourceRoom), damping, offsetMs: 0 }, { time, ramp },
     );
     listenerRoom.apply(
-      { amount: roomMix * (0.4 + clamp01(s.listenerRoom) * 0.85), size: roomSize, damping, offsetMs: predelayMs * 0.35 }, { time, ramp },
+      { amount: roomMix * clamp01(s.listenerRoom) * 1.55, size: roomSize, damping, offsetMs: predelayMs * 0.55 }, { time, ramp },
     );
     const smearAmount = clamp01(pick("smear"));
     smear.apply({ amount: smearAmount, scale: mat.smearScale * (0.82 + wall * 0.42), damping }, { time, ramp });

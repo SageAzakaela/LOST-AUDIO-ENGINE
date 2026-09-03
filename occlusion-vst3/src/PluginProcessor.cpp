@@ -1,274 +1,140 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include <lost_audio/core/TempoSync.h>
+
+#include <algorithm>
+#include <cmath>
+#include <vector>
 
 namespace
 {
-float clampf(float x, float lo, float hi)
-{
-    return juce::jlimit(lo, hi, x);
-}
-
-void eqPow(float wet, float& dryOut, float& wetOut)
-{
-    const auto w = clampf(wet, 0.0f, 1.0f);
-    const auto a = w * juce::MathConstants<float>::halfPi;
-    dryOut = std::cos(a);
-    wetOut = std::sin(a);
-}
+juce::NormalisableRange<float> linear(float a,float b,float step=.001f){return {a,b,step};}
+const juce::StringArray divisions { "1 Bar", "1/2", "1/4", "1/8", "1/16", "1/32", "1/4T", "1/8T", "1/16T", "1/8D", "1/16D" };
 }
 
 OcclusionEngineAudioProcessor::OcclusionEngineAudioProcessor()
-    : AudioProcessor(BusesProperties().withInput("Input", juce::AudioChannelSet::stereo(), true)
-                                     .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts(*this, nullptr, "PARAMS", createParameterLayout())
+    : AudioProcessor(BusesProperties().withInput("Input",juce::AudioChannelSet::stereo(),true)
+                                      .withOutput("Output",juce::AudioChannelSet::stereo(),true)),
+      apvts(*this,nullptr,"PARAMS",createParameterLayout())
 {
+    apvts.state.setProperty("engineId","occlusion",nullptr);
+    apvts.state.setProperty("schemaVersion",3,nullptr);
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout OcclusionEngineAudioProcessor::createParameterLayout()
 {
-    std::vector<std::unique_ptr<juce::RangedAudioParameter>> p;
-    auto n01 = juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f);
-
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("distance", "Distance", n01, 0.35f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("wall", "Wall", n01, 0.45f));
-    p.push_back(std::make_unique<juce::AudioParameterChoice>("material", "Material", juce::StringArray { "Drywall", "Brick", "Wood", "Curtain", "Door", "Glass" }, 0));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("sourceRoom", "Source Room", n01, 0.35f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("listenerRoom", "Listener Room", n01, 0.45f));
-
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("hpHz", "HP", juce::NormalisableRange<float>(10.0f, 600.0f, 1.0f), 50.0f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("lpHz", "LP", juce::NormalisableRange<float>(80.0f, 20000.0f, 1.0f), 5200.0f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("dipHz", "Dip Hz", juce::NormalisableRange<float>(120.0f, 10000.0f, 1.0f), 1600.0f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("dipDb", "Dip dB", juce::NormalisableRange<float>(-18.0f, 6.0f, 0.1f), -2.0f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("dipQ", "Dip Q", juce::NormalisableRange<float>(0.2f, 8.0f, 0.01f), 1.1f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("bumpHz", "Bump Hz", juce::NormalisableRange<float>(120.0f, 4000.0f, 1.0f), 420.0f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("bumpDb", "Bump dB", juce::NormalisableRange<float>(-12.0f, 12.0f, 0.1f), 1.2f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("bumpQ", "Bump Q", juce::NormalisableRange<float>(0.2f, 5.0f, 0.01f), 0.95f));
-
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("leak", "Leak", n01, 0.08f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("roomMix", "Room Mix", n01, 0.22f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("predelayMs", "Predelay", juce::NormalisableRange<float>(0.0f, 120.0f, 1.0f), 12.0f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("roomSize", "Room Size", n01, 0.5f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("damp", "Damp", n01, 0.68f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("outGain", "Out Gain", juce::NormalisableRange<float>(0.0f, 1.5f, 0.01f), 1.0f));
-
-    return { p.begin(), p.end() };
+    std::vector<std::unique_ptr<juce::RangedAudioParameter>> p;const auto n=linear(0,1);
+    // V1 and V2 order/IDs stay immutable for existing sessions.
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("distance","Distance",n,.35f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("wall","Wall",n,.45f));
+    p.push_back(std::make_unique<juce::AudioParameterChoice>("material","Material",juce::StringArray{"Drywall","Brick","Wood","Curtain","Door","Glass","Metal","Concrete"},0));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("sourceRoom","Source Room",n,.35f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("listenerRoom","Listener Room",n,.45f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("hpHz","High-pass",linear(10,600,1),64));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("lpHz","Low-pass",linear(80,20000,1),8285));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("dipHz","Absorption Frequency",linear(120,10000,1),1528));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("dipDb","Absorption Depth",linear(-18,6,.1f),-3.8f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("dipQ","Absorption Width",linear(.2f,8,.01f),1.1f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("bumpHz","Body Frequency",linear(60,4000,1),352));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("bumpDb","Body Gain",linear(-12,12,.1f),2.8f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("bumpQ","Body Width",linear(.2f,5,.01f),.95f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("leak","Edge Leak",n,.111f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("roomMix","Room Sound",n,.413f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("predelayMs","Listener Predelay",linear(0,120,1),12));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("roomSize","Room Size",n,.412f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("damp","Damping",n,.671f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("outGain","Output",linear(0,1.5f,.01f),.9f));
+    p.push_back(std::make_unique<juce::AudioParameterBool>("macroLink","Legacy Surface Link",false));
+    p.push_back(std::make_unique<juce::AudioParameterChoice>("construction","Construction",juce::StringArray{"Solid","Stud","Hollow","Panel","Loose"},1));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("resonance","Resonance",n,.613f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("cavity","Cavity",n,.443f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("rattle","Hardware Rattle",n,.060f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("looseness","Looseness",n,.34f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("smear","Multipath Smear",n,.396f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("leakTone","Leak Tone",n,.564f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("inputGain","Input Gain",linear(-24,24,.1f),0));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("mix","Mix",n,1));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("limiter","Limiter",n,1.0f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("ceiling","Ceiling",linear(.2f,1,.001f),.94f));
+    // V3 performance and motion controls are append-only.
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("stereoMotion","Stereo Motion",n,0));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("motionRateHz","Motion Rate",linear(.01f,8,.01f),.18f));
+    p.push_back(std::make_unique<juce::AudioParameterBool>("motionSync","Clock Motion",false));
+    p.push_back(std::make_unique<juce::AudioParameterChoice>("motionDivision","Motion Cycle",divisions,0));
+    p.push_back(std::make_unique<juce::AudioParameterBool>("exciteSync","Clock Boundary Excitation",false));
+    p.push_back(std::make_unique<juce::AudioParameterChoice>("exciteDivision","Excitation Grid",divisions,2));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("exciteProbability","Excitation Probability",n,.28f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("exciteStrength","Excitation Strength",n,.72f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("exciteDurationMs","Excitation Length",linear(30,6000,1),900));
+    p.push_back(std::make_unique<juce::AudioParameterBool>("exciteLengthSync","Clock Excitation Length",false));
+    p.push_back(std::make_unique<juce::AudioParameterChoice>("exciteLengthDivision","Excitation Length Grid",divisions,0));
+    p.push_back(std::make_unique<juce::AudioParameterBool>("strikeSync","Clock Hardware Strikes",false));
+    p.push_back(std::make_unique<juce::AudioParameterChoice>("strikeDivision","Hardware Grid",divisions,3));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("strikeProbability","Hardware Probability",n,.34f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("strikeStrength","Hardware Strength",n,.7f));
+    return {p.begin(),p.end()};
 }
 
-const juce::String OcclusionEngineAudioProcessor::getName() const { return JucePlugin_Name; }
-bool OcclusionEngineAudioProcessor::acceptsMidi() const { return false; }
-bool OcclusionEngineAudioProcessor::producesMidi() const { return false; }
-bool OcclusionEngineAudioProcessor::isMidiEffect() const { return false; }
-double OcclusionEngineAudioProcessor::getTailLengthSeconds() const { return 0.0; }
-int OcclusionEngineAudioProcessor::getNumPrograms() { return 1; }
-int OcclusionEngineAudioProcessor::getCurrentProgram() { return 0; }
-void OcclusionEngineAudioProcessor::setCurrentProgram(int) {}
-const juce::String OcclusionEngineAudioProcessor::getProgramName(int) { return {}; }
-void OcclusionEngineAudioProcessor::changeProgramName(int, const juce::String&) {}
+float OcclusionEngineAudioProcessor::value(const char* id)const noexcept{return apvts.getRawParameterValue(id)->load();}
+bool OcclusionEngineAudioProcessor::legacyMacrosActive()const noexcept{return value("macroLink")>.5f;}
 
-void OcclusionEngineAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
+void OcclusionEngineAudioProcessor::materialiseLegacyMacros()
 {
-    juce::ignoreUnused(samplesPerBlock);
-
-    const auto predelayLen = juce::jmax(64, (int) std::ceil(sampleRate * 0.12));
-    for (auto& c : channels)
-    {
-        c.predelay.assign((size_t) predelayLen, 0.0f);
-        c.writePos = 0;
-    }
-
-    filteredL.assign((size_t) juce::jmax(32, samplesPerBlock), 0.0f);
-    filteredR.assign((size_t) juce::jmax(32, samplesPerBlock), 0.0f);
-    wetL.assign((size_t) juce::jmax(32, samplesPerBlock), 0.0f);
-    wetR.assign((size_t) juce::jmax(32, samplesPerBlock), 0.0f);
-
-    juce::Reverb::Parameters rp;
-    rp.roomSize = 0.5f;
-    rp.damping = 0.68f;
-    rp.wetLevel = 1.0f;
-    rp.dryLevel = 0.0f;
-    rp.width = 1.0f;
-    rp.freezeMode = 0.0f;
-    reverb.setParameters(rp);
-
-    updateFilters();
+    if(!legacyMacrosActive())return;
+    const auto material=(lost_audio::core::OcclusionMaterial)juce::jlimit(0,7,(int)std::lround(value("material")));
+    const auto construction=(lost_audio::core::OcclusionConstruction)juce::jlimit(0,4,(int)std::lround(value("construction")));
+    const auto t=lost_audio::core::mapOcclusionMacros(material,construction,value("distance"),value("wall"),value("sourceRoom"),value("listenerRoom"));
+    const auto set=[this](const char*id,float plain){if(auto*parameter=apvts.getParameter(id))parameter->setValueNotifyingHost(parameter->convertTo0to1(plain));};
+    set("hpHz",t.hpHz);set("lpHz",t.lpHz);set("dipHz",t.dipHz);set("dipDb",t.dipDb);set("bumpHz",t.bumpHz);set("bumpDb",t.bumpDb);
+    set("resonance",t.resonance);set("cavity",t.cavity);set("rattle",t.rattle);set("looseness",t.looseness);set("smear",t.smear);
+    set("leak",t.leak);set("leakTone",t.leakTone);set("roomMix",t.roomMix);set("predelayMs",t.predelayMs);set("roomSize",t.roomSize);set("damp",t.damp);set("outGain",t.outputGain);set("macroLink",0);
 }
 
-void OcclusionEngineAudioProcessor::releaseResources() {}
-
-bool OcclusionEngineAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const
+lost_audio::core::OcclusionParameters OcclusionEngineAudioProcessor::readParameters()const noexcept
 {
-    const auto in = layouts.getMainInputChannelSet();
-    const auto out = layouts.getMainOutputChannelSet();
-    if (in != out)
-        return false;
-    return in == juce::AudioChannelSet::mono() || in == juce::AudioChannelSet::stereo();
+    lost_audio::core::OcclusionParameters p;
+    p.material=(lost_audio::core::OcclusionMaterial)juce::jlimit(0,7,(int)std::lround(value("material")));p.construction=(lost_audio::core::OcclusionConstruction)juce::jlimit(0,4,(int)std::lround(value("construction")));
+    p.distance=value("distance");p.wall=value("wall");p.sourceRoom=value("sourceRoom");p.listenerRoom=value("listenerRoom");p.dipQ=value("dipQ");p.bumpQ=value("bumpQ");p.inputGain=juce::Decibels::decibelsToGain(value("inputGain"));p.mix=value("mix");
+    if(legacyMacrosActive()){const auto t=lost_audio::core::mapOcclusionMacros(p.material,p.construction,value("distance"),value("wall"),p.sourceRoom,p.listenerRoom);p.hpHz=t.hpHz;p.lpHz=t.lpHz;p.dipHz=t.dipHz;p.dipDb=t.dipDb;p.bumpHz=t.bumpHz;p.bumpDb=t.bumpDb;p.resonance=t.resonance;p.cavity=t.cavity;p.rattle=t.rattle;p.looseness=t.looseness;p.smear=t.smear;p.leak=t.leak;p.leakTone=t.leakTone;p.roomMix=juce::jlimit(0.0f,1.0f,t.roomMix*(value("roomMix")/.22f));p.predelayMs=t.predelayMs;p.roomSize=t.roomSize;p.damp=t.damp;p.outputGain=t.outputGain;}
+    else{p.hpHz=value("hpHz");p.lpHz=value("lpHz");p.dipHz=value("dipHz");p.dipDb=value("dipDb");p.bumpHz=value("bumpHz");p.bumpDb=value("bumpDb");p.resonance=value("resonance");p.cavity=value("cavity");p.rattle=value("rattle");p.looseness=value("looseness");p.smear=value("smear");p.leak=value("leak");p.leakTone=value("leakTone");p.roomMix=value("roomMix");p.predelayMs=value("predelayMs");p.roomSize=value("roomSize");p.damp=value("damp");p.outputGain=value("outGain");}
+    p.limiter=value("limiter");p.ceiling=value("ceiling");p.stereoMotion=value("stereoMotion");p.motionPhase=motionPhase;return p;
 }
 
-void OcclusionEngineAudioProcessor::updateFilters()
+void OcclusionEngineAudioProcessor::prepareToPlay(double sr,int)
 {
-    const auto sr = getSampleRate();
-    if (sr <= 1000.0)
-        return;
-
-    const auto hpHz = apvts.getRawParameterValue("hpHz")->load();
-    const auto lpHz = apvts.getRawParameterValue("lpHz")->load();
-    const auto dipHz = apvts.getRawParameterValue("dipHz")->load();
-    const auto dipDb = apvts.getRawParameterValue("dipDb")->load();
-    const auto dipQ = apvts.getRawParameterValue("dipQ")->load();
-    const auto bumpHz = apvts.getRawParameterValue("bumpHz")->load();
-    const auto bumpDb = apvts.getRawParameterValue("bumpDb")->load();
-    const auto bumpQ = apvts.getRawParameterValue("bumpQ")->load();
-
-    auto hp = juce::dsp::IIR::Coefficients<float>::makeHighPass(sr, clampf(hpHz, 10.0f, 20000.0f), 0.707f);
-    auto lp = juce::dsp::IIR::Coefficients<float>::makeLowPass(sr, clampf(lpHz, 20.0f, 20000.0f), 0.85f);
-    auto dip = juce::dsp::IIR::Coefficients<float>::makePeakFilter(sr, clampf(dipHz, 20.0f, 20000.0f), juce::jmax(0.2f, dipQ), juce::Decibels::decibelsToGain(dipDb));
-    auto bump = juce::dsp::IIR::Coefficients<float>::makePeakFilter(sr, clampf(bumpHz, 20.0f, 20000.0f), juce::jmax(0.2f, bumpQ), juce::Decibels::decibelsToGain(bumpDb));
-
-    for (auto& f : filters)
-    {
-        f.hp1.coefficients = hp;
-        f.hp2.coefficients = hp;
-        f.lp1.coefficients = lp;
-        f.lp2.coefficients = lp;
-        f.dip.coefficients = dip;
-        f.bump.coefficients = bump;
-    }
+    core.prepare(sr,(std::size_t)juce::jlimit(1,2,getTotalNumOutputChannels()));core.reset();motionPhase=0;currentBpm=120;pendingBoundary.store(false);pendingHardware.store(false);for(auto&x:trace)x.store(0);setLatencySamples(0);
 }
 
-float OcclusionEngineAudioProcessor::readPredelay(const ChannelState& st, float delaySamps) const
+bool OcclusionEngineAudioProcessor::isBusesLayoutSupported(const BusesLayout& l)const
 {
-    const auto len = (int) st.predelay.size();
-    if (len < 2)
-        return 0.0f;
-
-    const auto read = (float) st.writePos - delaySamps;
-    auto i0 = (int) std::floor(read);
-    while (i0 < 0)
-        i0 += len;
-    i0 %= len;
-    const auto i1 = (i0 + 1) % len;
-    const auto frac = read - std::floor(read);
-    return st.predelay[(size_t) i0] * (1.0f - frac) + st.predelay[(size_t) i1] * frac;
+    const auto in=l.getMainInputChannelSet();return in==l.getMainOutputChannelSet()&&(in==juce::AudioChannelSet::mono()||in==juce::AudioChannelSet::stereo());
 }
 
-void OcclusionEngineAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
+void OcclusionEngineAudioProcessor::processBlock(juce::AudioBuffer<float>& b,juce::MidiBuffer&)
 {
-    juce::ignoreUnused(midi);
-    juce::ScopedNoDenormals nd;
-
-    const auto inCh = getTotalNumInputChannels();
-    const auto outCh = getTotalNumOutputChannels();
-    for (int ch = inCh; ch < outCh; ++ch)
-        buffer.clear(ch, 0, buffer.getNumSamples());
-
-    updateFilters();
-
-    const auto n = buffer.getNumSamples();
-    if ((int) filteredL.size() < n)
-    {
-        filteredL.resize((size_t) n);
-        filteredR.resize((size_t) n);
-        wetL.resize((size_t) n);
-        wetR.resize((size_t) n);
-    }
-
-    const auto sr = (float) getSampleRate();
-    const auto leak = clampf(apvts.getRawParameterValue("leak")->load(), 0.0f, 1.0f);
-    const auto roomMix = clampf(apvts.getRawParameterValue("roomMix")->load(), 0.0f, 1.0f);
-    const auto predelayMs = clampf(apvts.getRawParameterValue("predelayMs")->load(), 0.0f, 120.0f);
-    const auto roomSize = clampf(apvts.getRawParameterValue("roomSize")->load(), 0.0f, 1.0f);
-    const auto damp = clampf(apvts.getRawParameterValue("damp")->load(), 0.0f, 1.0f);
-    const auto outGain = clampf(apvts.getRawParameterValue("outGain")->load(), 0.0f, 1.5f);
-
-    juce::Reverb::Parameters rp;
-    rp.roomSize = roomSize;
-    rp.damping = damp;
-    rp.wetLevel = 1.0f;
-    rp.dryLevel = 0.0f;
-    rp.width = 1.0f;
-    rp.freezeMode = 0.0f;
-    reverb.setParameters(rp);
-
-    float filteredDry = 0.0f;
-    float filteredWet = 0.0f;
-    eqPow(roomMix, filteredDry, filteredWet);
-
-    const auto predelaySamps = (predelayMs / 1000.0f) * sr;
-
-    auto* l = buffer.getWritePointer(0);
-    auto* r = buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : nullptr;
-
-    for (int i = 0; i < n; ++i)
-    {
-        const auto inL = l[i];
-        const auto inR = r != nullptr ? r[i] : inL;
-
-        auto fL = inL;
-        auto fR = inR;
-
-        fL = filters[0].hp1.processSample(fL);
-        fL = filters[0].hp2.processSample(fL);
-        fL = filters[0].bump.processSample(fL);
-        fL = filters[0].dip.processSample(fL);
-        fL = filters[0].lp1.processSample(fL);
-        fL = filters[0].lp2.processSample(fL);
-
-        fR = filters[1].hp1.processSample(fR);
-        fR = filters[1].hp2.processSample(fR);
-        fR = filters[1].bump.processSample(fR);
-        fR = filters[1].dip.processSample(fR);
-        fR = filters[1].lp1.processSample(fR);
-        fR = filters[1].lp2.processSample(fR);
-
-        filteredL[(size_t) i] = fL;
-        filteredR[(size_t) i] = fR;
-
-        channels[0].predelay[(size_t) channels[0].writePos] = fL;
-        channels[1].predelay[(size_t) channels[1].writePos] = fR;
-        wetL[(size_t) i] = readPredelay(channels[0], predelaySamps);
-        wetR[(size_t) i] = readPredelay(channels[1], predelaySamps);
-
-        channels[0].writePos = (channels[0].writePos + 1) % (int) channels[0].predelay.size();
-        channels[1].writePos = (channels[1].writePos + 1) % (int) channels[1].predelay.size();
-    }
-
-    reverb.processStereo(wetL.data(), wetR.data(), n);
-
-    for (int i = 0; i < n; ++i)
-    {
-        const auto inL = l[i];
-        const auto inR = r != nullptr ? r[i] : inL;
-        const auto ocL = filteredL[(size_t) i] * filteredDry + wetL[(size_t) i] * filteredWet;
-        const auto ocR = filteredR[(size_t) i] * filteredDry + wetR[(size_t) i] * filteredWet;
-        const auto outL = (inL * leak + ocL) * outGain;
-        const auto outR = (inR * leak + ocR) * outGain;
-        l[i] = clampf(outL, -1.0f, 1.0f);
-        if (r != nullptr)
-            r[i] = clampf(outR, -1.0f, 1.0f);
-    }
+    juce::ScopedNoDenormals nd;for(int c=getTotalNumInputChannels();c<getTotalNumOutputChannels();++c)b.clear(c,0,b.getNumSamples());const auto channels=juce::jmin(2,b.getNumChannels()),samples=b.getNumSamples();if(channels<=0||samples<=0||getSampleRate()<=0)return;
+    bool playing=false,hasPpq=false;double ppq=0;if(auto*head=getPlayHead())if(const auto pos=head->getPosition()){playing=pos->getIsPlaying();if(const auto bpm=pos->getBpm())currentBpm=*bpm;if(const auto hostPpq=pos->getPpqPosition()){ppq=*hostPpq;hasPpq=true;}}
+    lost_audio::core::TempoEventSchedule exciteSchedule,strikeSchedule;if(playing&&hasPpq&&value("exciteSync")>.5f)exciteSchedule=lost_audio::core::tempoEventsInBlock(ppq,currentBpm,(int)value("exciteDivision"),getSampleRate(),samples);if(playing&&hasPpq&&value("strikeSync")>.5f)strikeSchedule=lost_audio::core::tempoEventsInBlock(ppq,currentBpm,(int)value("strikeDivision"),getSampleRate(),samples);
+    std::vector<int> boundaries{0,samples};for(std::size_t i=0;i<exciteSchedule.size;++i)boundaries.push_back(exciteSchedule.events[i].sampleOffset);for(std::size_t i=0;i<strikeSchedule.size;++i)boundaries.push_back(strikeSchedule.events[i].sampleOffset);std::sort(boundaries.begin(),boundaries.end());boundaries.erase(std::unique(boundaries.begin(),boundaries.end()),boundaries.end());
+    auto fireExcite=pendingBoundary.exchange(false),fireStrike=pendingHardware.exchange(false);const auto durationMs=value("exciteLengthSync")>.5f?lost_audio::core::tempoDivisionMilliseconds(currentBpm,(int)value("exciteLengthDivision")):value("exciteDurationMs");
+    for(std::size_t segment=0;segment+1<boundaries.size();++segment){const auto offset=boundaries[segment],count=boundaries[segment+1]-offset;for(std::size_t i=0;i<exciteSchedule.size;++i)if(exciteSchedule.events[i].sampleOffset==offset&&lost_audio::core::tempoEventDecision(exciteSchedule.events[i].stepIndex,value("exciteProbability"),0x4f43434cu))fireExcite=true;for(std::size_t i=0;i<strikeSchedule.size;++i)if(strikeSchedule.events[i].sampleOffset==offset&&lost_audio::core::tempoEventDecision(strikeSchedule.events[i].stepIndex,value("strikeProbability"),0x52415454u))fireStrike=true;
+        if(fireExcite&&!core.excitationActive()){core.triggerBoundaryExcitation(value("exciteStrength"),std::max(1,(int)std::lround(durationMs*.001*getSampleRate())));fireExcite=false;}if(fireStrike){core.triggerRattleStrike(value("strikeStrength"));fireStrike=false;}
+        const auto cycleMs=value("motionSync")>.5f?lost_audio::core::tempoDivisionMilliseconds(currentBpm,(int)value("motionDivision")):1000.0/value("motionRateHz");motionPhase=std::fmod(motionPhase+(float)(count/(getSampleRate()*cycleMs*.001)),1.0f);std::array<float*,2>d{b.getWritePointer(0,offset),channels>1?b.getWritePointer(1,offset):nullptr};core.process(d.data(),(std::size_t)channels,(std::size_t)count,readParameters());}
+    for(int c=0;c<channels;++c){inputPeaks[(std::size_t)c].store(core.inputPeak((std::size_t)c));outputPeaks[(std::size_t)c].store(core.outputPeak((std::size_t)c));}if(channels==1){inputPeaks[1].store(inputPeaks[0].load());outputPeaks[1].store(outputPeaks[0].load());}
+    for(std::size_t i=0;i<trace.size();++i){const auto at=juce::jlimit(0,samples-1,(int)std::lround((double)i*(samples-1)/(trace.size()-1)));trace[i].store(b.getSample(0,at));}bodyMeter.store(core.bodyActivity());roomMeter.store(core.roomActivity());leakMeter.store(core.leakActivity());rattleMeter.store(core.rattleActivity());limiterMeter.store(core.limiterActivity());excitationState.store(core.excitationActive());excitationProgressMeter.store(core.excitationProgress());
 }
 
-bool OcclusionEngineAudioProcessor::hasEditor() const { return true; }
+std::array<float,64> OcclusionEngineAudioProcessor::outputTrace()const noexcept{std::array<float,64> out{};for(std::size_t i=0;i<out.size();++i)out[i]=trace[i].load();return out;}
+juce::AudioProcessorEditor* OcclusionEngineAudioProcessor::createEditor(){return new OcclusionEngineAudioProcessorEditor(*this);}
 
-juce::AudioProcessorEditor* OcclusionEngineAudioProcessor::createEditor()
+void OcclusionEngineAudioProcessor::getStateInformation(juce::MemoryBlock& d)
 {
-    return new OcclusionEngineAudioProcessorEditor(*this);
+    auto state=apvts.copyState();state.setProperty("engineId","occlusion",nullptr);state.setProperty("schemaVersion",3,nullptr);if(auto xml=state.createXml())copyXmlToBinary(*xml,d);
 }
 
-void OcclusionEngineAudioProcessor::getStateInformation(juce::MemoryBlock& dest)
+void OcclusionEngineAudioProcessor::setStateInformation(const void* d,int size)
 {
-    if (auto xml = apvts.copyState().createXml())
-        copyXmlToBinary(*xml, dest);
+    if(auto xml=getXmlFromBinary(d,size))if(xml->hasTagName(apvts.state.getType())){auto restored=juce::ValueTree::fromXml(*xml);const auto schema=(int)restored.getProperty("schemaVersion",1);apvts.replaceState(restored);if(schema<3&&legacyMacrosActive())materialiseLegacyMacros();apvts.state.setProperty("engineId","occlusion",nullptr);apvts.state.setProperty("schemaVersion",3,nullptr);}
 }
 
-void OcclusionEngineAudioProcessor::setStateInformation(const void* data, int size)
-{
-    if (auto xml = getXmlFromBinary(data, size))
-        if (xml->hasTagName(apvts.state.getType()))
-            apvts.replaceState(juce::ValueTree::fromXml(*xml));
-}
-
-juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
-{
-    return new OcclusionEngineAudioProcessor();
-}
+juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter(){return new OcclusionEngineAudioProcessor();}

@@ -34,7 +34,7 @@ engines are **Dictaphone**, **Surveillance**, **Lossy Media**, and
 Their modeling boundaries and candidate controls are preserved in the
 [expansion priorities](expansion-ideas.md).
 
-### Lost Audio Suite (working name)
+### Lost Audio Suite
 
 One native plugin containing the complete effect collection as reorderable slots. The first release should prioritize a fast serial signal chain; parallel lanes and more elaborate routing can follow after the core is stable.
 
@@ -249,7 +249,7 @@ Exit: the web reference has evidence-backed Windows/Linux support, platform fail
 1. Pin JUCE and establish clean cross-platform CMake/CI builds.
 2. Build the shared parameter/preset schema and migration system.
 3. Implement a portable realtime-safe DSP core plus JUCE and WebAssembly/AudioWorklet adapters.
-4. Port the complete web Tape graph first, including deterministic transport behavior, then use the proven boundary for Transmission, Comms, and CD. (All four now have first shared-core V2 slices; listening and host approval remain.)
+4. Port the complete web Tape graph first, including deterministic transport behavior, then use the proven boundary for Transmission, Comms, CD, Conference, Camcorder, Cartridge, Television, Occlusion, and Open Mic Night. (All ten now have first shared-core V2 slices; consolidated listening and host approval remain.)
 5. Create reusable Surface/Advanced UI components while retaining distinct device art direction.
 6. Run parity, plugin validation, DAW recall/automation smoke tests, and level-matched listening.
 
@@ -260,11 +260,11 @@ Exit: one engine proves the complete cross-platform architecture and quality bar
 Port and validate in families:
 
 1. Tape;
-2. Comms and Conference; (Comms' first V2 slice is implemented; Conference remains next.)
-3. Camcorder;
-4. CD and Cartridge; (CD's first stereo shared-core V2 slice is implemented; Cartridge remains.)
-5. Television and Occlusion;
-6. Open Mic Night after feedback safety and asset review.
+2. Comms and Conference; (both first V2 slices are implemented; consolidated listening and host approval remain.)
+3. Camcorder; (first V2 slice is implemented; consolidated listening and host approval remain.)
+4. CD and Cartridge; (both first stereo shared-core V2 slices are implemented; consolidated listening and host approval remain.)
+5. Television and Occlusion; (both first stereo shared-core V2 slices are implemented; consolidated listening and host approval remain.)
+6. Open Mic Night; (first stereo shared-core V2 slice is implemented with explicit feedback arming, hard output safety, and undocumented audio assets excluded; consolidated listening and host approval remain.)
 
 Exit: every individual plugin meets V2 standard and can be hosted in the Suite.
 
@@ -276,9 +276,20 @@ After the fleet passes its DSP, UX, preset, state, automation, and DAW gates,
 establish one verified B&E Digital publisher identity and automate signing for
 every VST3 binary, installer, and uninstaller before public native distribution.
 
-### Phase 4 — Lost Audio Suite V1
+### Phase 4 — Lost Audio Suite V1 (active)
 
-Build the all-in-one native plugin from the validated shared engines: reorderable slots, fast serial routing, useful factory chains, session/preset interchange, and a cross-platform release pipeline. Parallel routing can follow after the serial workflow is stable.
+The first native slice now hosts all ten shared engines in six repeatable,
+reorderable serial slots. It includes independent slot state, bypass and Mix,
+two surface macros, model selection, two bipolar global-macro assignment
+matrices, twelve safe factory chains, fixed latency compensation, click-safe
+topology changes, master metering, CPU feedback, and a hard output safety path.
+Open Mic feedback remains explicitly armed and requires an observed off state
+after insertion or recall before a later on-transition is honored.
+
+Next, complete hands-on DAW/UI/listening approval, session migration and chain
+preset interchange, richer engine-specific slot presets, quality/oversampling,
+and release-platform validation. Parallel routing can follow after the serial
+workflow is stable.
 
 Exit: the web reference and native Suite use the same approved models, parameter schema, migrations, and presets.
 
@@ -290,10 +301,10 @@ Exit: deterministic, host-synced patterns survive save/reopen and pass the DAW m
 
 ## Current audit snapshot
 
-- Ten independent JUCE plugin projects use duplicated editor/control code and fixed non-resizable windows.
-- A root CMake entry point, deterministic parity-fixture tooling, dependency-free repository validator, and source-level CI now exist. JUCE remains unpinned; plugin validation, clean native rebuild proof, and native release automation are still absent.
+- Eleven individual JUCE plugins now use shared dependency-free DSP cores and resizable no-scroll V2 editors, while some reusable editor/control code remains duplicated.
+- A root CMake entry point, pinned JUCE revision, deterministic parity-fixture tooling, dependency-free repository validator, portable core tests, and source-level CI now exist. Formal plugin validation, DAW approval, and native release signing are still absent.
 - The web workstation builds nine engines from their standalone graph modules and supports a drag-and-drop left-to-right rack, focused inspectors, realtime preview, deterministic offline export, user/master presets, and four-layer automation.
-- The web has 99 factory presets across the nine shared engines; the corresponding VSTs have 50.
+- The web has 99 factory presets across the nine shared engines; the eleven individual V2 VSTs now require a consolidated preset count and listening audit.
 - Transmission has 16 web presets versus 6 VST presets and web controls that the native parameter surface does not currently expose.
 - The web Suite does not currently include Open Mic Night.
 - The selected-device workstation, mastering drawer, automation drawer, walkthrough, laptop layout, deliberate mobile boundary, and protected rack presets are implemented. Cross-platform/device evidence and a formal reference-render freeze remain outstanding.

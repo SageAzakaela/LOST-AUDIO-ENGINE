@@ -12,6 +12,7 @@ Thumbs.db
 /build-core/
 /build-tape/
 /build-tape-dev/
+/build-validation/
 .tools/
 **/cmake-build-*/
 **/CMakeFiles/

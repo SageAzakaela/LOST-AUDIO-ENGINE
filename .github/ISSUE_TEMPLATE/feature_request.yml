@@ -10,6 +10,7 @@ body:
       label: Area
       options:
         - Existing Device Engine
+        - Brain Cruncher
         - New device or signal path
         - Web workstation
         - Lost Audio Suite

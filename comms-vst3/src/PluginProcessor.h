@@ -33,6 +33,7 @@ public:
 
     juce::AudioProcessorValueTreeState& getAPVTS() noexcept { return apvts; }
     [[nodiscard]] float getOutputPeak() const noexcept { return outputPeak.load(std::memory_order_relaxed); }
+    void materialiseLegacyMacros();
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
 private:

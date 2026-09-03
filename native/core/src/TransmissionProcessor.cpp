@@ -128,6 +128,7 @@ void TransmissionProcessor::reset(std::uint32_t seed) noexcept
             stage.dropoutRemaining = stage.dropoutTotal = 0;
             stage.dropoutDepth = 1.0f;
             stage.crackleRemaining = stage.crackleTotal = 0;
+            stage.crackleState = 0.0f;
             stage.hp1.reset(); stage.hp2.reset(); stage.lp1.reset(); stage.lp2.reset();
             stage.dip.reset(); stage.mid.reset();
         }
@@ -146,6 +147,17 @@ void TransmissionProcessor::reset(std::uint32_t seed) noexcept
     walkie_.clickPhase = 0.0f;
     walkie_.noiseHpState = 0.0f;
     walkie_.randomState = mixSeed(seed_, 0xa11ce001u);
+    pendingDropoutStrength_.store(0.0f);
+    pendingDropoutDuration_.store(0.0f);
+    carrierDisplacementMs_ = dropoutProgress_ = compressionReduction_ = 0.0f;
+    noiseActivity_ = crackleActivity_ = limiterActivity_ = 0.0f;
+    dropoutActive_ = false;
+}
+
+void TransmissionProcessor::triggerDropout(float strength, float durationSeconds) noexcept
+{
+    pendingDropoutDuration_.store(std::max(0.001f, durationSeconds), std::memory_order_relaxed);
+    pendingDropoutStrength_.store(clamp01(strength), std::memory_order_release);
 }
 
 int TransmissionProcessor::latencySamples() const noexcept
@@ -266,6 +278,7 @@ float TransmissionProcessor::processStage(StageState& s, float input, bool activ
     auto gain = 1.0f;
     if (s.envelope > threshold)
         gain = 1.0f / (1.0f + compAmount * (s.envelope - threshold) * 4.2f);
+    compressionReduction_ = std::max(compressionReduction_ * 0.999f, 1.0f - gain);
     const auto postCenter = softClip(postBias * post * gain);
     const auto postMatch = 0.2f / std::max(1.0e-6f, softClip(0.2f * post));
     value = (softClip(driven * gain) - postCenter) * postMatch;
@@ -309,6 +322,7 @@ float TransmissionProcessor::processStage(StageState& s, float input, bool activ
     s.delay[s.delayIndex] = value;
     const auto wow = clamp01(p.wowDepth);
     const auto driftSeconds = wow * (std::sin(s.lfoPhase) * 0.0018f + s.driftNoise * 0.0012f);
+    carrierDisplacementMs_ = std::max(carrierDisplacementMs_ * 0.999f, std::abs(driftSeconds) * 1000.0f);
     const auto delay = std::clamp(((float) stageLatencySeconds + driftSeconds) * (float) sampleRate_,
                                   1.0f, (float) s.delay.size() - 2.0f);
     value = readDelay(s, delay);
@@ -321,6 +335,8 @@ float TransmissionProcessor::processStage(StageState& s, float input, bool activ
         const auto t = 1.0f - (float) s.dropoutRemaining / (float) s.dropoutTotal;
         const auto fade = t < 0.2f ? t / 0.2f : (t > 0.85f ? (1.0f - t) / 0.15f : 1.0f);
         dropoutGain = 1.0f - (1.0f - s.dropoutDepth) * fade;
+        dropoutActive_ = true;
+        dropoutProgress_ = std::max(dropoutProgress_, t);
         --s.dropoutRemaining;
     }
     auto crackle = 0.0f;
@@ -328,8 +344,16 @@ float TransmissionProcessor::processStage(StageState& s, float input, bool activ
     {
         const auto t = 1.0f - (float) s.crackleRemaining / (float) s.crackleTotal;
         const auto envelope = (t < 0.15f ? t / 0.15f : 1.0f) * (t > 0.7f ? (1.0f - t) / 0.3f : 1.0f);
-        crackle = nextSigned(s.randomState) * (0.06f + 0.24f * crackleAmount) * envelope;
+        const auto target = nextSigned(s.randomState);
+        const auto smoothing = 0.10f + crackleAmount * 0.12f;
+        s.crackleState += (target - s.crackleState) * smoothing;
+        crackle = s.crackleState * (0.06f + 0.24f * crackleAmount) * envelope;
+        crackleActivity_ = std::max(crackleActivity_ * 0.999f, std::abs(crackle));
         --s.crackleRemaining;
+    }
+    else
+    {
+        s.crackleState *= 0.92f;
     }
     const auto white = nextSigned(s.randomState);
     const auto pink = pinkFromWhite(s.pink, white);
@@ -339,6 +363,7 @@ float TransmissionProcessor::processStage(StageState& s, float input, bool activ
     const auto stageNoiseScale = std::pow(passCount, -0.4f);
     const auto noiseLevel = std::pow(clamp01(p.noise) * stageNoiseScale, 1.2f) * 0.055f;
     const auto noiseOutput = colored * noiseLevel + hissHp * (noiseLevel * clamp01(p.hiss) * 0.45f);
+    noiseActivity_ = std::max(noiseActivity_ * 0.999f, std::abs(noiseOutput));
     const auto passLoss = 1.0f / std::sqrt(1.0f + 0.55f * (passCount - 1.0f));
     const auto stageGain = std::pow(passLoss, 1.0f / passCount);
     return std::clamp((value * carrierFade * dropoutGain + crackle + noiseOutput) * stageGain, -1.0f, 1.0f);
@@ -411,7 +436,29 @@ void TransmissionProcessor::process(float* const* channels, std::size_t channelC
     p.inputGain = std::clamp(p.inputGain, 0.0f, 4.0f);
     p.outputGain = std::clamp(p.outputGain, 0.0f, 1.5f);
     p.mix = clamp01(p.mix);
+    p.ceiling = std::clamp(p.ceiling, 0.2f, 1.0f);
     updateFilters(p);
+
+    carrierDisplacementMs_ *= 0.92f;
+    dropoutProgress_ = 0.0f;
+    compressionReduction_ *= 0.92f;
+    noiseActivity_ *= 0.92f;
+    crackleActivity_ *= 0.92f;
+    limiterActivity_ *= 0.92f;
+    dropoutActive_ = false;
+    const auto manualStrength = pendingDropoutStrength_.exchange(0.0f, std::memory_order_acq_rel);
+    if (manualStrength > 0.0f)
+    {
+        const auto duration = pendingDropoutDuration_.exchange(0.0f, std::memory_order_relaxed);
+        const auto total = std::max(1, (int) std::lround(duration * (float) sampleRate_));
+        for (std::size_t channel = 0; channel < count; ++channel)
+            for (int pass = 0; pass < p.passes; ++pass)
+            {
+                auto& stage = stages_[channel][(std::size_t) pass];
+                stage.dropoutRemaining = stage.dropoutTotal = total;
+                stage.dropoutDepth = std::clamp(1.0f - manualStrength * 0.95f, 0.02f, 1.0f);
+            }
+    }
 
     for (std::size_t sample = 0; sample < sampleCount; ++sample)
     {
@@ -430,8 +477,24 @@ void TransmissionProcessor::process(float* const* channels, std::size_t channelC
             auto value = std::clamp(input + walkie, -1.0f, 1.0f);
             for (std::size_t pass = 0; pass < maxPasses; ++pass)
                 value = processStage(stages_[channel][pass], value, (int) pass < p.passes, p.passes, p);
-            channels[channel][sample] = std::clamp((drySample * (1.0f - p.mix) + value * p.mix) * p.outputGain, -1.0f, 1.0f);
+            auto output = (drySample * (1.0f - p.mix) + value * p.mix) * p.outputGain;
+            if (std::abs(output) > p.ceiling)
+                limiterActivity_ = std::max(limiterActivity_, 1.0f - p.ceiling / (std::abs(output) + 1.0e-6f));
+            channels[channel][sample] = std::clamp(output, -p.ceiling, p.ceiling);
         }
     }
+    dropoutActive_ = false;
+    dropoutProgress_ = 0.0f;
+    for (std::size_t channel = 0; channel < count; ++channel)
+        for (int pass = 0; pass < p.passes; ++pass)
+        {
+            const auto& stage = stages_[channel][(std::size_t) pass];
+            if (stage.dropoutRemaining > 0 && stage.dropoutTotal > 0)
+            {
+                dropoutActive_ = true;
+                dropoutProgress_ = std::max(dropoutProgress_,
+                    1.0f - (float) stage.dropoutRemaining / (float) stage.dropoutTotal);
+            }
+        }
 }
 }

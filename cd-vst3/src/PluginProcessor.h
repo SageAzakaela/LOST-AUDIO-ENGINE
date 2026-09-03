@@ -2,9 +2,11 @@
 
 #include <JuceHeader.h>
 #include <lost_audio/core/CDProcessor.h>
+#include <lost_audio/core/TempoSync.h>
 
 #include <array>
 #include <atomic>
+#include <limits>
 
 class CDEngineAudioProcessor final : public juce::AudioProcessor
 {
@@ -37,16 +39,23 @@ public:
     juce::AudioProcessorValueTreeState& getAPVTS() noexcept { return apvts; }
 
     void triggerDamage(float strength = 1.0f) noexcept { cd.triggerDamage(strength); }
-    void triggerSkip(float strength = 1.0f) noexcept { cd.triggerSkip(strength); }
+    void triggerSkip(float strength = 1.0f) noexcept;
+    void materialiseLegacyMacros();
+    [[nodiscard]] bool legacyMacrosActive() const noexcept;
     [[nodiscard]] float inputPeak(int channel) const noexcept;
     [[nodiscard]] float outputPeak(int channel) const noexcept;
     [[nodiscard]] bool damageActive() const noexcept { return damageActiveFlag.load(std::memory_order_relaxed); }
     [[nodiscard]] bool skipActive() const noexcept { return skipActiveFlag.load(std::memory_order_relaxed); }
+    [[nodiscard]] float discPhase() const noexcept { return discPhaseMeter.load(std::memory_order_relaxed); }
+    [[nodiscard]] float damageProgress() const noexcept { return damageProgressMeter.load(std::memory_order_relaxed); }
+    [[nodiscard]] float skipProgress() const noexcept { return skipProgressMeter.load(std::memory_order_relaxed); }
+    [[nodiscard]] float servoActivity() const noexcept { return servoActivityMeter.load(std::memory_order_relaxed); }
 
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
 private:
     [[nodiscard]] float value(const char* parameterID) const noexcept;
+    void triggerMusicalSkip(float strength, double bpm) noexcept;
 
     juce::AudioProcessorValueTreeState apvts;
     lost_audio::core::CDProcessor cd;
@@ -54,6 +63,21 @@ private:
     std::array<std::atomic<float>, 2> outputPeaks {};
     std::atomic<bool> damageActiveFlag { false };
     std::atomic<bool> skipActiveFlag { false };
+    std::atomic<float> discPhaseMeter { 0.0f };
+    std::atomic<float> damageProgressMeter { 0.0f };
+    std::atomic<float> skipProgressMeter { 0.0f };
+    std::atomic<float> servoActivityMeter { 0.0f };
+    std::int64_t lastTempoStep = -1;
+    int lastTempoDivision = -1;
+    int tempoFallbackSamples = 0;
+    int alternateTempoTarget = 0;
+    std::int64_t fallbackTempoStep = 0;
+    double lastHostPpq = 0.0;
+    bool hostTempoWasPlaying = false;
+    std::atomic<double> currentBpm { 120.0 };
+    std::atomic<bool> transportPlaying { false };
+    std::atomic<float> pendingQuantizedSkip { 0.0f };
+    std::int64_t nextSkipEligibleStep = std::numeric_limits<std::int64_t>::min();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(CDEngineAudioProcessor)
 };

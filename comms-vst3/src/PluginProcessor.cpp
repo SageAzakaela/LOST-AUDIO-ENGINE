@@ -92,6 +92,33 @@ bool CommsEngineAudioProcessor::isBusesLayoutSupported(const BusesLayout& layout
         && (input == juce::AudioChannelSet::mono() || input == juce::AudioChannelSet::stereo());
 }
 
+void CommsEngineAudioProcessor::materialiseLegacyMacros()
+{
+    const auto value = [this](const char* id) { return apvts.getRawParameterValue(id)->load(); };
+    if (value("macroLink") <= 0.5f) return;
+    const auto mode = static_cast<lost_audio::core::CommsMode>(juce::jlimit(0, 4, (int) std::lround(value("mode"))));
+    const auto targets = lost_audio::core::mapCommsMacros(mode, value("bandwidth"), value("drive"),
+                                                           value("glitch"), value("noise"),
+                                                           value("character"), value("distance"));
+    const auto setPlain = [this](const char* id, float plainValue)
+    {
+        if (auto* parameter = apvts.getParameter(id))
+            parameter->setValueNotifyingHost(parameter->convertTo0to1(plainValue));
+    };
+    setPlain("hpHz", targets.highPassHz); setPlain("lpHz", targets.lowPassHz);
+    setPlain("midHumpDb", targets.midHumpDb); setPlain("midFreq", targets.midFrequencyHz);
+    setPlain("comp", targets.compression); setPlain("bits", (float) targets.bits); setPlain("rate", targets.converterRateHz);
+    setPlain("packet", targets.packetLoss); setPlain("packetMs", targets.packetLengthMs);
+    setPlain("hum", targets.hum); setPlain("hiss", targets.hiss); setPlain("toneMix", targets.toneMix);
+    setPlain("transducer", targets.transducer); setPlain("lineAge", targets.lineAge); setPlain("duplex", targets.duplex);
+    setPlain("speakerRattle", targets.speakerRattle); setPlain("distance", targets.distance);
+    setPlain("echoMix", targets.echoMix); setPlain("echoMs", targets.echoMs); setPlain("echoFb", targets.echoFeedback);
+    setPlain("echoTone", targets.echoTone); setPlain("verbMix", targets.roomMix); setPlain("verbMs", targets.roomMs);
+    setPlain("verbDamp", targets.roomDamping); setPlain("ceiling", targets.ceiling);
+    setPlain("outGain", juce::jlimit(0.0f, 1.5f, targets.outputGain * value("outGain") / 0.95f));
+    setPlain("macroLink", 0.0f);
+}
+
 lost_audio::core::CommsParameters CommsEngineAudioProcessor::readParameters() const noexcept
 {
     const auto value = [this](const char* id) { return apvts.getRawParameterValue(id)->load(); };

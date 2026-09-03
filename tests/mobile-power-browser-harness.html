@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>LOST mobile power browser harness</title>
+    <style>
+      body { margin: 0; padding: 12px; color: #fff8ed; background: #050607; font: 13px/1.4 monospace; }
+      header { display: flex; justify-content: space-between; max-width: 360px; margin: 0 auto 8px; }
+      iframe { display: block; width: 360px; height: 740px; max-width: 100%; margin: 0 auto; border: 1px solid #4ef6ff; background: #08090a; }
+      pre { max-width: 360px; margin: 8px auto 0; white-space: pre-wrap; color: #4ef6ff; }
+    </style>
+  </head>
+  <body>
+    <header><strong>360 × 740 / POWER QA</strong><span id="status">LOADING</span></header>
+    <iframe id="preview" title="LOST mobile power preview"></iframe>
+    <pre id="results">WAITING FOR WORKSTATION</pre>
+    <script>
+      const preview = document.getElementById("preview");
+      const status = document.getElementById("status");
+      const results = document.getElementById("results");
+      const wait = (duration) => new Promise((resolve) => setTimeout(resolve, duration));
+      const makeSilentWav = () => {
+        const sampleRate = 8000;
+        const frames = sampleRate * 5;
+        const buffer = new ArrayBuffer(44 + frames * 2);
+        const view = new DataView(buffer);
+        const text = (offset, value) => [...value].forEach((character, index) => view.setUint8(offset + index, character.charCodeAt(0)));
+        text(0, "RIFF"); view.setUint32(4, 36 + frames * 2, true); text(8, "WAVE"); text(12, "fmt ");
+        view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+        view.setUint32(24, sampleRate, true); view.setUint32(28, sampleRate * 2, true);
+        view.setUint16(32, 2, true); view.setUint16(34, 16, true); text(36, "data"); view.setUint32(40, frames * 2, true);
+        return new File([buffer], "mobile-power-qa.wav", { type: "audio/wav" });
+      };
+
+      preview.src = `../?mobile-power-qa=1&run=${Date.now()}`;
+      preview.addEventListener("load", async () => {
+        const doc = preview.contentDocument;
+        await wait(900);
+        const transfer = new DataTransfer();
+        transfer.items.add(makeSilentWav());
+        const input = doc.querySelector("#fileInput");
+        input.files = transfer.files;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        await wait(900);
+
+        const frameCount = () => Number(doc.documentElement.dataset.powerVisualFrames || 0);
+        const idleStart = frameCount();
+        await wait(1200);
+        const idleEnd = frameCount();
+        window.__idleFrames = idleEnd - idleStart;
+        status.textContent = "READY — PRESS PLAY";
+        results.textContent = `READY\nidle visual frames / 1.2 s: ${window.__idleFrames}`;
+
+        const poll = window.setInterval(async () => {
+          if (doc.documentElement.dataset.powerPlaying !== "true") return;
+          window.clearInterval(poll);
+          const activeStart = frameCount();
+          await wait(1250);
+          const activeEnd = frameCount();
+          doc.querySelector("#mobilePlayBtn").click();
+          const pauseFrames = frameCount();
+          await wait(3000);
+          const finalFrames = frameCount();
+          const activeFrames = activeEnd - activeStart;
+          const postPauseFrames = finalFrames - pauseFrames;
+          const released = doc.documentElement.dataset.powerAudio === "released";
+          const checks = {
+            idleLoopStops: window.__idleFrames === 0,
+            mobilePlaybackIsThrottled: activeFrames >= 18 && activeFrames <= 32,
+            pauseStopsVisuals: postPauseFrames <= 1,
+            pauseReleasesAudioGraph: released,
+          };
+          const passed = Object.values(checks).filter(Boolean).length;
+          status.textContent = passed === 4 ? "PASS" : "FAIL";
+          results.textContent = `${status.textContent} / ${passed} of 4 checks\nidle frames: ${window.__idleFrames}\nactive frames / 1.25 s: ${activeFrames}\npost-pause frames / 3 s: ${postPauseFrames}\naudio graph: ${released ? "released" : "active"}\n${JSON.stringify(checks, null, 2)}`;
+        }, 50);
+      });
+    </script>
+  </body>
+</html>

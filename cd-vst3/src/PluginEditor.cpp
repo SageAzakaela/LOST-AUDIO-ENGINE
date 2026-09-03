@@ -44,6 +44,10 @@ const PresetDefinition presets[] = {
     { "Loose Spindle", { { "clarity", 0.58f }, { "damage", 0.18f }, { "tracking", 0.46f }, { "jitterMacro", 0.88f }, { "mode", 0.0f }, { "damageShape", 2.0f }, { "stereoWidth", 1.12f }, { "macroLink", 1.0f } } },
     { "Audio CD-R", { { "clarity", 0.76f }, { "damage", 0.22f }, { "tracking", 0.18f }, { "jitterMacro", 0.12f }, { "mode", 4.0f }, { "damageShape", 4.0f }, { "carComp", 0.12f }, { "macroLink", 1.0f } } },
     { "Unreadable Edge", { { "clarity", 0.04f }, { "damage", 0.92f }, { "tracking", 0.96f }, { "jitterMacro", 0.42f }, { "mode", 3.0f }, { "damageShape", 0.0f }, { "stereoLink", 0.68f }, { "softClip", 1.0f }, { "macroLink", 1.0f } } },
+    { "PLAY - Guitar Hook Skip", { { "clarity", .72f }, { "damage", .16f }, { "tracking", .18f }, { "jitterMacro", .06f }, { "mode", 3 }, { "macroLink", 1 }, { "tempoSync", 1 }, { "syncDivision", 2 }, { "syncTarget", 1 }, { "syncStrength", .52f }, { "syncProbability", .26f }, { "skipSliceDivision", 5 }, { "skipLengthDivision", 3 }, { "skipRetrigger", 0 }, { "mix", .82f }, { "ceiling", .90f }, { "outGain", .94f } } },
+    { "PLAY - Drum Fill Stutter", { { "clarity", .78f }, { "damage", .10f }, { "tracking", .12f }, { "jitterMacro", .04f }, { "mode", 3 }, { "macroLink", 1 }, { "tempoSync", 1 }, { "syncDivision", 3 }, { "syncTarget", 1 }, { "syncStrength", .44f }, { "syncProbability", .22f }, { "skipSliceDivision", 5 }, { "skipLengthDivision", 4 }, { "skipRetrigger", 0 }, { "mix", .76f }, { "ceiling", .90f }, { "outGain", .96f } } },
+    { "PLAY - Synth Disc Pulse", { { "clarity", .68f }, { "damage", .20f }, { "tracking", .16f }, { "jitterMacro", .08f }, { "mode", 2 }, { "damageShape", 0 }, { "macroLink", 1 }, { "tempoSync", 1 }, { "syncDivision", 3 }, { "syncTarget", 0 }, { "syncStrength", .38f }, { "syncProbability", .30f }, { "mix", .72f }, { "ceiling", .90f }, { "outGain", .94f } } },
+    { "PLAY - Sparse Disc Errors", { { "clarity", .82f }, { "damage", .12f }, { "tracking", .08f }, { "jitterMacro", .04f }, { "mode", 4 }, { "damageShape", 5 }, { "macroLink", 1 }, { "tempoSync", 1 }, { "syncDivision", 2 }, { "syncTarget", 2 }, { "syncStrength", .34f }, { "syncProbability", .16f }, { "skipSliceDivision", 5 }, { "skipLengthDivision", 3 }, { "mix", .84f }, { "ceiling", .92f }, { "outGain", .96f } } },
 };
 }
 
@@ -158,8 +162,9 @@ juce::Rectangle<int> CDEngineAudioProcessorEditor::Panel::contentBounds() const
 }
 
 void CDEngineAudioProcessorEditor::DiscDisplay::setState(
-    float leftIn, float rightIn, float leftOut, float rightOut, float rotation,
-    float damage, float stereoLink, bool damaged, bool skipping)
+    float leftIn, float rightIn, float leftOut, float rightOut, float resolvedDiscPhase,
+    float damage, float stereoLink, bool damaged, bool skipping,
+    float resolvedDamageProgress, float resolvedSkipProgress, float servoActivity)
 {
     const std::array<float, 2> nextInput { leftIn, rightIn };
     const std::array<float, 2> nextOutput { leftOut, rightOut };
@@ -168,17 +173,15 @@ void CDEngineAudioProcessorEditor::DiscDisplay::setState(
         input[(std::size_t) channel] += (nextInput[(std::size_t) channel] - input[(std::size_t) channel]) * 0.24f;
         output[(std::size_t) channel] += (nextOutput[(std::size_t) channel] - output[(std::size_t) channel]) * 0.24f;
     }
-    speed = rotation;
+    phase = resolvedDiscPhase;
     damageAmount = damage;
     linkAmount = stereoLink;
     damageActive = damaged;
     skipActive = skipping;
+    damageEventProgress = resolvedDamageProgress;
+    skipEventProgress = resolvedSkipProgress;
+    servo = servoActivity;
     repaint();
-}
-
-void CDEngineAudioProcessorEditor::DiscDisplay::advance()
-{
-    phase = std::fmod(phase + 0.0024f * speed, 1.0f);
 }
 
 void CDEngineAudioProcessorEditor::DiscDisplay::paint(juce::Graphics& g)
@@ -190,7 +193,7 @@ void CDEngineAudioProcessorEditor::DiscDisplay::paint(juce::Graphics& g)
     g.drawRoundedRectangle(outer.reduced(0.5f), 10.0f, 1.2f);
     g.setColour(juce::Colour(ink));
     g.setFont(uiFont(11.0f, true));
-    g.drawText("LOST AUDIO // OPTICAL TRANSPORT", outer.toNearestInt().reduced(16).removeFromTop(20), juce::Justification::centredLeft);
+    g.drawText("B&E DIGITAL // OPTICAL TRANSPORT", outer.toNearestInt().reduced(16).removeFromTop(20), juce::Justification::centredLeft);
 
     auto work = outer.reduced(18.0f).withTrimmedTop(24.0f).withTrimmedBottom(94.0f);
     const auto side = juce::jmin(work.getWidth(), work.getHeight()) * 0.86f;
@@ -255,7 +258,7 @@ void CDEngineAudioProcessorEditor::DiscDisplay::paint(juce::Graphics& g)
         { "CORRECT", !damageActive && damageAmount > 0.04f, amber },
         { "CONCEAL", damageActive, magenta },
         { "SKIP", skipActive, danger },
-        { "STEREO", std::abs(output[0] - output[1]) > 0.001f || linkAmount < 0.99f, cyan },
+        { "SERVO", servo > 0.01f, cyan },
     };
     for (const auto& state : states)
     {
@@ -265,6 +268,22 @@ void CDEngineAudioProcessorEditor::DiscDisplay::paint(juce::Graphics& g)
         g.setColour(juce::Colour(ink));
         g.setFont(uiFont(8.5f, true));
         g.drawText(state.name, row.toNearestInt().withTrimmedLeft(12), juce::Justification::centredLeft);
+    }
+    auto eventBars = juce::Rectangle<float>(outer.getX() + 18.0f, footer.getY() - 20.0f,
+                                             outer.getWidth() - 36.0f, 16.0f);
+    const struct { const char* name; float value; std::uint32_t colour; } events[] {
+        { "DAMAGE", damageEventProgress, magenta }, { "SKIP", skipEventProgress, danger }
+    };
+    for (const auto& event : events)
+    {
+        auto barArea = eventBars.removeFromLeft(eventBars.getWidth() / 2).reduced(4, 2);
+        g.setColour(juce::Colour(ink));
+        g.fillRect(barArea);
+        g.setColour(juce::Colour(event.colour));
+        g.fillRect(barArea.withWidth(barArea.getWidth() * juce::jlimit(0.0f, 1.0f, event.value)));
+        g.setColour(juce::Colour(bone));
+        g.setFont(uiFont(7.5f, true));
+        g.drawText(event.name, barArea.toNearestInt(), juce::Justification::centred);
     }
 }
 
@@ -327,7 +346,7 @@ void CDEngineAudioProcessorEditor::Choice::resized()
 {
     auto area = getLocalBounds();
     label.setBounds(area.removeFromTop(17));
-    combo.setBounds(area.reduced(1));
+    combo.setBounds(area.removeFromTop(32).reduced(1));
 }
 
 void CDEngineAudioProcessorEditor::Choice::setHint(const juce::String& hint)
@@ -342,7 +361,7 @@ CDEngineAudioProcessorEditor::CDEngineAudioProcessorEditor(CDEngineAudioProcesso
     setLookAndFeel(&lookAndFeel);
     setOpaque(true);
 
-    brandLabel.setText("B&E DIGITAL / LOST AUDIO", juce::dontSendNotification);
+    brandLabel.setText("B&E DIGITAL", juce::dontSendNotification);
     brandLabel.setColour(juce::Label::textColourId, juce::Colour(cyan));
     brandLabel.setFont(uiFont(10.0f, true));
     addAndMakeVisible(brandLabel);
@@ -360,58 +379,64 @@ CDEngineAudioProcessorEditor::CDEngineAudioProcessorEditor(CDEngineAudioProcesso
     addAndMakeVisible(profileLabel);
     presetBox.addItem("Custom", 1);
     for (int index = 0; index < (int) std::size(presets); ++index) presetBox.addItem(presets[index].name, index + 2);
-    presetBox.setSelectedId(1, juce::dontSendNotification);
+    const auto restoredPreset = apvts.state.getProperty("factoryPresetName", "Custom").toString();
+    auto restoredPresetId = 1;
+    for (int index = 0; index < (int) std::size(presets); ++index) if (restoredPreset == presets[index].name) restoredPresetId = index + 2;
+    presetBox.setSelectedId(restoredPresetId, juce::dontSendNotification);
     presetBox.onChange = [this]
     {
         if (presetBox.getSelectedId() >= 2) applyPreset(presetBox.getSelectedId() - 2);
     };
     addAndMakeVisible(presetBox);
 
-    for (auto* button : { &surfaceButton, &advancedButton })
+    for (auto* button : { &simpleButton, &advancedButton, &performerButton })
     {
         button->setClickingTogglesState(false);
         button->setColour(juce::TextButton::textColourOffId, juce::Colour(bone));
         addAndMakeVisible(*button);
     }
-    surfaceButton.onClick = [this] { showAdvanced(false); };
-    advancedButton.onClick = [this] { showAdvanced(true); };
+    simpleButton.onClick = [this] { showMode(EditorMode::simple); };
+    advancedButton.onClick = [this] { showMode(EditorMode::advanced); };
+    performerButton.onClick = [this] { showMode(EditorMode::performer); };
     statusLabel.setColour(juce::Label::textColourId, juce::Colour(dimBone));
     statusLabel.setFont(uiFont(9.0f, true));
     statusLabel.setJustificationType(juce::Justification::centredRight);
     addAndMakeVisible(statusLabel);
 
-    addAndMakeVisible(surfacePage);
+    addAndMakeVisible(discDisplay);
+    addAndMakeVisible(simplePage);
     addAndMakeVisible(advancedPage);
-    surfacePage.addAndMakeVisible(discDisplay);
-    for (auto* panelComponent : { &characterPanel, &deckPanel }) surfacePage.addAndMakeVisible(*panelComponent);
+    addAndMakeVisible(performerPage);
+    for (auto* panelComponent : { &characterPanel, &deckPanel }) simplePage.addAndMakeVisible(*panelComponent);
     for (auto* panelComponent : { &decoderPanel, &burstPanel, &trackingPanel, &mechanicsPanel, &stereoPanel, &protectionPanel })
         advancedPage.addAndMakeVisible(*panelComponent);
+    for (auto* panelComponent : { &performanceEventPanel, &performanceClockPanel, &performanceTrackingPanel, &performanceOutputPanel })
+        performerPage.addAndMakeVisible(*panelComponent);
     for (auto* button : { &damageButton, &skipButton })
     {
         button->setColour(juce::TextButton::textColourOffId, juce::Colour(bone));
         button->setColour(juce::TextButton::buttonColourId, juce::Colour(0xff3b2427));
-        surfacePage.addAndMakeVisible(*button);
+        addAndMakeVisible(*button);
     }
-    damageButton.onClick = [this] { processor.triggerDamage(); };
-    skipButton.onClick = [this] { processor.triggerSkip(); };
-    damageButton.setTooltip("Force a full-strength sector failure now.");
-    skipButton.setTooltip("Force the optical pickup to repeat an earlier section once enough history exists.");
+    damageButton.onClick = [this] { processor.triggerDamage(getParameter("syncStrength")); };
+    skipButton.onClick = [this] { processor.triggerSkip(getParameter("syncStrength")); };
+    damageButton.setTooltip("Trigger a sector failure at the current FORCE setting.");
+    skipButton.setTooltip("Trigger an authentic skip, or the synchronized slice/hold pattern when HOST CLOCK is enabled.");
 
-    addChoice(characterPanel, "mode", "CONCEALMENT", "Choose how missing sectors are reconstructed. This selection is never changed by macros or the timer.");
+    addChoice(characterPanel, "mode", "CONCEALMENT", "Choose how missing sectors are reconstructed.");
     addChoice(characterPanel, "damageShape", "DAMAGE SHAPE", "Radial scratches recur each revolution; other shapes alter the sector-loss geometry.");
-    addKnob(characterPanel, "clarity", "CLARITY", "Decoder health and readable-sector quality.");
-    addKnob(characterPanel, "damage", "DAMAGE", "Strength and frequency of optical read faults.");
-    addKnob(characterPanel, "tracking", "TRACKING", "Pickup loss, repeats and anti-skip failure.");
-    addKnob(characterPanel, "jitterMacro", "JITTER", "Transport clock instability and timing blur.");
+    addKnob(characterPanel, "errorRate", "FAULT CHANCE", "Rate of uncorrelated sector read failures.");
+    addKnob(characterPanel, "scratchAmt", "FAULT DEPTH", "Severity of caught scratches and pits.");
+    addKnob(characterPanel, "trackingRate", "SKIP CHANCE", "Rate of tracking-loss repeats.");
+    addKnob(characterPanel, "repeatMs", "LOOP SIZE", "Length of repeated history.");
 
     addKnob(deckPanel, "carComp", "CAR COMP", "Three-band car-stereo levelling and density.");
-    addKnob(deckPanel, "stereoLink", "STEREO LINK", "How strongly failures affect both channels together without summing them.");
-    addKnob(deckPanel, "stereoWidth", "WIDTH", "Post-deck mid/side stereo width.");
+    addKnob(deckPanel, "correction", "CORRECTION", "Chance that the decoder recovers damage before concealment.");
+    addKnob(deckPanel, "servoNoise", "SERVO", "Audible pickup and spindle search mechanism.");
     addKnob(deckPanel, "inputGain", "INPUT dB", "Input trim before the optical transport.");
     addKnob(deckPanel, "mix", "MIX", "Latency-aligned dry/wet blend.");
     addKnob(deckPanel, "outGain", "OUTPUT", "Final deck output trim.");
 
-    addSwitch(decoderPanel, "macroLink", "MACROS DRIVE DETAIL", "When enabled, surface macros calculate protected advanced settings.");
     addKnob(decoderPanel, "correction", "CORRECTION", "Chance that the decoder recovers a damaged sector before concealment.", true);
     addKnob(decoderPanel, "interpolationMs", "INTERPOLATE", "Short repair window before a terminal concealment strategy.", true);
     addKnob(burstPanel, "errorRate", "ERROR RATE", "Uncorrelated sector read failure rate.", true);
@@ -426,6 +451,10 @@ CDEngineAudioProcessorEditor::CDEngineAudioProcessorEditor(CDEngineAudioProcesso
     addKnob(mechanicsPanel, "jitterMs", "JITTER ms", "Sample-time wander depth.", true);
     addKnob(mechanicsPanel, "jitterRate", "JITTER RATE", "Clock-instability modulation rate.", true);
     addKnob(mechanicsPanel, "servoNoise", "SERVO BED", "Audible pickup and spindle search mechanism.", true);
+    addSwitch(mechanicsPanel, "tempoSync", "TEMPO SYNC", "Trigger damage or bounded musical skip patterns from the host grid.");
+    addChoice(mechanicsPanel, "syncDivision", "TRIGGER GRID", "Straight, triplet, dotted, or bar-length event spacing.");
+    addChoice(mechanicsPanel, "syncTarget", "SYNC EVENT", "Trigger damage, skips, or alternate between both.");
+    addKnob(mechanicsPanel, "syncStrength", "SYNC FORCE", "Intensity of each grid-triggered event.");
     addKnob(stereoPanel, "stereoLink", "LINK", "Shared error timing with independent channel samples.");
     addKnob(stereoPanel, "stereoWidth", "WIDTH", "Mid/side width after concealment.");
     addKnob(stereoPanel, "mix", "MIX", "Latency-aligned dry/wet balance.");
@@ -434,10 +463,31 @@ CDEngineAudioProcessorEditor::CDEngineAudioProcessorEditor(CDEngineAudioProcesso
     addKnob(protectionPanel, "ceiling", "CEILING", "Shared stereo limiter ceiling.", true);
     addKnob(protectionPanel, "outGain", "OUTPUT", "Final gain trim after macro compensation.");
 
+    addChoice(performanceEventPanel, "mode", "EVENT RESULT", "Concealment result used by triggered damage events.");
+    addChoice(performanceEventPanel, "damageShape", "DAMAGE SHAPE", "Geometry used by free-running and triggered damage.");
+    addKnob(performanceEventPanel, "scratchAmt", "EVENT DEPTH", "Severity of a caught or triggered defect.");
+    addKnob(performanceEventPanel, "burstMs", "DAMAGE LENGTH", "Free-time duration of a damage burst.");
+    addSwitch(performanceClockPanel, "tempoSync", "HOST CLOCK", "Trigger monophonic events from exact host-grid boundaries without creating a backlog.");
+    addChoice(performanceClockPanel, "syncDivision", "TRIGGER GRID", "When a new event is eligible to begin.");
+    addChoice(performanceClockPanel, "syncTarget", "EVENT TYPE", "Trigger damage, musical skips, or alternate between both.");
+    addKnob(performanceClockPanel, "syncStrength", "FORCE", "Intensity of each clocked event.");
+    addKnob(performanceClockPanel, "syncProbability", "PROBABILITY", "Chance that each eligible clock step fires.");
+    addKnob(performanceTrackingPanel, "errorRate", "FREE DAMAGE", "Unclocked sector-failure rate.");
+    addKnob(performanceTrackingPanel, "trackingRate", "FREE SKIPS", "Unclocked tracking-loss rate.");
+    addKnob(performanceTrackingPanel, "trackingMs", "JUMP BACK", "How far the pickup jumps into history.");
+    addChoice(performanceTrackingPanel, "skipSliceDivision", "SKIP SLICE", "Musical length of the immediately preceding audio fragment that repeats.");
+    addChoice(performanceTrackingPanel, "skipLengthDivision", "SKIP HOLD", "Total musical duration of the bounded repetition event.");
+    addChoice(performanceTrackingPanel, "skipRetrigger", "RETRIGGER", "Ignore active is protected; restart active deliberately interrupts the current loop.");
+    addKnob(performanceOutputPanel, "correction", "RECOVERY", "Chance of repair before terminal concealment.");
+    addKnob(performanceOutputPanel, "servoNoise", "SERVO BED", "Audible pickup-search mechanism.");
+    addKnob(performanceOutputPanel, "mix", "MIX", "Latency-aligned dry/wet balance.");
+    addKnob(performanceOutputPanel, "outGain", "OUTPUT", "Final deck trim.");
+    addKnob(performanceOutputPanel, "ceiling", "CEILING", "Shared stereo safety ceiling.");
+
     setResizable(true, true);
     setResizeLimits(900, 620, 1600, 1000);
     setSize(1120, 720);
-    showAdvanced(false);
+    showMode(EditorMode::simple);
     startTimerHz(30);
 }
 
@@ -450,7 +500,11 @@ CDEngineAudioProcessorEditor::~CDEngineAudioProcessorEditor()
 CDEngineAudioProcessorEditor::Knob* CDEngineAudioProcessorEditor::addKnob(
     Panel& owner, const juce::String& id, const juce::String& text, const juce::String& hint, bool linked)
 {
-    auto control = std::make_unique<Knob>(apvts, id, text, [this] { markCustom(); });
+    auto control = std::make_unique<Knob>(apvts, id, text, [this, linked]
+    {
+        if (linked) processor.materialiseLegacyMacros();
+        markCustom();
+    });
     control->setHint(hint);
     auto* raw = control.get();
     owner.addAndMakeVisible(*raw);
@@ -504,13 +558,15 @@ void CDEngineAudioProcessorEditor::layoutPanel(Panel& owner, int columns)
     }
 }
 
-void CDEngineAudioProcessorEditor::showAdvanced(bool shouldShow)
+void CDEngineAudioProcessorEditor::showMode(EditorMode mode)
 {
-    showingAdvanced = shouldShow;
-    surfacePage.setVisible(!showingAdvanced);
-    advancedPage.setVisible(showingAdvanced);
-    surfaceButton.setToggleState(!showingAdvanced, juce::dontSendNotification);
-    advancedButton.setToggleState(showingAdvanced, juce::dontSendNotification);
+    editorMode = mode;
+    simplePage.setVisible(editorMode == EditorMode::simple);
+    advancedPage.setVisible(editorMode == EditorMode::advanced);
+    performerPage.setVisible(editorMode == EditorMode::performer);
+    simpleButton.setToggleState(editorMode == EditorMode::simple, juce::dontSendNotification);
+    advancedButton.setToggleState(editorMode == EditorMode::advanced, juce::dontSendNotification);
+    performerButton.setToggleState(editorMode == EditorMode::performer, juce::dontSendNotification);
     resized();
 }
 
@@ -535,30 +591,50 @@ void CDEngineAudioProcessorEditor::applyPreset(int index)
     if (index < 0 || index >= (int) std::size(presets)) return;
     suppressPresetChanges = true;
     resetParameters();
-    for (const auto& setting : presets[index].values) setParameter(setting.first, setting.second);
+    // The legacy macro path treated 0.98 as unity for its output compensation.
+    // Resolve old factory recipes from that exact baseline, then store the
+    // resulting canonical output value.
+    setParameter("outGain", 0.98f);
+    for (const auto& setting : presets[index].values) if (juce::String(setting.first) != "macroLink") setParameter(setting.first, setting.second);
+    setParameter("macroLink", 1.0f);
+    processor.materialiseLegacyMacros();
+    for (const auto& setting : presets[index].values)
+    {
+        const auto id = juce::String(setting.first);
+        if (id != "clarity" && id != "damage" && id != "tracking" && id != "jitterMacro" && id != "macroLink")
+            setParameter(setting.first, setting.second);
+    }
+    setParameter("macroLink", 0.0f);
+    apvts.state.setProperty("factoryPresetName", presets[index].name, nullptr);
     suppressPresetChanges = false;
 }
 
 void CDEngineAudioProcessorEditor::markCustom()
 {
-    if (!suppressPresetChanges) presetBox.setSelectedId(1, juce::dontSendNotification);
+    if (!suppressPresetChanges)
+    {
+        presetBox.setSelectedId(1, juce::dontSendNotification);
+        apvts.state.setProperty("factoryPresetName", "Custom", nullptr);
+    }
 }
 
 void CDEngineAudioProcessorEditor::timerCallback()
 {
-    const auto macroLink = getParameter("macroLink") > 0.5f;
     for (auto* control : linkedControls)
     {
-        control->setEnabled(!macroLink);
-        control->setAlpha(macroLink ? 0.48f : 1.0f);
+        control->setEnabled(true);
+        control->setAlpha(1.0f);
     }
     discDisplay.setState(processor.inputPeak(0), processor.inputPeak(1), processor.outputPeak(0), processor.outputPeak(1),
-                         getParameter("rotationHz"), getParameter("damage"), getParameter("stereoLink"),
-                         processor.damageActive(), processor.skipActive());
-    discDisplay.advance();
-    if (processor.skipActive()) statusLabel.setText("TRACKING LOST / HISTORY REPEAT", juce::dontSendNotification);
+                         processor.discPhase(), getParameter("scratchAmt"), getParameter("stereoLink"),
+                         processor.damageActive(), processor.skipActive(), processor.damageProgress(),
+                         processor.skipProgress(), processor.servoActivity());
+    if (processor.skipActive() && getParameter("tempoSync") > 0.5f) statusLabel.setText("MUSICAL SKIP / BOUNDED HISTORY LOOP", juce::dontSendNotification);
+    else if (processor.skipActive()) statusLabel.setText("TRACKING LOST / AUTHENTIC HISTORY REPEAT", juce::dontSendNotification);
     else if (processor.damageActive()) statusLabel.setText("SECTOR FAILURE / CONCEALMENT ACTIVE", juce::dontSendNotification);
-    else statusLabel.setText(macroLink ? "120 SAMPLE STEREO PATH / PROTECTED MACROS" : "120 SAMPLE STEREO PATH / DETAIL UNLOCKED", juce::dontSendNotification);
+    else if (getParameter("tempoSync") > 0.5f) statusLabel.setText("TEMPO SYNC ARMED / HOST GRID EVENTS", juce::dontSendNotification);
+    else if (processor.legacyMacrosActive()) statusLabel.setText("LEGACY MACRO PATCH / SOUND PRESERVED", juce::dontSendNotification);
+    else statusLabel.setText("CANONICAL PARAMETERS / 120 SAMPLE STEREO PATH", juce::dontSendNotification);
 }
 
 void CDEngineAudioProcessorEditor::paint(juce::Graphics& g)
@@ -581,39 +657,46 @@ void CDEngineAudioProcessorEditor::resized()
 {
     auto area = getLocalBounds().reduced(16);
     auto header = area.removeFromTop(86);
-    auto identity = header.removeFromLeft(juce::jmin(520, header.getWidth() / 2));
+    const auto profileWidth = juce::jlimit(205, 270, (int) std::round(header.getWidth() * 0.24f));
+    auto profile = header.removeFromRight(profileWidth);
+    header.removeFromRight(12);
+    auto navColumn = header.removeFromRight(300);
+    auto identity = header;
     brandLabel.setBounds(identity.removeFromTop(17));
     titleLabel.setBounds(identity.removeFromTop(36));
     subtitleLabel.setBounds(identity.removeFromTop(18));
-    auto profile = header.removeFromRight(juce::jmin(300, header.getWidth()));
     profileLabel.setBounds(profile.removeFromTop(17));
     presetBox.setBounds(profile.removeFromTop(32));
-    header.removeFromRight(14);
-    auto nav = header.removeFromBottom(35);
-    surfaceButton.setBounds(nav.removeFromLeft(108));
-    nav.removeFromLeft(8);
-    advancedButton.setBounds(nav.removeFromLeft(108));
-    statusLabel.setBounds(header);
+    auto nav = navColumn.removeFromBottom(35);
+    const auto modeWidth = (nav.getWidth() - 12) / 3;
+    simpleButton.setBounds(nav.removeFromLeft(modeWidth));
+    nav.removeFromLeft(6);
+    advancedButton.setBounds(nav.removeFromLeft(modeWidth));
+    nav.removeFromLeft(6);
+    performerButton.setBounds(nav);
+    statusLabel.setBounds(navColumn);
 
-    surfacePage.setBounds(area);
-    advancedPage.setBounds(area);
-    if (!showingAdvanced)
+    auto triggerRow = area.removeFromBottom(48);
+    damageButton.setBounds(triggerRow.removeFromLeft(triggerRow.getWidth() / 2).reduced(6, 5));
+    skipButton.setBounds(triggerRow.reduced(6, 5));
+    auto displayArea = area.removeFromLeft((int) std::round(area.getWidth() * 0.35f)).reduced(4, 4);
+    discDisplay.setBounds(displayArea);
+    auto controls = area.reduced(4, 4);
+    simplePage.setBounds(controls);
+    advancedPage.setBounds(controls);
+    performerPage.setBounds(controls);
+
+    if (editorMode == EditorMode::simple)
     {
-        auto page = surfacePage.getLocalBounds();
-        auto triggerRow = page.removeFromBottom(48);
-        damageButton.setBounds(triggerRow.removeFromLeft(triggerRow.getWidth() / 2).reduced(6, 5));
-        skipButton.setBounds(triggerRow.reduced(6, 5));
-        auto displayArea = page.removeFromLeft((int) std::round(page.getWidth() * 0.45f)).reduced(4, 4);
-        discDisplay.setBounds(displayArea);
-        auto controls = page.reduced(4, 4);
-        characterPanel.setBounds(controls.removeFromTop(controls.getHeight() / 2).reduced(3));
-        deckPanel.setBounds(controls.reduced(3));
+        auto page = simplePage.getLocalBounds();
+        characterPanel.setBounds(page.removeFromTop(page.getHeight() / 2).reduced(3));
+        deckPanel.setBounds(page.reduced(3));
         layoutPanel(characterPanel, 3);
         layoutPanel(deckPanel, 3);
     }
-    else
+    else if (editorMode == EditorMode::advanced)
     {
-        auto page = advancedPage.getLocalBounds().reduced(3);
+        const auto page = advancedPage.getLocalBounds().reduced(3);
         const auto columnWidth = page.getWidth() / 3;
         const auto rowHeight = page.getHeight() / 2;
         Panel* panels[] { &decoderPanel, &burstPanel, &trackingPanel, &mechanicsPanel, &stereoPanel, &protectionPanel };
@@ -627,5 +710,21 @@ void CDEngineAudioProcessorEditor::resized()
         layoutPanel(mechanicsPanel, 2);
         layoutPanel(stereoPanel, 2);
         layoutPanel(protectionPanel, 2);
+    }
+    else
+    {
+        const auto page = performerPage.getLocalBounds().reduced(3);
+        const auto columnWidth = page.getWidth() / 2;
+        const auto rowHeight = page.getHeight() / 2;
+        Panel* panels[] { &performanceEventPanel, &performanceClockPanel,
+                          &performanceTrackingPanel, &performanceOutputPanel };
+        for (int index = 0; index < 4; ++index)
+            panels[index]->setBounds(juce::Rectangle<int>(page.getX() + (index % 2) * columnWidth,
+                                                           page.getY() + (index / 2) * rowHeight,
+                                                           columnWidth, rowHeight).reduced(4));
+        layoutPanel(performanceEventPanel, 2);
+        layoutPanel(performanceClockPanel, 2);
+        layoutPanel(performanceTrackingPanel, 2);
+        layoutPanel(performanceOutputPanel, 3);
     }
 }

@@ -1,67 +1,112 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include <BinaryData.h>
+#include <lost_audio/core/TempoSync.h>
+
+#include <algorithm>
 #include <cmath>
 
-namespace
-{
-float clampf(float x, float lo, float hi)
-{
-    return juce::jlimit(lo, hi, x);
-}
-
-float softClip(float x)
-{
-    return std::tanh(x);
-}
-}
+namespace { float clamp01(float value) noexcept { return juce::jlimit(0.0f, 1.0f, value); } }
 
 CamcorderEngineAudioProcessor::CamcorderEngineAudioProcessor()
     : AudioProcessor(BusesProperties().withInput("Input", juce::AudioChannelSet::stereo(), true)
                                      .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts(*this, nullptr, "PARAMS", createParameterLayout()),
-      rng(0x43414d45)
+      apvts(*this, nullptr, "PARAMS", createParameterLayout())
 {
+    apvts.state.setProperty("engineId", "camcorder", nullptr); apvts.state.setProperty("schemaVersion", 3, nullptr);
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout CamcorderEngineAudioProcessor::createParameterLayout()
 {
-    std::vector<std::unique_ptr<juce::RangedAudioParameter>> p;
-    auto n01 = juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f);
-
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("coverage", "Coverage", n01, 0.35f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("movement", "Movement", n01, 0.25f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("corruption", "Corruption", n01, 0.18f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("agc", "AGC Drive", n01, 0.35f));
+    std::vector<std::unique_ptr<juce::RangedAudioParameter>> p; const auto n01 = juce::NormalisableRange<float>(0.0f, 1.0f, .001f);
+    // Preserve the V1 IDs and ordering for automation and project recall.
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("coverage", "Coverage", n01, .35f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("movement", "Movement", n01, .25f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("corruption", "Corruption", n01, .18f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("agc", "AGC Drive", n01, .35f));
     p.push_back(std::make_unique<juce::AudioParameterBool>("wind", "Wind", false));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("windLevel", "Wind Level", juce::NormalisableRange<float>(0.0f, 1.5f, 0.001f), 0.95f));
-
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("hpHz", "HP", juce::NormalisableRange<float>(10.0f, 280.0f, 1.0f), 55.0f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("lpHz", "LP", juce::NormalisableRange<float>(900.0f, 22000.0f, 1.0f), 9200.0f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("boxDb", "Box dB", juce::NormalisableRange<float>(0.0f, 14.0f, 0.1f), 3.2f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("boxHz", "Box Hz", juce::NormalisableRange<float>(650.0f, 4200.0f, 1.0f), 1650.0f));
-
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("agcAmt", "AGC Amt", n01, 0.55f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("agcSpeed", "AGC Speed", n01, 0.45f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("clip", "Clip", n01, 0.25f));
-
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("crush", "Crush", n01, 0.12f));
-    p.push_back(std::make_unique<juce::AudioParameterInt>("bits", "Bits", 4, 16, 12));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("rate", "Rate", juce::NormalisableRange<float>(8000.0f, 48000.0f, 1.0f), 24000.0f));
-
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("drop", "Drop", n01, 0.18f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("dropMs", "Drop Ms", juce::NormalisableRange<float>(1.0f, 500.0f, 1.0f), 28.0f));
-    p.push_back(std::make_unique<juce::AudioParameterChoice>("dropMode", "Drop Mode", juce::StringArray { "Hold", "Mute", "Interp", "Repeat" }, 0));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("repeatMs", "Repeat Ms", juce::NormalisableRange<float>(1.0f, 600.0f, 1.0f), 48.0f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("chirp", "Chirp", n01, 0.15f));
-
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("handling", "Handling", n01, 0.22f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("rub", "Rub", n01, 0.18f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("hiss", "Hiss", n01, 0.12f));
-
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("ceiling", "Ceiling", juce::NormalisableRange<float>(0.2f, 1.0f, 0.001f), 0.92f));
-    p.push_back(std::make_unique<juce::AudioParameterFloat>("outGain", "Out Gain", juce::NormalisableRange<float>(0.0f, 1.5f, 0.01f), 0.98f));
-
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("windLevel", "Wind Level", juce::NormalisableRange<float>(0.0f, 1.5f, .001f), .80f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("hpHz", "High-pass", juce::NormalisableRange<float>(10.0f, 1200.0f, 1.0f), 96.0f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("lpHz", "Low-pass", juce::NormalisableRange<float>(800.0f, 22000.0f, 1.0f), 10492.0f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("boxDb", "Body Resonance", juce::NormalisableRange<float>(0.0f, 14.0f, .1f), 4.0f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("boxHz", "Body Frequency", juce::NormalisableRange<float>(650.0f, 4200.0f, 1.0f), 1846.0f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("agcAmt", "AGC Amount", n01, .519f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("agcSpeed", "AGC Speed", n01, .385f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("clip", "Preamp Clip", n01, .239f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("crush", "Converter Damage", n01, .098f));
+    p.push_back(std::make_unique<juce::AudioParameterInt>("bits", "Converter Bits", 4, 16, 13));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("rate", "Converter Rate", juce::NormalisableRange<float>(8000.0f, 48000.0f, 1.0f), 29608.0f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("drop", "Dropouts", n01, .085f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("dropMs", "Dropout Length", juce::NormalisableRange<float>(1.0f, 500.0f, 1.0f), 25.0f));
+    p.push_back(std::make_unique<juce::AudioParameterChoice>("dropMode", "Concealment", juce::StringArray { "Hold", "Mute", "Interpolate", "Repeat" }, 0));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("repeatMs", "Repeat Length", juce::NormalisableRange<float>(1.0f, 600.0f, 1.0f), 38.0f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("chirp", "Codec Chirp", n01, .065f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("handling", "Handling", n01, .168f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("rub", "Body Rub", n01, .132f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("hiss", "Mic Hiss", n01, .138f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("ceiling", "Ceiling", juce::NormalisableRange<float>(.2f, 1.0f, .001f), .914f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("outGain", "Output", juce::NormalisableRange<float>(0.0f, 1.5f, .01f), .97f));
+    // V2 additions are appended; Surface mapping never rewrites Wind or Concealment.
+    p.push_back(std::make_unique<juce::AudioParameterBool>("macroLink", "Legacy Macro Link", false));
+    p.push_back(std::make_unique<juce::AudioParameterChoice>("format", "Recording Format", juce::StringArray { "VHS-C", "Video8 / Hi8", "MiniDV", "Digicam", "Action Cam" }, 2));
+    p.push_back(std::make_unique<juce::AudioParameterChoice>("micModel", "Camera Microphone", juce::StringArray { "Electret", "Cheap Mono", "Stereo Capsule", "Waterproof", "Shotgun" }, 0));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("agcPump", "AGC Pump", n01, .358f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("flutter", "Transport Flutter", n01, .155f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("motorBleed", "Motor Bleed", n01, .155f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("inputGain", "Input Gain", juce::NormalisableRange<float>(-24.0f, 24.0f, .1f), 0.0f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("mix", "Mix", n01, 1.0f));
+    p.push_back(std::make_unique<juce::AudioParameterBool>("camBedEnable", "Captured Camera Bed", false));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("camBedLevel", "Camera Bed Level", n01, .24f));
+    const juce::StringArray divisions { "1 Bar", "1/2", "1/4", "1/8", "1/16", "1/32", "1/4T", "1/8T", "1/16T", "1/8D", "1/16D" };
+    p.push_back(std::make_unique<juce::AudioParameterBool>("dropTempoSync", "Clock Dropouts", false));
+    p.push_back(std::make_unique<juce::AudioParameterChoice>("dropDivision", "Dropout Grid", divisions, 2));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("dropProbability", "Dropout Probability", n01, .40f));
+    p.push_back(std::make_unique<juce::AudioParameterBool>("dropLengthSync", "Clock Drop Length", false));
+    p.push_back(std::make_unique<juce::AudioParameterChoice>("dropLengthDivision", "Dropout Length Grid", divisions, 4));
+    p.push_back(std::make_unique<juce::AudioParameterBool>("faultTempoSync", "Clock Codec Faults", false));
+    p.push_back(std::make_unique<juce::AudioParameterChoice>("faultDivision", "Codec Fault Grid", divisions, 3));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("faultProbability", "Codec Fault Probability", n01, .30f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("faultStrength", "Codec Fault Strength", n01, .65f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("faultDurationMs", "Codec Fault Length", juce::NormalisableRange<float>(4.0f, 800.0f, 1.0f), 80.0f));
+    p.push_back(std::make_unique<juce::AudioParameterBool>("faultLengthSync", "Clock Fault Length", false));
+    p.push_back(std::make_unique<juce::AudioParameterChoice>("faultLengthDivision", "Codec Fault Length Grid", divisions, 4));
+    p.push_back(std::make_unique<juce::AudioParameterBool>("handlingTempoSync", "Clock Body Hits", false));
+    p.push_back(std::make_unique<juce::AudioParameterChoice>("handlingDivision", "Body Hit Grid", divisions, 2));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("handlingProbability", "Body Hit Probability", n01, .35f));
+    p.push_back(std::make_unique<juce::AudioParameterFloat>("handlingStrength", "Body Hit Strength", n01, .55f));
+    p.push_back(std::make_unique<juce::AudioParameterBool>("flutterTempoSync", "Clock Flutter", false));
+    p.push_back(std::make_unique<juce::AudioParameterChoice>("flutterDivision", "Flutter Cycle", divisions, 0));
     return { p.begin(), p.end() };
+}
+
+float CamcorderEngineAudioProcessor::value(const char* id) const noexcept
+{
+    if (const auto* raw = apvts.getRawParameterValue(id)) return raw->load(std::memory_order_relaxed);
+    return 0.0f;
+}
+bool CamcorderEngineAudioProcessor::legacyMacrosActive() const noexcept { return value("macroLink") > .5f; }
+void CamcorderEngineAudioProcessor::materialiseLegacyMacros()
+{
+    if (!legacyMacrosActive()) return;
+    const auto format = (lost_audio::core::CamcorderFormat) juce::jlimit(0, 4, (int) std::lround(value("format")));
+    const auto mic = (lost_audio::core::CameraMic) juce::jlimit(0, 4, (int) std::lround(value("micModel")));
+    const auto t = lost_audio::core::mapCamcorderMacros(format, mic, value("coverage"), value("movement"), value("corruption"), value("agc"));
+    const auto set = [this] (const char* id, float plain) { if (auto* p = apvts.getParameter(id)) p->setValueNotifyingHost(p->convertTo0to1(plain)); };
+    set("hpHz", t.highPassHz); set("lpHz", t.lowPassHz); set("boxDb", t.bodyDb); set("boxHz", t.bodyHz);
+    set("agcAmt", t.agcAmount); set("agcSpeed", t.agcSpeed); set("agcPump", t.agcPump); set("clip", t.clip);
+    set("crush", t.crush); set("bits", (float) t.bits); set("rate", t.converterRateHz); set("flutter", t.flutter);
+    set("drop", t.dropout); set("dropMs", t.dropoutMs); set("repeatMs", t.repeatMs); set("chirp", t.chirp);
+    set("handling", t.handling); set("rub", t.rub); set("hiss", t.hiss); set("motorBleed", t.motorBleed);
+    set("outGain", t.outputGain); set("ceiling", t.ceiling); set("macroLink", 0.0f);
+}
+std::array<float, 64> CamcorderEngineAudioProcessor::outputTrace() const noexcept
+{
+    std::array<float, 64> result {}; for (std::size_t i = 0; i < result.size(); ++i) result[i] = trace[i].load(std::memory_order_relaxed); return result;
+}
+float CamcorderEngineAudioProcessor::syncedDuration(const char* syncId, const char* divisionId, const char* millisecondsId, double bpm) const noexcept
+{
+    if (value(syncId) > .5f) return lost_audio::core::tempoDivisionMilliseconds(bpm, (int) value(divisionId)) * .001f;
+    return value(millisecondsId) * .001f;
 }
 
 const juce::String CamcorderEngineAudioProcessor::getName() const { return JucePlugin_Name; }
@@ -75,358 +120,166 @@ void CamcorderEngineAudioProcessor::setCurrentProgram(int) {}
 const juce::String CamcorderEngineAudioProcessor::getProgramName(int) { return {}; }
 void CamcorderEngineAudioProcessor::changeProgramName(int, const juce::String&) {}
 
-float CamcorderEngineAudioProcessor::nextWhite()
+std::vector<float> CamcorderEngineAudioProcessor::decodeBed(const void* data, std::size_t bytes, double targetRate) const
 {
-    return unif(rng) * 2.0f - 1.0f;
+    if (data == nullptr || bytes == 0 || targetRate <= 0.0) return {};
+    juce::AudioFormatManager formats; formats.registerBasicFormats();
+    auto stream = std::make_unique<juce::MemoryInputStream>(data, bytes, false);
+    std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(std::move(stream)));
+    if (!reader || reader->lengthInSamples <= 0 || reader->numChannels == 0) return {};
+    const auto length = (int) reader->lengthInSamples;
+    juce::AudioBuffer<float> source((int) reader->numChannels, length); reader->read(&source, 0, length, 0, true, true);
+    const auto ratio = targetRate / reader->sampleRate;
+    const auto outputLength = juce::jmax(1, (int) std::floor(length * ratio));
+    std::vector<float> output((std::size_t) outputLength);
+    for (int i = 0; i < outputLength; ++i)
+    {
+        const auto position = (float) i / (float) ratio; const auto a = juce::jlimit(0, length - 1, (int) position), b = juce::jlimit(0, length - 1, a + 1); const auto fraction = position - (float) a;
+        float sample = 0; for (unsigned channel = 0; channel < reader->numChannels; ++channel) sample += source.getSample((int) channel, a) + (source.getSample((int) channel, b) - source.getSample((int) channel, a)) * fraction;
+        output[(std::size_t) i] = sample / (float) reader->numChannels;
+    }
+    return output;
+}
+
+float CamcorderEngineAudioProcessor::readBed(const std::vector<float>& bed, float& position) const noexcept
+{
+    if (bed.empty()) return 0.0f; const auto a = (std::size_t) position; const auto b = (a + 1u) % bed.size(); const auto fraction = position - (float) a;
+    const auto sample = bed[a] + (bed[b] - bed[a]) * fraction; position += 1.0f; if (position >= (float) bed.size()) position -= (float) bed.size(); return sample;
 }
 
 void CamcorderEngineAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
-    juce::ignoreUnused(samplesPerBlock);
-    st = {};
-    st.ring.assign((size_t) juce::jmax(1024, (int) std::ceil(sampleRate * 0.35)), 0.0f);
-    updateFilters(sampleRate);
+    juce::ignoreUnused(samplesPerBlock); camcorderCore.prepare(sampleRate, (std::size_t) juce::jlimit(1, 2, getTotalNumInputChannels()));
+    camcorderCore.reset(0x43414d45u); setLatencySamples(camcorderCore.latencySamples());
+    const void* cameraData[] { BinaryData::camerabed1_wav, BinaryData::camerabed2_wav,
+                               BinaryData::camerabed3_wav, BinaryData::camerabed4_wav };
+    const int cameraBytes[] { BinaryData::camerabed1_wavSize, BinaryData::camerabed2_wavSize,
+                              BinaryData::camerabed3_wavSize, BinaryData::camerabed4_wavSize };
+    const void* windData[] { BinaryData::windbed1_wav, BinaryData::windbed2_wav,
+                             BinaryData::windbed3_wav, BinaryData::windbed4_wav };
+    const int windBytes[] { BinaryData::windbed1_wavSize, BinaryData::windbed2_wavSize,
+                            BinaryData::windbed3_wavSize, BinaryData::windbed4_wavSize };
+    for (int i = 0; i < 4; ++i)
+    {
+        cameraBeds[(std::size_t) i] = decodeBed(cameraData[i], (std::size_t) cameraBytes[i], sampleRate);
+        windBeds[(std::size_t) i] = decodeBed(windData[i], (std::size_t) windBytes[i], sampleRate);
+    }
+    cameraBedPositions.fill(0.0f); windBedPositions.fill(0.0f); bedChunk.resize((std::size_t) juce::jmax(1, samplesPerBlock));
+    for (auto& peak : inputPeaks) peak.store(0); for (auto& peak : outputPeaks) peak.store(0);
+    for (auto& point : trace) point.store(0); pendingDropTrigger.store(false); pendingFaultTrigger.store(false); pendingHandlingTrigger.store(false); currentBpm = 120.0;
 }
-
 void CamcorderEngineAudioProcessor::releaseResources() {}
-
 bool CamcorderEngineAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const
 {
-    const auto in = layouts.getMainInputChannelSet();
-    const auto out = layouts.getMainOutputChannelSet();
-    if (in != out)
-        return false;
-    return in == juce::AudioChannelSet::mono() || in == juce::AudioChannelSet::stereo();
+    const auto input = layouts.getMainInputChannelSet(); return input == layouts.getMainOutputChannelSet()
+        && (input == juce::AudioChannelSet::mono() || input == juce::AudioChannelSet::stereo());
 }
 
-void CamcorderEngineAudioProcessor::updateFilters(double sampleRate)
+lost_audio::core::CamcorderParameters CamcorderEngineAudioProcessor::readParameters(double bpm) const noexcept
 {
-    const auto hpHz = apvts.getRawParameterValue("hpHz")->load();
-    const auto lpHz = apvts.getRawParameterValue("lpHz")->load();
-    const auto boxDb = apvts.getRawParameterValue("boxDb")->load();
-    const auto boxHz = apvts.getRawParameterValue("boxHz")->load();
-
-    auto hp = juce::dsp::IIR::Coefficients<float>::makeHighPass(sampleRate, clampf(hpHz, 10.0f, 20000.0f), 0.707f);
-    auto lp = juce::dsp::IIR::Coefficients<float>::makeLowPass(sampleRate, clampf(lpHz, 20.0f, 20000.0f), 0.85f);
-    auto box = juce::dsp::IIR::Coefficients<float>::makePeakFilter(sampleRate, clampf(boxHz, 20.0f, 20000.0f), 1.2f, juce::Decibels::decibelsToGain(boxDb));
-    auto dip = juce::dsp::IIR::Coefficients<float>::makePeakFilter(sampleRate, 650.0f, 0.9f, juce::Decibels::decibelsToGain(-0.35f * boxDb));
-
-    tone.hp.coefficients = hp;
-    tone.lp1.coefficients = lp;
-    tone.lp2.coefficients = lp;
-    tone.box.coefficients = box;
-    tone.dip.coefficients = dip;
+    const auto value = [this](const char* id) { return apvts.getRawParameterValue(id)->load(); };
+    lost_audio::core::CamcorderParameters p; p.format = (lost_audio::core::CamcorderFormat) juce::jlimit(0, 4, (int) std::lround(value("format")));
+    p.microphone = (lost_audio::core::CameraMic) juce::jlimit(0, 4, (int) std::lround(value("micModel")));
+    p.concealment = (lost_audio::core::CameraConcealment) juce::jlimit(0, 3, (int) std::lround(value("dropMode")));
+    p.coverage = clamp01(value("coverage")); p.movement = clamp01(value("movement")); p.corruption = clamp01(value("corruption")); p.agcDrive = clamp01(value("agc"));
+    p.windEnabled = value("wind") > .5f; p.windLevel = juce::jlimit(0.0f, 1.5f, value("windLevel"));
+    p.inputGain = juce::Decibels::decibelsToGain(value("inputGain")); p.mix = clamp01(value("mix"));
+    if (value("macroLink") > .5f)
+    {
+        const auto t = lost_audio::core::mapCamcorderMacros(p.format, p.microphone, p.coverage, p.movement, p.corruption, p.agcDrive);
+        p.highPassHz = t.highPassHz; p.lowPassHz = t.lowPassHz; p.bodyDb = t.bodyDb; p.bodyHz = t.bodyHz;
+        p.agcAmount = t.agcAmount; p.agcSpeed = t.agcSpeed; p.agcPump = t.agcPump; p.clip = t.clip; p.crush = t.crush; p.bits = t.bits;
+        p.converterRateHz = t.converterRateHz; p.flutter = t.flutter; p.dropout = t.dropout; p.dropoutMs = t.dropoutMs; p.repeatMs = t.repeatMs; p.chirp = t.chirp;
+        p.handling = t.handling; p.rub = t.rub; p.hiss = t.hiss; p.motorBleed = t.motorBleed;
+        p.outputGain = juce::jlimit(0.0f, 1.5f, t.outputGain * value("outGain") / .98f); p.ceiling = t.ceiling;
+    }
+    else
+    {
+        p.highPassHz = value("hpHz"); p.lowPassHz = value("lpHz"); p.bodyDb = value("boxDb"); p.bodyHz = value("boxHz");
+        p.agcAmount = value("agcAmt"); p.agcSpeed = value("agcSpeed"); p.agcPump = value("agcPump"); p.clip = value("clip");
+        p.crush = value("crush"); p.bits = (int) std::lround(value("bits")); p.converterRateHz = value("rate"); p.flutter = value("flutter");
+        p.dropout = value("drop"); p.dropoutMs = value("dropMs"); p.repeatMs = value("repeatMs"); p.chirp = value("chirp");
+        p.handling = value("handling"); p.rub = value("rub"); p.hiss = value("hiss"); p.motorBleed = value("motorBleed");
+        p.outputGain = value("outGain"); p.ceiling = value("ceiling");
+    }
+    if (value("dropTempoSync") > .5f) p.dropout = 0.0f;
+    if (value("faultTempoSync") > .5f) p.chirp = 0.0f;
+    if (value("handlingTempoSync") > .5f) p.handling = 0.0f;
+    if (value("flutterTempoSync") > .5f) p.flutterRateHz = lost_audio::core::tempoDivisionRateHz(bpm, (int) value("flutterDivision"));
+    return p;
 }
 
 void CamcorderEngineAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
-    juce::ignoreUnused(midi);
-    juce::ScopedNoDenormals nd;
+    juce::ignoreUnused(midi); juce::ScopedNoDenormals noDenormals; const auto channels = juce::jlimit(0, 2, getTotalNumInputChannels());
+    for (int channel = channels; channel < getTotalNumOutputChannels(); ++channel) buffer.clear(channel, 0, buffer.getNumSamples());
+    if (channels == 0 || getSampleRate() <= 0 || buffer.getNumSamples() <= 0) return;
+    const auto sampleCount = buffer.getNumSamples();
+    for (int channel = 0; channel < channels; ++channel) inputPeaks[(std::size_t) channel].store(buffer.getMagnitude(channel, 0, sampleCount));
+    if (channels == 1) inputPeaks[1].store(inputPeaks[0].load());
 
-    const auto inCh = getTotalNumInputChannels();
-    const auto outCh = getTotalNumOutputChannels();
-    for (int ch = inCh; ch < outCh; ++ch)
-        buffer.clear(ch, 0, buffer.getNumSamples());
-
-    updateFilters(getSampleRate());
-
-    const auto sr = (float) getSampleRate();
-    const auto n = buffer.getNumSamples();
-
-    const auto coverage = clampf(apvts.getRawParameterValue("coverage")->load(), 0.0f, 1.0f);
-    const auto movement = clampf(apvts.getRawParameterValue("movement")->load(), 0.0f, 1.0f);
-    const auto corruption = clampf(apvts.getRawParameterValue("corruption")->load(), 0.0f, 1.0f);
-    const auto agcDrive = clampf(apvts.getRawParameterValue("agc")->load(), 0.0f, 1.0f);
-    const auto windOn = apvts.getRawParameterValue("wind")->load() > 0.5f;
-    const auto windLevel = clampf(apvts.getRawParameterValue("windLevel")->load(), 0.0f, 1.5f);
-
-    const auto agcAmt = clampf(apvts.getRawParameterValue("agcAmt")->load(), 0.0f, 1.0f);
-    const auto agcSpeed = clampf(apvts.getRawParameterValue("agcSpeed")->load(), 0.0f, 1.0f);
-    const auto clip = clampf(apvts.getRawParameterValue("clip")->load(), 0.0f, 1.0f);
-    const auto crush = clampf(apvts.getRawParameterValue("crush")->load(), 0.0f, 1.0f);
-    const auto bits = juce::jlimit(4, 16, (int) std::lround(apvts.getRawParameterValue("bits")->load()));
-    const auto rateParam = clampf(apvts.getRawParameterValue("rate")->load(), 8000.0f, 48000.0f);
-
-    const auto drop = clampf(apvts.getRawParameterValue("drop")->load(), 0.0f, 1.0f);
-    const auto dropMs = clampf(apvts.getRawParameterValue("dropMs")->load(), 1.0f, 600.0f);
-    const auto dropMode = juce::jlimit(0, 3, (int) std::lround(apvts.getRawParameterValue("dropMode")->load()));
-    const auto repeatMs = clampf(apvts.getRawParameterValue("repeatMs")->load(), 1.0f, 800.0f);
-    const auto chirp = clampf(apvts.getRawParameterValue("chirp")->load(), 0.0f, 1.0f);
-
-    const auto handling = clampf(apvts.getRawParameterValue("handling")->load(), 0.0f, 1.0f);
-    const auto rub = clampf(apvts.getRawParameterValue("rub")->load(), 0.0f, 1.0f);
-    const auto hiss = clampf(apvts.getRawParameterValue("hiss")->load(), 0.0f, 1.0f);
-
-    const auto ceiling = clampf(apvts.getRawParameterValue("ceiling")->load(), 0.2f, 1.0f);
-    const auto outGain = clampf(apvts.getRawParameterValue("outGain")->load(), 0.0f, 1.5f);
-
-    const auto target = 0.18f;
-    const auto atk = 0.002f + (1.0f - agcSpeed) * 0.02f;
-    const auto rel = 0.05f + (1.0f - agcSpeed) * 0.28f;
-    const auto envAtk = std::exp(-1.0f / (atk * sr));
-    const auto envRel = std::exp(-1.0f / (rel * sr));
-    const auto compPow = 1.0f + agcAmt * 2.0f;
-
-    const auto baseCut = 14000.0f - coverage * 11500.0f;
-    const auto loudClose = 0.35f + 0.55f * coverage;
-
-    const auto qLevels = (float) juce::jmax(1, (1 << (bits - 1)) - 1);
-    const auto basePeriod = juce::jmax(1, (int) std::lround(sr / juce::jmin(sr, rateParam)));
-
-    const auto dropSamps = juce::jmax(8, (int) std::lround((dropMs / 1000.0f) * sr));
-    const auto dropP = (0.0000009f + drop * drop * 0.00006f) * (1.0f + 3.2f * corruption);
-
-    const auto repeatSamps = juce::jmax(1, (int) std::lround((repeatMs / 1000.0f) * sr));
-    const auto chirpP = (0.0000012f + chirp * chirp * 0.00009f) * (0.6f + 1.2f * corruption);
-    const auto thumpP = (0.000004f + movement * movement * 0.00035f) * (0.55f + handling);
-    const auto thumpLenMin = juce::jmax(8, (int) std::lround((10.0f / 1000.0f) * sr));
-    const auto thumpLenMax = juce::jmax(thumpLenMin + 1, (int) std::lround((90.0f / 1000.0f) * sr));
-
-    const auto rubDepth = rub * rub * (0.055f + 0.095f * movement);
-    const auto rubA90 = std::exp((-2.0f * juce::MathConstants<float>::pi * 90.0f) / sr);
-    const auto rubA1800 = std::exp((-2.0f * juce::MathConstants<float>::pi * 1800.0f) / sr);
-
-    const auto hissDepth = hiss * hiss * 0.03f;
-    const auto drive = 1.0f + agcDrive * 14.0f;
-    const auto asym = 0.05f * agcDrive;
-
-    const auto limAtk = std::exp(-1.0f / (0.002f * sr));
-    const auto limRel = std::exp(-1.0f / (0.06f * sr));
-
-    const auto windP = windOn ? (0.0000011f + movement * movement * 0.00022f) * 0.9f : 0.0f;
-    const auto windLenMin = juce::jmax(8, (int) std::lround((35.0f / 1000.0f) * sr));
-    const auto windLenMax = juce::jmax(windLenMin + 1, (int) std::lround((180.0f / 1000.0f) * sr));
-
-    const auto wiggleP = (0.0000012f + movement * movement * 0.00018f) * (0.35f + 0.9f * corruption);
-    const auto wiggleLenMin = juce::jmax(8, (int) std::lround((8.0f / 1000.0f) * sr));
-    const auto wiggleLenMax = juce::jmax(wiggleLenMin + 1, (int) std::lround((55.0f / 1000.0f) * sr));
-
-    auto* l = buffer.getWritePointer(0);
-    auto* r = buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : nullptr;
-
-    for (int i = 0; i < n; ++i)
+    bool playing = false, hasPpq = false; double bpm = currentBpm, ppq = 0.0;
+    if (auto* head = getPlayHead()) if (const auto position = head->getPosition())
     {
-        const auto inL = l[i];
-        const auto inR = r != nullptr ? r[i] : inL;
-        const auto xIn = 0.5f * (inL + inR);
-
-        st.ring[(size_t) st.ri] = xIn;
-        st.ri = (st.ri + 1) % (int) st.ring.size();
-
-        const auto a0 = std::abs(xIn);
-        const auto c0 = a0 > st.env ? envAtk : envRel;
-        st.env = a0 + c0 * (st.env - a0);
-        const auto env = st.env + 1.0e-6f;
-
-        const auto want = std::pow(target / env, compPow * 0.35f);
-        const auto agc = clampf(want, 0.25f, 7.5f);
-        auto y = xIn * agc;
-
-        if (clip > 0.0001f)
-        {
-            const auto amt = 1.0f + clip * 6.5f;
-            y = softClip((y + asym) * amt * drive) - asym * 0.7f;
-        }
-        else
-            y *= drive;
-
-        const auto loud = clampf(env * 3.2f, 0.0f, 1.0f);
-        const auto cut = juce::jmax(350.0f, baseCut * (1.0f - loud * loudClose * 0.55f));
-        const auto a = std::exp((-2.0f * juce::MathConstants<float>::pi * cut) / sr);
-        st.mufZ = (1.0f - a) * y + a * st.mufZ;
-        y = st.mufZ;
-
-        y = tone.hp.processSample(y);
-        y = tone.box.processSample(y);
-        y = tone.dip.processSample(y);
-        y = tone.lp1.processSample(y);
-        y = tone.lp2.processSample(y);
-
-        const auto wob = corruption * 0.35f;
-        if (st.holdCount <= 0)
-        {
-            const auto j = wob > 0.0f ? nextWhite() * wob : 0.0f;
-            st.holdPeriod = juce::jmax(1, (int) std::lround((float) basePeriod * (1.0f + j)));
-            st.hold = y;
-            st.holdCount = st.holdPeriod;
-        }
-        y = st.hold;
-        --st.holdCount;
-
-        if (crush > 0.0001f)
-        {
-            const auto q = std::round(clampf(y, -1.0f, 1.0f) * qLevels) / qLevels;
-            y = y * (1.0f - crush) + q * crush;
-        }
-
-        if (st.dropRemain <= 0 && unif(rng) < dropP)
-        {
-            st.dropRemain = dropSamps;
-            st.dropTotal = dropSamps;
-            st.dropStart = st.lastGood;
-            st.dropEnd = xIn;
-        }
-
-        if (st.dropRemain > 0)
-        {
-            const auto t = 1.0f - (float) st.dropRemain / (float) st.dropTotal;
-            if (dropMode == 1)
-                y = 0.0f;
-            else if (dropMode == 2)
-                y = st.dropStart + (st.dropEnd - st.dropStart) * t;
-            else if (dropMode == 3)
-            {
-                const auto read = (st.ri - repeatSamps + (int) st.ring.size()) % (int) st.ring.size();
-                y = st.ring[(size_t) read];
-            }
-            else
-                y = st.lastGood;
-            --st.dropRemain;
-        }
-        else
-            st.lastGood = y;
-
-        if (st.chirpRemain <= 0 && chirp > 0.0001f && unif(rng) < chirpP)
-        {
-            const auto durMs = 10.0f + unif(rng) * (35.0f + chirp * 55.0f);
-            st.chirpTotal = juce::jmax(8, (int) std::lround((durMs / 1000.0f) * sr));
-            st.chirpRemain = st.chirpTotal;
-            st.chirpPhase = unif(rng);
-            const auto base = 900.0f + unif(rng) * 2500.0f;
-            st.chirpF0 = base;
-            st.chirpF1 = base + 3000.0f + unif(rng) * 5000.0f;
-            st.chirpAmp = (0.02f + 0.12f * chirp) * (0.65f + 0.7f * unif(rng));
-        }
-        if (st.chirpRemain > 0)
-        {
-            const auto t = 1.0f - (float) st.chirpRemain / (float) st.chirpTotal;
-            const auto f = st.chirpF0 + (st.chirpF1 - st.chirpF0) * t;
-            st.chirpPhase += f / sr;
-            if (st.chirpPhase >= 1.0f)
-                st.chirpPhase -= 1.0f;
-            const auto envc = std::sin(juce::MathConstants<float>::pi * t) * (1.0f - t);
-            const auto sig = std::sin(st.chirpPhase * juce::MathConstants<float>::twoPi) * st.chirpAmp * envc;
-            y = clampf(y + sig, -1.2f, 1.2f);
-            --st.chirpRemain;
-        }
-
-        if (st.thumpRemain <= 0 && handling > 0.0001f && unif(rng) < thumpP)
-        {
-            const auto len = thumpLenMin + (int) std::floor(unif(rng) * (float) (thumpLenMax - thumpLenMin));
-            st.thumpTotal = len;
-            st.thumpRemain = len;
-            st.thumpPhase = 0.0f;
-            st.thumpHz = 35.0f + unif(rng) * 75.0f;
-            st.thumpAmp = (0.045f + 0.38f * handling) * (0.75f + 0.9f * unif(rng));
-        }
-        if (st.thumpRemain > 0)
-        {
-            const auto t = 1.0f - (float) st.thumpRemain / (float) st.thumpTotal;
-            const auto envt = std::pow(1.0f - t, 2.05f) * std::sin(juce::jmin(1.0f, t / 0.1f) * juce::MathConstants<float>::halfPi);
-            st.thumpPhase += st.thumpHz / sr;
-            if (st.thumpPhase >= 1.0f)
-                st.thumpPhase -= 1.0f;
-            const auto sig = std::sin(st.thumpPhase * juce::MathConstants<float>::twoPi) * st.thumpAmp * envt;
-            y += sig;
-            --st.thumpRemain;
-        }
-
-        if (st.wiggleRemain <= 0 && movement > 0.0001f && unif(rng) < wiggleP)
-        {
-            const auto len = wiggleLenMin + (int) std::floor(unif(rng) * (float) (wiggleLenMax - wiggleLenMin));
-            st.wiggleTotal = len;
-            st.wiggleRemain = len;
-            st.wigglePhase = unif(rng);
-            st.wiggleHz = 140.0f + unif(rng) * 520.0f;
-            st.wiggleAmp = (0.02f + 0.16f * movement) * (0.6f + 0.8f * unif(rng));
-        }
-        if (st.wiggleRemain > 0)
-        {
-            const auto t = 1.0f - (float) st.wiggleRemain / (float) st.wiggleTotal;
-            const auto envw = std::pow(1.0f - t, 1.8f);
-            st.wigglePhase += st.wiggleHz / sr;
-            if (st.wigglePhase >= 1.0f)
-                st.wigglePhase -= 1.0f;
-            const auto p = st.wigglePhase < 0.5f ? 1.0f : -1.0f;
-            const auto chunk = softClip(p * st.wiggleAmp * (1.0f + 2.2f * corruption));
-            y += chunk * envw;
-            --st.wiggleRemain;
-        }
-
-        if (windOn && st.windRemain <= 0 && unif(rng) < windP)
-        {
-            const auto len = windLenMin + (int) std::floor(unif(rng) * (float) (windLenMax - windLenMin));
-            st.windTotal = len;
-            st.windRemain = len;
-            st.windPhase = unif(rng);
-            st.windAmp = (0.09f + 0.7f * movement) * (0.75f + 0.85f * unif(rng));
-        }
-        if (st.windRemain > 0)
-        {
-            const auto t = 1.0f - (float) st.windRemain / (float) st.windTotal;
-            const auto envwi = std::sin(juce::MathConstants<float>::pi * t) * (1.0f - 0.2f * t);
-            const auto f = 35.0f + 55.0f * (1.0f - t);
-            st.windPhase += f / sr;
-            if (st.windPhase >= 1.0f)
-                st.windPhase -= 1.0f;
-            const auto woof = std::sin(st.windPhase * juce::MathConstants<float>::twoPi) * st.windAmp;
-            const auto wide = nextWhite() * (st.windAmp * 0.55f);
-            y += (woof + wide) * envwi * windLevel;
-            --st.windRemain;
-        }
-
-        if (rubDepth > 0.00001f)
-        {
-            const auto wn = nextWhite();
-            st.rubLp90 = (1.0f - rubA90) * wn + rubA90 * st.rubLp90;
-            const auto hp = wn - st.rubLp90;
-            st.rubLp1800 = (1.0f - rubA1800) * hp + rubA1800 * st.rubLp1800;
-            y += st.rubLp1800 * rubDepth;
-        }
-
-        if (hissDepth > 0.00001f)
-        {
-            const auto wn = nextWhite();
-            const auto hp = wn - st.hissZ;
-            st.hissZ = wn;
-            y += hp * hissDepth;
-        }
-
-        auto post = y * outGain;
-        const auto aa = std::abs(post);
-        const auto lc = aa > st.limEnv ? limAtk : limRel;
-        st.limEnv = aa + lc * (st.limEnv - aa);
-        const auto g = st.limEnv > ceiling ? ceiling / (st.limEnv + 1.0e-6f) : 1.0f;
-        post *= g;
-        post = clampf(post, -ceiling, ceiling);
-
-        l[i] = post;
-        if (r != nullptr)
-            r[i] = post;
+        playing = position->getIsPlaying(); if (const auto hostBpm = position->getBpm()) bpm = *hostBpm;
+        if (const auto hostPpq = position->getPpqPosition()) { ppq = *hostPpq; hasPpq = true; }
     }
+    currentBpm = juce::jlimit(20.0, 400.0, bpm);
+    lost_audio::core::TempoEventSchedule dropSchedule, faultSchedule, handlingSchedule;
+    if (playing && hasPpq && value("dropTempoSync") > .5f) dropSchedule = lost_audio::core::tempoEventsInBlock(ppq, currentBpm, (int) value("dropDivision"), getSampleRate(), sampleCount);
+    if (playing && hasPpq && value("faultTempoSync") > .5f) faultSchedule = lost_audio::core::tempoEventsInBlock(ppq, currentBpm, (int) value("faultDivision"), getSampleRate(), sampleCount);
+    if (playing && hasPpq && value("handlingTempoSync") > .5f) handlingSchedule = lost_audio::core::tempoEventsInBlock(ppq, currentBpm, (int) value("handlingDivision"), getSampleRate(), sampleCount);
+
+    const auto parameters = readParameters(currentBpm); const auto cameraIndex = juce::jlimit(0, 3, (int) parameters.format % 4);
+    const auto windIndex = juce::jlimit(0, 3, ((int) parameters.format + (int) parameters.microphone) % 4);
+    const auto cameraBedEnabled = value("camBedEnable") > .5f;
+    const auto cameraBedLevel = clamp01(value("camBedLevel"));
+    if (bedChunk.size() < (std::size_t) sampleCount) bedChunk.resize((std::size_t) sampleCount);
+    auto maxCameraBed = 0.0f, maxWindBed = 0.0f;
+    for (int i = 0; i < sampleCount; ++i)
+    {
+        const auto camera = cameraBedEnabled ? readBed(cameraBeds[(std::size_t) cameraIndex], cameraBedPositions[(std::size_t) cameraIndex]) * cameraBedLevel * .36f : 0.0f;
+        const auto wind = parameters.windEnabled ? readBed(windBeds[(std::size_t) windIndex], windBedPositions[(std::size_t) windIndex]) * juce::jlimit(0.0f, 1.5f, parameters.windLevel) * .10f : 0.0f;
+        maxCameraBed = std::max(maxCameraBed, std::abs(camera)); maxWindBed = std::max(maxWindBed, std::abs(wind)); bedChunk[(std::size_t) i] = juce::jlimit(-.35f, .35f, camera + wind);
+    }
+
+    std::array<int, 100> boundaries {}; int boundaryCount = 0; boundaries[(std::size_t) boundaryCount++] = 0; boundaries[(std::size_t) boundaryCount++] = sampleCount;
+    for (std::size_t i = 0; i < dropSchedule.size; ++i) boundaries[(std::size_t) boundaryCount++] = dropSchedule.events[i].sampleOffset;
+    for (std::size_t i = 0; i < faultSchedule.size; ++i) boundaries[(std::size_t) boundaryCount++] = faultSchedule.events[i].sampleOffset;
+    for (std::size_t i = 0; i < handlingSchedule.size; ++i) boundaries[(std::size_t) boundaryCount++] = handlingSchedule.events[i].sampleOffset;
+    std::sort(boundaries.begin(), boundaries.begin() + boundaryCount); boundaryCount = (int) std::distance(boundaries.begin(), std::unique(boundaries.begin(), boundaries.begin() + boundaryCount));
+    auto fireDrop = pendingDropTrigger.exchange(false), fireFault = pendingFaultTrigger.exchange(false), fireHandling = pendingHandlingTrigger.exchange(false);
+    auto maxAgc = 0.0f, maxFlutter = 0.0f, maxLimiter = 0.0f;
+    for (int boundary = 0; boundary < boundaryCount - 1; ++boundary)
+    {
+        const auto offset = boundaries[(std::size_t) boundary];
+        for (std::size_t i = 0; i < dropSchedule.size; ++i) if (dropSchedule.events[i].sampleOffset == offset && lost_audio::core::tempoEventDecision(dropSchedule.events[i].stepIndex, value("dropProbability"), 0x43414d44524f50ull)) fireDrop = true;
+        for (std::size_t i = 0; i < faultSchedule.size; ++i) if (faultSchedule.events[i].sampleOffset == offset && lost_audio::core::tempoEventDecision(faultSchedule.events[i].stepIndex, value("faultProbability"), 0x43414d4641554c54ull)) fireFault = true;
+        for (std::size_t i = 0; i < handlingSchedule.size; ++i) if (handlingSchedule.events[i].sampleOffset == offset && lost_audio::core::tempoEventDecision(handlingSchedule.events[i].stepIndex, value("handlingProbability"), 0x43414d484954ull)) fireHandling = true;
+        if (fireDrop && !camcorderCore.dropoutActive()) camcorderCore.triggerDropout(syncedDuration("dropLengthSync", "dropLengthDivision", "dropMs", currentBpm));
+        if (fireFault && !camcorderCore.corruptionActive()) camcorderCore.triggerCodecFault(value("faultStrength"), syncedDuration("faultLengthSync", "faultLengthDivision", "faultDurationMs", currentBpm));
+        if (fireHandling && !camcorderCore.handlingActive()) camcorderCore.triggerHandling(value("handlingStrength"));
+        fireDrop = fireFault = fireHandling = false;
+        const auto count = boundaries[(std::size_t) boundary + 1] - offset; if (count <= 0) continue;
+        float* pointers[] { buffer.getWritePointer(0) + offset, channels > 1 ? buffer.getWritePointer(1) + offset : nullptr };
+        camcorderCore.process(pointers, (std::size_t) channels, (std::size_t) count, parameters, bedChunk.data() + offset);
+        maxAgc = std::max(maxAgc, camcorderCore.agcActivity()); maxFlutter = std::max(maxFlutter, camcorderCore.flutterActivity()); maxLimiter = std::max(maxLimiter, camcorderCore.limiterActivity());
+    }
+    for (int channel = 0; channel < channels; ++channel) outputPeaks[(std::size_t) channel].store(buffer.getMagnitude(channel, 0, sampleCount));
+    if (channels == 1) outputPeaks[1].store(outputPeaks[0].load());
+    for (int i = 0; i < (int) trace.size(); ++i) { const auto first = i * sampleCount / (int) trace.size(), last = juce::jmax(first + 1, (i + 1) * sampleCount / (int) trace.size()); trace[(std::size_t) i].store(buffer.getRMSLevel(0, first, juce::jmin(sampleCount, last) - first)); }
+    windState.store(camcorderCore.windActive()); handlingState.store(camcorderCore.handlingActive()); dropoutState.store(camcorderCore.dropoutActive()); corruptionState.store(camcorderCore.corruptionActive());
+    dropoutProgressMeter.store(camcorderCore.dropoutProgress()); corruptionProgressMeter.store(camcorderCore.corruptionProgress()); handlingProgressMeter.store(camcorderCore.handlingProgress()); windProgressMeter.store(camcorderCore.windProgress());
+    agcMeter.store(maxAgc); flutterMeter.store(maxFlutter); limiterMeter.store(maxLimiter); cameraBedMeter.store(juce::jlimit(0.0f, 1.0f, maxCameraBed * 8.0f)); windBedMeter.store(juce::jlimit(0.0f, 1.0f, maxWindBed * 8.0f));
 }
 
 bool CamcorderEngineAudioProcessor::hasEditor() const { return true; }
-
-juce::AudioProcessorEditor* CamcorderEngineAudioProcessor::createEditor()
-{
-    return new CamcorderEngineAudioProcessorEditor(*this);
-}
-
+juce::AudioProcessorEditor* CamcorderEngineAudioProcessor::createEditor() { return new CamcorderEngineAudioProcessorEditor(*this); }
 void CamcorderEngineAudioProcessor::getStateInformation(juce::MemoryBlock& dest)
 {
-    if (auto xml = apvts.copyState().createXml())
-        copyXmlToBinary(*xml, dest);
+    auto state = apvts.copyState(); state.setProperty("engineId", "camcorder", nullptr); state.setProperty("schemaVersion", 3, nullptr);
+    if (auto xml = state.createXml()) copyXmlToBinary(*xml, dest);
 }
-
 void CamcorderEngineAudioProcessor::setStateInformation(const void* data, int size)
-{
-    if (auto xml = getXmlFromBinary(data, size))
-        if (xml->hasTagName(apvts.state.getType()))
-            apvts.replaceState(juce::ValueTree::fromXml(*xml));
-}
-
-juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
-{
-    return new CamcorderEngineAudioProcessor();
-}
+{ if (auto xml = getXmlFromBinary(data, size)) if (xml->hasTagName(apvts.state.getType())) { apvts.replaceState(juce::ValueTree::fromXml(*xml)); apvts.state.setProperty("engineId", "camcorder", nullptr); apvts.state.setProperty("schemaVersion", 3, nullptr); } }
+juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new CamcorderEngineAudioProcessor(); }

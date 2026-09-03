@@ -10,6 +10,7 @@ body:
       label: Product
       options:
         - Web workstation
+        - Brain Cruncher
         - Transmission Engine
         - Tape Engine
         - Television Engine

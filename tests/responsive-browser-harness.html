@@ -32,6 +32,21 @@
         const root = doc.documentElement;
         const workstationVisible = getComputedStyle(doc.querySelector(".workstation-shell")).display !== "none";
         const mobileVisible = getComputedStyle(doc.querySelector(".mobile-gate")).display !== "none";
+        const mobileDockVisible = getComputedStyle(doc.querySelector(".mobile-workflow-dock")).display !== "none";
+        const panelSelectors = [".device-library", ".rack-bay", ".device-inspector", "#toolDrawer"];
+        const visiblePanels = panelSelectors.filter((selector) => getComputedStyle(doc.querySelector(selector)).display !== "none");
+        const dockTargets = [...doc.querySelectorAll(".mobile-workflow-dock button")].map((button) => button.getBoundingClientRect().height);
+        const header = doc.querySelector(".workstation-header");
+        const headerContained = header.scrollWidth <= header.clientWidth + 1;
+        const levelControlsContained = [...doc.querySelectorAll(".header-level")]
+          .every((control) => control.scrollWidth <= control.clientWidth + 1);
+        const isMobile = width <= 960;
+        const pass = ! (root.scrollWidth > root.clientWidth)
+          && workstationVisible
+          && !mobileVisible
+          && headerContained
+          && levelControlsContained
+          && (isMobile ? mobileDockVisible && visiblePanels.length === 1 && dockTargets.every((height) => height >= 44) : !mobileDockVisible);
         const results = {
           width,
           height,
@@ -40,15 +55,24 @@
           horizontalOverflow: root.scrollWidth > root.clientWidth,
           workstationVisible,
           mobileVisible,
+          mobileDockVisible,
+          activeMobilePanel: doc.body.dataset.mobilePanel || "",
+          visiblePanels,
+          headerContained,
+          levelControlsContained,
+          minimumDockTarget: dockTargets.length ? Math.min(...dockTargets) : null,
+          pass,
         };
         document.getElementById("metrics").textContent = [
           `client ${root.clientWidth}px`,
           `scroll ${root.scrollWidth}px`,
           `horizontal overflow ${root.scrollWidth > root.clientWidth ? "YES" : "no"}`,
           `workstation ${workstationVisible ? "visible" : "hidden"}`,
-          `mobile handoff ${mobileVisible ? "visible" : "hidden"}`,
+          `mobile rack ${mobileDockVisible ? "active" : "inactive"}`,
+          `result ${pass ? "PASS" : "FAIL"}`,
         ].join("  /  ");
         document.getElementById("results").textContent = JSON.stringify(results, null, 2);
+        document.body.dataset.pass = pass ? "true" : "false";
         document.body.dataset.complete = "true";
       });
     </script>

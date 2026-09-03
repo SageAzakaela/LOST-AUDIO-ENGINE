@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LOST mobile workflow browser harness</title>
+    <style>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; min-height: 100%; background: #181a1d; color: #f4efe5; font: 13px/1.4 ui-monospace, monospace; }
+      body { padding: 20px; }
+      header, #metrics { width: 390px; max-width: 100%; margin: 0 auto 12px; }
+      header { display: flex; justify-content: space-between; gap: 24px; }
+      #metrics { margin-top: 12px; color: #9dfff7; white-space: pre-wrap; }
+      iframe { display: block; width: 390px; height: 844px; max-width: 100%; margin: 0 auto; border: 1px solid #4ef6ff; background: #08090a; }
+    </style>
+  </head>
+  <body>
+    <header><strong id="viewportLabel">390 × 844</strong><span>Add → Rack → Tune → Output</span></header>
+    <iframe id="preview" title="LOST mobile workflow preview"></iframe>
+    <div id="metrics">waiting for workstation…</div>
+    <pre id="results" hidden>RUNNING</pre>
+    <script>
+      const params = new URLSearchParams(location.search);
+      const width = Math.max(320, Math.min(480, Number(params.get("width")) || 390));
+      const height = Math.max(568, Math.min(1000, Number(params.get("height")) || 844));
+      const preview = document.getElementById("preview");
+      const wait = (duration) => new Promise((resolve) => setTimeout(resolve, duration));
+      const makeSilentWav = () => {
+        const sampleRate = 8000;
+        const frames = 800;
+        const buffer = new ArrayBuffer(44 + frames * 2);
+        const view = new DataView(buffer);
+        const text = (offset, value) => [...value].forEach((character, index) => view.setUint8(offset + index, character.charCodeAt(0)));
+        text(0, "RIFF");
+        view.setUint32(4, 36 + frames * 2, true);
+        text(8, "WAVE");
+        text(12, "fmt ");
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true);
+        view.setUint16(22, 1, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, sampleRate * 2, true);
+        view.setUint16(32, 2, true);
+        view.setUint16(34, 16, true);
+        text(36, "data");
+        view.setUint32(40, frames * 2, true);
+        return new File([buffer], "mobile-workflow-qa.wav", { type: "audio/wav" });
+      };
+      const visible = (doc, selector) => {
+        const node = doc.querySelector(selector);
+        return Boolean(node && getComputedStyle(node).display !== "none" && node.getBoundingClientRect().height > 0);
+      };
+      const clears = (upper, lower, tolerance = 1) => lower.top >= upper.bottom - tolerance;
+
+      preview.style.width = `${width}px`;
+      preview.style.height = `${height}px`;
+      document.getElementById("viewportLabel").textContent = `${width} × ${height}`;
+      preview.src = `../?mobile-workflow-qa=${width}x${height}-${Date.now()}`;
+      preview.addEventListener("load", async () => {
+        const doc = preview.contentDocument;
+        await wait(900);
+
+        const checks = {};
+        const addTab = doc.querySelector('.mobile-workflow-dock [data-mobile-panel="library"]');
+        const rackTab = doc.querySelector('.mobile-workflow-dock [data-mobile-panel="rack"]');
+        const tuneTab = doc.querySelector('.mobile-workflow-dock [data-mobile-panel="inspector"]');
+        const outputTab = doc.querySelector('.mobile-workflow-dock [data-mobile-panel="output"]');
+        const mobilePlay = doc.querySelector("#mobilePlayBtn");
+        const dockTargets = [...doc.querySelectorAll(".mobile-workflow-dock button")]
+          .map((button) => button.getBoundingClientRect().height);
+
+        checks.startsOnRack = doc.body.dataset.mobilePanel === "rack" && visible(doc, ".rack-bay");
+        checks.dockTargets = dockTargets.length === 4 && dockTargets.every((height) => height >= 44);
+        checks.mobilePlayTarget = Boolean(mobilePlay?.disabled) && mobilePlay.getBoundingClientRect().height >= 44;
+        const testAudio = new DataTransfer();
+        testAudio.items.add(makeSilentWav());
+        const fileInput = doc.querySelector("#fileInput");
+        fileInput.files = testAudio.files;
+        fileInput.dispatchEvent(new Event("change", { bubbles: true }));
+        await wait(700);
+        checks.mobilePlayEnables = !mobilePlay.disabled && !doc.querySelector("#playBtn")?.disabled;
+        let mobilePlayDelegated = false;
+        const desktopPlay = doc.querySelector("#playBtn");
+        desktopPlay?.addEventListener("click", (event) => {
+          mobilePlayDelegated = true;
+          event.stopImmediatePropagation();
+        }, { once: true, capture: true });
+        mobilePlay.click();
+        checks.mobilePlayDelegates = mobilePlayDelegated;
+        const emptyRackShortcut = doc.querySelector("[data-mobile-open-library]");
+        checks.emptyRackShortcut = Boolean(emptyRackShortcut) && emptyRackShortcut.getBoundingClientRect().height >= 44;
+
+        emptyRackShortcut?.click();
+        await wait(650);
+        checks.opensLibrary = doc.body.dataset.mobilePanel === "library" && visible(doc, ".device-library");
+        checks.libraryClearsStickyBar = clears(
+          doc.querySelector(".mobile-workflow-bar").getBoundingClientRect(),
+          doc.querySelector(".library-filter").getBoundingClientRect(),
+        );
+        checks.libraryUsesSingleHeading = !visible(doc, ".device-library > .bay-heading");
+
+        doc.querySelector(".library-device__add")?.click();
+        await wait(750);
+        checks.installsDevice = doc.body.dataset.mobilePanel === "rack"
+          && visible(doc, ".rack-bay")
+          && Boolean(doc.querySelector(".rack-module"))
+          && !tuneTab?.disabled;
+        checks.rackClearsStickyBar = clears(
+          doc.querySelector(".mobile-workflow-bar").getBoundingClientRect(),
+          doc.querySelector(".rack-module").getBoundingClientRect(),
+        );
+        checks.rackUsesSingleHeading = !visible(doc, ".rack-bay > .bay-heading");
+        checks.orderControlsAreTouchSized = [...doc.querySelectorAll(".rack-module__order-button")]
+          .every((button) => button.getBoundingClientRect().height >= 44);
+
+        addTab?.click();
+        await wait(650);
+        [...doc.querySelectorAll(".library-device__add")].find((button) => !button.disabled)?.click();
+        await wait(750);
+        const orderBefore = [...doc.querySelectorAll(".rack-module h3")].map((heading) => heading.textContent.trim());
+        doc.querySelector('.rack-module [data-rack-shift="later"]')?.click();
+        await wait(750);
+        const orderAfter = [...doc.querySelectorAll(".rack-module h3")].map((heading) => heading.textContent.trim());
+        checks.reordersRack = orderBefore.length === 2
+          && orderAfter.length === 2
+          && orderBefore[0] === orderAfter[1]
+          && orderBefore[1] === orderAfter[0];
+        checks.reorderFeedback = /position 2 of 2/i.test(doc.querySelector("#rackOrderStatus")?.textContent || "")
+          && doc.querySelectorAll(".rack-module__position").length === 2;
+
+        doc.querySelector(".rack-module__model")?.click();
+        await wait(650);
+        checks.opensInspector = doc.body.dataset.mobilePanel === "inspector"
+          && visible(doc, ".device-inspector")
+          && Boolean(doc.querySelector("#inspectorContent .control"));
+        checks.inspectorClearsStickyBar = clears(
+          doc.querySelector(".mobile-workflow-bar").getBoundingClientRect(),
+          doc.querySelector("#inspectorContent .inspector-module").getBoundingClientRect(),
+        );
+        checks.inspectorUsesSingleHeading = !visible(doc, ".device-inspector > .bay-heading");
+
+        outputTab?.click();
+        await wait(650);
+        checks.opensOutput = doc.body.dataset.mobilePanel === "output"
+          && visible(doc, "#toolDrawer")
+          && doc.querySelector("#toolDrawer")?.dataset.drawerOpen === "true";
+        const automationTab = doc.querySelector('[data-drawer-target="automation"]');
+        const automationCanvas = doc.querySelector("#autoLaneCanvas");
+        checks.mobileAutomationRemoved = !visible(doc, '[data-drawer-target="automation"]')
+          && !visible(doc, '[data-drawer-panel="automation"]')
+          && doc.querySelector("#toolDrawer")?.dataset.drawerTab === "mastering"
+          && automationTab?.getAttribute("aria-pressed") === "false"
+          && automationCanvas?.width === 1
+          && automationCanvas?.height === 1;
+        checks.outputClearsStickyBar = clears(
+          doc.querySelector(".mobile-workflow-bar").getBoundingClientRect(),
+          doc.querySelector(".drawer-tabs").getBoundingClientRect(),
+        ) && clears(
+          doc.querySelector(".drawer-tabs").getBoundingClientRect(),
+          doc.querySelector(".master-meter-bank").getBoundingClientRect(),
+        );
+        checks.outputUsesSingleHeading = !visible(doc, ".drawer-heading");
+        checks.stickyOffsetTracksBar = Math.abs(
+          parseFloat(getComputedStyle(doc.documentElement).getPropertyValue("--mobile-context-height"))
+            - Math.ceil(doc.querySelector(".mobile-workflow-bar").getBoundingClientRect().height),
+        ) <= 1;
+
+        rackTab?.click();
+        await wait(650);
+        checks.returnsToRack = doc.body.dataset.mobilePanel === "rack"
+          && visible(doc, ".rack-bay")
+          && doc.querySelector("#toolDrawer")?.dataset.drawerOpen === "false";
+
+        const root = doc.documentElement;
+        checks.noHorizontalOverflow = root.scrollWidth <= root.clientWidth;
+        const pass = Object.values(checks).every(Boolean);
+        const results = {
+          viewport: { width: root.clientWidth, height: root.clientHeight },
+          minimumDockTarget: dockTargets.length ? Math.min(...dockTargets) : null,
+          installedModule: doc.querySelector(".rack-module__model")?.textContent?.trim() || "",
+          checks,
+          pass,
+        };
+
+        document.getElementById("metrics").textContent = `${pass ? "PASS" : "FAIL"} / ${Object.values(checks).filter(Boolean).length} of ${Object.keys(checks).length} checks`;
+        document.getElementById("results").textContent = JSON.stringify(results, null, 2);
+        document.body.dataset.pass = pass ? "true" : "false";
+        document.body.dataset.complete = "true";
+      });
+    </script>
+  </body>
+</html>

@@ -2,6 +2,7 @@
 
 #include <JuceHeader.h>
 #include <lost_audio/core/TapeProcessor.h>
+#include <lost_audio/core/TempoSync.h>
 #include <array>
 #include <atomic>
 #include <random>
@@ -40,6 +41,21 @@ public:
     void setStateInformation(const void*, int) override;
     juce::AudioProcessorValueTreeState& getAPVTS() { return apvts; }
     float getOutputPeak() const noexcept { return outputPeak.load(std::memory_order_relaxed); }
+    void triggerDropout() noexcept;
+    void triggerMechanism() noexcept { pendingMechanismTrigger.store(true, std::memory_order_release); }
+    void materialiseLegacyMacros();
+    [[nodiscard]] bool legacyMacrosActive() const noexcept;
+    [[nodiscard]] float inputPeak(int channel) const noexcept;
+    [[nodiscard]] float outputPeakForChannel(int channel) const noexcept;
+    [[nodiscard]] float modulationMeter() const noexcept { return modulationTelemetry.load(std::memory_order_relaxed); }
+    [[nodiscard]] bool dropoutIsActive() const noexcept { return dropoutState.load(std::memory_order_relaxed); }
+    [[nodiscard]] float dropoutProgressMeter() const noexcept { return dropoutTelemetry.load(std::memory_order_relaxed); }
+    [[nodiscard]] float compressionMeter() const noexcept { return compressionTelemetry.load(std::memory_order_relaxed); }
+    [[nodiscard]] float saturationMeter() const noexcept { return saturationTelemetry.load(std::memory_order_relaxed); }
+    [[nodiscard]] float noiseMeter() const noexcept { return noiseTelemetry.load(std::memory_order_relaxed); }
+    [[nodiscard]] float mechanismMeter() const noexcept { return mechanismTelemetry.load(std::memory_order_relaxed); }
+    [[nodiscard]] float limiterMeter() const noexcept { return limiterTelemetry.load(std::memory_order_relaxed); }
+    [[nodiscard]] std::array<float, 64> outputTrace() const noexcept;
 
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
@@ -69,6 +85,9 @@ private:
     };
 
     void updateToneFilters();
+    [[nodiscard]] float value(const char* id) const noexcept;
+    [[nodiscard]] lost_audio::core::TapeParameters readParameters(double bpm) const noexcept;
+    [[nodiscard]] float dropoutDurationSeconds(double bpm) const noexcept;
     std::vector<float> decodeWavToMono(const void* data, size_t bytes, double targetSampleRate) const;
     void initSfx(double sampleRate);
     void startSfxVoice(int sampleIndex, float gain = 1.0f);
@@ -79,7 +98,21 @@ private:
 
     std::array<ToneState, 2> tone{};
     lost_audio::core::TapeProcessor tapeCore;
+    juce::AudioBuffer<float> alignedDry;
+    std::array<std::vector<float>, 2> dryDelay{};
+    std::size_t dryWriteIndex = 0;
     std::atomic<float> outputPeak { 0.0f };
+    std::array<std::atomic<float>, 2> inputPeaks {}, outputPeaks {};
+    std::array<std::atomic<float>, 64> trace {};
+    std::atomic<float> modulationTelemetry { 0.0f }, dropoutTelemetry { 0.0f };
+    std::atomic<float> compressionTelemetry { 0.0f }, saturationTelemetry { 0.0f };
+    std::atomic<float> noiseTelemetry { 0.0f }, mechanismTelemetry { 0.0f }, limiterTelemetry { 0.0f };
+    std::atomic<bool> dropoutState { false }, pendingMechanismTrigger { false };
+
+    std::int64_t lastTempoStep = -1, fallbackTempoStep = 0;
+    int lastTempoDivision = -1, tempoFallbackSamples = 0;
+    double lastHostPpq = 0.0, currentBpm = 120.0;
+    bool hostTempoWasPlaying = false;
 
     std::minstd_rand rng;
     std::uniform_real_distribution<float> unif { 0.0f, 1.0f };
