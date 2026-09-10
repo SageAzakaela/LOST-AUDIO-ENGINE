@@ -32,10 +32,14 @@ jobs:
           assert run_id.isdigit(), 'Expected numeric workflow run ID'
           run = json.loads(subprocess.check_output(['gh', 'api', f'repos/{os.environ["GITHUB_REPOSITORY"]}/actions/runs/{run_id}']))
           assert run['conclusion'] == 'success', 'Source build did not pass'
-          assert run['path'] == '.github/workflows/macos-plugins.yml', 'Wrong source workflow'
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-              output.write(f'commit={run["head_sha"]}\n')
+          assert run['path'] in ('.github/workflows/macos-plugins.yml', '.github/workflows/macos-validation.yml'), 'Wrong source workflow'
           subprocess.run(['gh', 'run', 'download', run_id, '--name', 'be-digital-mac-universal-dev', '--dir', 'incoming'], check=True)
+          from pathlib import Path
+          import re
+          commit = Path('incoming/SOURCE-COMMIT.txt').read_text().strip()
+          assert re.fullmatch('[0-9a-f]{40}', commit), 'Invalid source SHA'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'commit={commit}\n')
           PY
       - name: Verify archive and create installer
         env:

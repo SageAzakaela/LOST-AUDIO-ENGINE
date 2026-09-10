@@ -1,0 +1,114 @@
+name: Revalidate Mac beta bundles
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: Mac universal build run with successful build and DSP jobs
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    outputs:
+      commit: ${{ steps.check.outputs.commit }}
+    steps:
+      - name: Require successful compilation and both native DSP suites
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN: ${{ inputs.build_run_id }}
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+          run_id = os.environ['SOURCE_RUN']
+          assert run_id.isdigit(), 'Expected numeric workflow run ID'
+          endpoint = f'repos/{os.environ["GITHUB_REPOSITORY"]}/actions/runs/{run_id}'
+          run = json.loads(subprocess.check_output(['gh', 'api', endpoint]))
+          assert run['path'] == '.github/workflows/macos-plugins.yml', 'Wrong build workflow'
+          jobs = json.loads(subprocess.check_output(['gh', 'api', endpoint + '/jobs?per_page=100']))['jobs']
+          required = [j for j in jobs if j['name'].startswith(('build (', 'core-tests ('))]
+          assert len(required) == 6 and all(j['conclusion'] == 'success' for j in required), 'Build/DSP gates incomplete'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'commit={run["head_sha"]}\n')
+          PY
+
+  host-validation:
+    needs: source
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-15-intel]
+        group: [decks, broadcast, spaces, creative]
+        include:
+          - group: decks
+            projects: 'tape-vst3;cd-vst3;cartridge-vst3'
+          - group: broadcast
+            projects: 'transmission-vst3;comms-vst3;television-vst3'
+          - group: spaces
+            projects: 'camcorder-vst3;conference-vst3;occlusion-vst3;openmicnight-vst3'
+          - group: creative
+            projects: 'brain-cruncher-vst3;suite-vst3;sequencer-vst3'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          name: mac-build-${{ matrix.group }}
+          run-id: ${{ inputs.build_run_id }}
+          github-token: ${{ github.token }}
+      - name: Extract the exact universal bundles
+        run: ditto -x -k mac-${{ matrix.group }}.zip .
+      - name: Fetch pinned pluginval
+        run: |
+          curl --fail --location --retry 3 https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_macOS.zip -o pluginval.zip
+          echo '3c4c533bda0c5059eea3ddaea752d757ee2025041f0f47e6bcb0e87f6082b29f  pluginval.zip' | shasum -a 256 -c -
+          ditto -x -k pluginval.zip pluginval
+      - name: Validate system-installed Audio Units and VST3 bundles
+        run: >-
+          python3 scripts/macos_plugins.py validate --bundles bundles
+          --pluginval pluginval/pluginval.app/Contents/MacOS/pluginval
+          --logs validation --ci-system-install --projects '${{ matrix.projects }}'
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: mac-validation-${{ matrix.runner }}-${{ matrix.group }}
+          path: validation/
+          if-no-files-found: warn
+
+  package:
+    needs: [source, host-validation]
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: mac-build-*
+          run-id: ${{ inputs.build_run_id }}
+          github-token: ${{ github.token }}
+          path: incoming
+          merge-multiple: true
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: mac-validation-*
+          path: evidence
+      - name: Assemble only bundles with passing native validations
+        env:
+          SOURCE_COMMIT: ${{ needs.source.outputs.commit }}
+        run: |
+          mkdir combined
+          for archive in incoming/*.zip; do ditto -x -k "$archive" combined; done
+          rm combined/bundles/build-manifest.json
+          python3 scripts/macos_plugins.py package --bundles combined/bundles --evidence evidence --output dist/macos --source-commit "$SOURCE_COMMIT"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: be-digital-mac-universal-dev
+          path: dist/macos/
+          if-no-files-found: error

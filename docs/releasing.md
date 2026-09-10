@@ -30,10 +30,12 @@ The package is the standalone web edition. The B&E Digital deployment also needs
 
 ## Native packages
 
-Native distribution is currently paused while the individual VST3 fleet is
-rebuilt. CI artifacts are unsigned developer evidence, not public downloads.
-Installers resume only after the fleet is complete enough to justify automated
-publisher signing of every plugin binary, installer, and uninstaller.
+Public native releases remain paused while the individual VST3 fleet is
+rebuilt and publisher signing is established. The [Mac private beta](macos.md)
+has a separate universal AU/VST3 build, validation and installer workflow for
+deliberate beta testing. Its unsigned installer requires a recipient's explicit
+macOS approval and must not be presented as an Apple-notarized public release.
+Other CI artifacts remain unsigned developer evidence.
 
 Native releases must come from clean builds and include:
 

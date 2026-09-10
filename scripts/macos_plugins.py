@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import platform
 import plistlib
@@ -108,9 +109,36 @@ def stage(args):
 
 def validate(args):
     args.logs.mkdir(parents=True, exist_ok=True)
+    chosen = products(args.projects)
+    build_manifest = json.loads((args.bundles / "build-manifest.json").read_text())
+    if args.ci_system_install and os.environ.get("GITHUB_ACTIONS") != "true":
+        raise ValueError("System installation/registrar refresh is restricted to disposable CI runners")
+    component_directory = (Path("/Library/Audio/Plug-Ins/Components") if args.ci_system_install
+                           else Path.home() / "Library/Audio/Plug-Ins/Components")
+    for product in chosen:
+        for fmt, suffix in FORMATS.items():
+            bundle = args.bundles / fmt / (product["name"] + suffix)
+            if inspect_bundle(bundle, product, fmt) not in build_manifest["products"]:
+                raise ValueError(f"Bundle differs from its build manifest: {bundle}")
+        bundle = args.bundles / "Components" / (product["name"] + ".component")
+        destination = component_directory / bundle.name
+        if destination.exists():
+            raise FileExistsError(f"Refusing to replace an installed AU: {destination}")
+        if args.ci_system_install:
+            run("sudo", "ditto", bundle, destination)
+        else:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            run("ditto", bundle, destination)
+    if args.ci_system_install:
+        # Fresh CI login sessions can retain an empty AU registry after copying
+        # bundles. Refresh once after installing the whole shard, as a logout
+        # would do on a recipient's Mac. Never included in the shipped installer.
+        subprocess.run(["sudo", "killall", "-9", "AudioComponentRegistrar"], check=False,
+                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    (args.logs / "registered-audio-units.txt").write_text(run("auval", "-a"))
     records = []
     failed = False
-    for product in products(args.projects):
+    for product in chosen:
         for fmt, suffix in FORMATS.items():
             bundle = args.bundles / fmt / (product["name"] + suffix)
             record = inspect_bundle(bundle, product, fmt)
@@ -118,11 +146,6 @@ def validate(args):
                         "--sample-rates", "44100,48000,96000", "--block-sizes", "64,128,256,512,1024",
                         "--timeout-ms", "60000", "--validate", bundle.resolve()])]
             if fmt == "Components":
-                destination = Path.home() / "Library/Audio/Plug-Ins/Components" / bundle.name
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                if destination.exists():
-                    raise FileExistsError(f"Refusing to replace an installed AU: {destination}")
-                run("ditto", bundle, destination)
                 commands.insert(0, ("auval", ["auval", "-v", "aufx", product["code"], "LsAu"]))
             record["checks"] = {}
             for label, command in commands:
@@ -144,7 +167,8 @@ def validate(args):
             records.append(record)
     (args.logs / "validation.json").write_text(json.dumps({
         "architecture": platform.machine(), "macos": platform.mac_ver()[0],
-        "commit": run("git", "rev-parse", "HEAD", cwd=ROOT).strip(),
+        "commit": build_manifest["commit"],
+        "validation_tools_commit": run("git", "rev-parse", "HEAD", cwd=ROOT).strip(),
         "passed": not failed, "products": records}, indent=2) + "\n")
     if failed:
         raise SystemExit("Mac plugin validation failed; see retained logs")
@@ -154,7 +178,7 @@ def package(args):
     # Each build shard is checked natively on both CPU families. Require the
     # evidence to match the exact bytes that will be handed off.
     reports = [json.loads(p.read_text()) for p in args.evidence.rglob("validation.json")]
-    commit = run("git", "rev-parse", "HEAD", cwd=ROOT).strip()
+    commit = args.source_commit or run("git", "rev-parse", "HEAD", cwd=ROOT).strip()
     inspected = []
     for product in products():
         for fmt, suffix in FORMATS.items():
@@ -178,6 +202,7 @@ def package(args):
         raise FileExistsError(archive)
     run("ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", args.bundles, archive)
     (args.output / "SHA256SUMS.txt").write_text(f'{hashlib.sha256(archive.read_bytes()).hexdigest()}  {archive.name}\n')
+    (args.output / "SOURCE-COMMIT.txt").write_text(commit + "\n")
     print(archive)
 
 
@@ -191,12 +216,14 @@ def main():
     va.add_argument("--bundles", type=Path, required=True)
     va.add_argument("--pluginval", type=Path, required=True)
     va.add_argument("--logs", type=Path, required=True)
+    va.add_argument("--ci-system-install", action="store_true")
     for p in (st, va):
         p.add_argument("--projects", type=lambda value: value.split(";"))
     pa = sub.add_parser("package")
     pa.add_argument("--bundles", type=Path, required=True)
     pa.add_argument("--evidence", type=Path, required=True)
     pa.add_argument("--output", type=Path, required=True)
+    pa.add_argument("--source-commit")
     args = parser.parse_args()
     if platform.system() != "Darwin":
         parser.error("Mac bundle tools must run on macOS")
