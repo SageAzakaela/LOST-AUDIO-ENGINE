@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
+include(${CMAKE_CURRENT_LIST_DIR}/../cmake/LostAudioPluginDefaults.cmake)
 project(OcclusionEngineVST3 VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -24,7 +25,8 @@ juce_add_plugin(OcclusionEngine
   PLUGIN_MANUFACTURER_CODE LsAu
   PLUGIN_CODE OcEg
   VST3_AUTO_MANIFEST FALSE
-  FORMATS VST3 Standalone
+  FORMATS ${LAE_PLUGIN_FORMATS}
+  AU_SANDBOX_SAFE TRUE
   PRODUCT_NAME "Occlusion Engine"
 )
 

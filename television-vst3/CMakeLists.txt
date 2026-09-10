@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
+include(${CMAKE_CURRENT_LIST_DIR}/../cmake/LostAudioPluginDefaults.cmake)
 project(TelevisionEngineVST3 VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -25,7 +26,8 @@ juce_add_plugin(TelevisionEngine
   PLUGIN_CODE TvEg
   # Windows Application Control blocks JUCE's newly generated helper in local developer builds.
   VST3_AUTO_MANIFEST FALSE
-  FORMATS VST3 Standalone
+  FORMATS ${LAE_PLUGIN_FORMATS}
+  AU_SANDBOX_SAFE TRUE
   PRODUCT_NAME "Television Engine"
 )
 

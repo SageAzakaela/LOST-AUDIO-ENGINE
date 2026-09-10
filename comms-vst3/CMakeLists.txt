@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
+include(${CMAKE_CURRENT_LIST_DIR}/../cmake/LostAudioPluginDefaults.cmake)
 project(CommsEngineVST3 VERSION 0.2.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -28,7 +29,8 @@ juce_add_plugin(CommsEngine
   COPY_PLUGIN_AFTER_BUILD FALSE
   PLUGIN_MANUFACTURER_CODE LsAu
   PLUGIN_CODE CmEg
-  FORMATS VST3 Standalone
+  FORMATS ${LAE_PLUGIN_FORMATS}
+  AU_SANDBOX_SAFE TRUE
   PRODUCT_NAME "Comms Engine"
 )
 
