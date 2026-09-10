@@ -100,3 +100,32 @@ source control. See [Apple's Developer ID guidance](https://developer.apple.com/
 Before calling a recipient's setup verified, record their DAW/version and macOS
 version, then check scan, insertion, audio, UI resizing, factory presets,
 automation and save/close/reopen. Test on a copy of a project.
+
+## Verified private beta, September 9, 2026
+
+- Binary source: `3bf921df4f045f5445d5e5ce7a281071880f48f8`.
+- [Build and portable DSP evidence](https://github.com/SageAzakaela/LOST-AUDIO-ENGINE/actions/runs/34432553049):
+  all thirteen universal AU/VST3 builds passed; 14 portable DSP tests passed on
+  each CPU. This first run's AU discovery tests failed before the CI registration
+  fix; use the subsequent passing validation evidence below.
+- [Passing plugin validation](https://github.com/SageAzakaela/LOST-AUDIO-ENGINE/actions/runs/34433772109):
+  52 pluginval executions and 26 Apple AU validations passed across native arm64
+  and x86_64, on macOS 15.7.9. The original binary hashes are unchanged.
+- [Passing final installer validation](https://github.com/SageAzakaela/LOST-AUDIO-ENGINE/actions/runs/34434651331):
+  installation succeeded on both CPUs, all 26 installed bundle hashes matched,
+  and all thirteen installed AUs passed again on each CPU. Neither final installer
+  test needed a registrar refresh. Logout/login is only a recipient troubleshooting
+  fallback, not a required normal installation step.
+- `BE-Digital-Mac-Beta-3bf921df.pkg` SHA-256:
+  `301a3621d40e66e314c1a8bf45d6036571274f92773b22c608a8b8e2979925f9`.
+- The local handoff ZIP `dist/macos/BE-Digital-Mac-Beta-3bf921df.zip` contains the
+  installer, instructions, manifest and installer checksum. Its SHA-256 is
+  `c271ea8410c649b28c066222451ef320500d3bb2222c73adb466b7894832741f`.
+  The downloaded installer and the installer inside the ZIP both matched the
+  installed/tested package hash; the ZIP CRC check passed.
+- Nine local packaging tests passed, repository validation passed, and a fresh
+  Windows Tape VST3 build passed with the shared CMake defaults.
+
+The installer remains unsigned and unnotarized. No interactive DAW session on
+Summer's Mac has been observed; Pro Tools/AAX and macOS versions other than the
+tested version remain outside the demonstrated host coverage.
