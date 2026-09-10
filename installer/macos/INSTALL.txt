@@ -8,8 +8,10 @@ Pro Tools requires AAX, which is not included.
 INSTALL
 1. Close your recording software. Back up any older B&E Digital plugin versions.
 2. Open the BE-Digital-Mac-Beta installer package and follow Installer's prompts.
-3. Reopen your recording software and rescan plugins if needed.
-4. Look for B&E Digital in the audio effects list.
+3. Save your work, then log out of macOS and log back in once. This refreshes
+   macOS Audio Unit discovery after the first installation.
+4. Reopen your recording software and rescan plugins if needed.
+5. Look for B&E Digital in the audio effects list.
 
 This is an unsigned private beta, not an Apple-notarized release. If macOS says
 the developer cannot be verified, and you have confirmed this is the beta sent

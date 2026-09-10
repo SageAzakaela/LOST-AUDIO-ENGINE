@@ -2,8 +2,10 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import plistlib
+import re
 import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
@@ -110,10 +112,28 @@ def verify_install(args):
             record = inspect_bundle(bundle, product, fmt)
             if record not in manifest["products"]:
                 raise ValueError(f"Installed bytes do not match validated bundle: {bundle}")
-        output = run("auval", "-v", "aufx", product["code"], "LsAu", timeout=300)
+    registered = run("auval", "-a")
+    (logs / "registry-before-login-refresh.txt").write_text(registered)
+    missing = [p["name"] for p in products() if not re.search(r'aufx\s+' + p["code"] + r'\s+LsAu\b', registered)]
+    if missing and args.ci_refresh_au_registry:
+        if os.environ.get("GITHUB_ACTIONS") != "true":
+            raise ValueError("Registry refresh is restricted to disposable CI runners")
+        # Model the explicitly documented logout/login after a first AU install.
+        # This command is test tooling and is never part of the installer payload.
+        subprocess.run(["sudo", "killall", "-9", "AudioComponentRegistrar"], check=False,
+                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        (logs / "registry-after-login-refresh.txt").write_text(run("auval", "-a"))
+    for product in products():
+        try:
+            output = run("auval", "-v", "aufx", product["code"], "LsAu", timeout=300)
+        except subprocess.CalledProcessError as error:
+            (logs / (product["project"] + "-installed-auval.txt")).write_text(error.stdout or "")
+            print(error.stdout, flush=True)
+            raise
         (logs / (product["project"] + "-installed-auval.txt")).write_text(output)
     (logs / "result.json").write_text(json.dumps({"passed": True, "commit": args.source_commit,
-        "verified_bundles": len(manifest["products"]), "installer_sha256": expected[0]}, indent=2) + "\n")
+        "verified_bundles": len(manifest["products"]), "installer_sha256": expected[0],
+        "login_refresh_needed": bool(missing)}, indent=2) + "\n")
 
 
 if __name__ == "__main__":
@@ -124,6 +144,7 @@ if __name__ == "__main__":
     make.add_argument("--output", type=Path, required=True)
     verify = sub.add_parser("verify-install")
     verify.add_argument("--package-dir", type=Path, required=True)
+    verify.add_argument("--ci-refresh-au-registry", action="store_true")
     for p in (make, verify):
         p.add_argument("--source-commit", required=True)
     args = parser.parse_args()

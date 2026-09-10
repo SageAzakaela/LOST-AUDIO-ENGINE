@@ -76,7 +76,7 @@ jobs:
       - name: Install, inspect installed bytes and scan installed Audio Units
         env:
           SOURCE_COMMIT: ${{ needs.package.outputs.source_commit }}
-        run: python3 scripts/build_macos_installer.py verify-install --package-dir candidate --source-commit "$SOURCE_COMMIT"
+        run: python3 scripts/build_macos_installer.py verify-install --package-dir candidate --source-commit "$SOURCE_COMMIT" --ci-refresh-au-registry
       - uses: actions/upload-artifact@v7
         if: always()
         with:
