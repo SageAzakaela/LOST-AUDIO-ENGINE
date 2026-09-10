@@ -63,6 +63,14 @@ Validation logs and exact source commits are retained as CI artifacts. The final
 developer ZIP is emitted only after all required jobs pass. Build-shard artifacts
 alone are compilation evidence, not a validated handoff.
 
+`.github/workflows/macos-validation.yml` can revalidate existing build shards
+without recompiling. It requires all four original build jobs and both native
+DSP jobs to have passed. Reports retain the original binary source SHA separately
+from the validation-tool SHA and verify the original binary hashes. In disposable
+CI runners, the components are installed to the system folder and the AU registrar
+is refreshed once before validation to model a fresh login. The recipient's
+installer does not include a registrar-reset script.
+
 `.github/workflows/macos-installer.yml` accepts a successful build run ID and
 creates a standard Installer `.pkg` from its exact validated ZIP. It checks the
 source SHA and every plugin hash before packaging. The installer is then run on

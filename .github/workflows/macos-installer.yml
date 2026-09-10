@@ -1,6 +1,9 @@
 name: Mac beta installer
 
 on:
+  push:
+    branches: [codex/macos-universal-beta]
+    paths: ['.github/workflows/macos-installer.yml']
   workflow_dispatch:
     inputs:
       build_run_id:
@@ -20,11 +23,13 @@ jobs:
       source_commit: ${{ steps.source.outputs.commit }}
     steps:
       - uses: actions/checkout@v7
+      - name: Check packaging rejection cases
+        run: python3 -m unittest discover -s tests -p 'test_macos_*.py'
       - name: Verify and download the tested source build
         id: source
         env:
           GH_TOKEN: ${{ github.token }}
-          SOURCE_RUN: ${{ inputs.build_run_id }}
+          SOURCE_RUN: ${{ inputs.build_run_id || vars.MAC_BETA_VALIDATED_RUN_ID }}
         run: |
           python3 - <<'PY'
           import json, os, subprocess
