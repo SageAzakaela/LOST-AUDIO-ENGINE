@@ -2,7 +2,7 @@
 
 ## Current status
 
-The repository contains thirteen JUCE projects. They build VST3 and Standalone targets, preserve existing plugin identities, and contain useful DSP/UI work. They are not currently the sonic authority and must not be described as equivalent to the current web workstation until listening QA establishes parity.
+The repository contains thirteen JUCE projects. They build VST3 and Standalone targets, plus Audio Units on macOS, preserve existing plugin identities, and contain useful DSP/UI work. Universal Mac builds and beta installation checks are described in the [Mac build guide](macos.md). They are not currently the sonic authority and must not be described as equivalent to the current web workstation until listening QA establishes parity.
 
 Native V2 work is active. Broader Linux/browser/device validation remains documented backlog rather than a blocker. Tape is the proving engine for the portable core because it exercises deterministic modulation, stochastic damage, noise, nonlinear color, latency, safety, presets, and embedded mechanical media.
 
@@ -437,7 +437,7 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DJUCE_DIR=/path/to/JUCE
 cmake --build build --parallel
 ```
 
-The root `CMakeLists.txt` configures all ten projects. An individual `*-vst3/` directory can also be configured alone with the same `JUCE_DIR` argument.
+The root `CMakeLists.txt` configures all thirteen projects. An individual `*-vst3/` directory can also be configured alone with the same `JUCE_DIR` argument.
 
 `COPY_PLUGIN_AFTER_BUILD` is disabled. Builds must not silently overwrite installed release plugins.
 

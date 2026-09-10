@@ -1,0 +1,89 @@
+name: Mac beta installer
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: Successful Mac universal plugin beta run ID
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  package:
+    runs-on: macos-15
+    timeout-minutes: 15
+    outputs:
+      source_commit: ${{ steps.source.outputs.commit }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Verify and download the tested source build
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN: ${{ inputs.build_run_id }}
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+          run_id = os.environ['SOURCE_RUN']
+          assert run_id.isdigit(), 'Expected numeric workflow run ID'
+          run = json.loads(subprocess.check_output(['gh', 'api', f'repos/{os.environ["GITHUB_REPOSITORY"]}/actions/runs/{run_id}']))
+          assert run['conclusion'] == 'success', 'Source build did not pass'
+          assert run['path'] == '.github/workflows/macos-plugins.yml', 'Wrong source workflow'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'commit={run["head_sha"]}\n')
+          subprocess.run(['gh', 'run', 'download', run_id, '--name', 'be-digital-mac-universal-dev', '--dir', 'incoming'], check=True)
+          PY
+      - name: Verify archive and create installer
+        env:
+          SOURCE_COMMIT: ${{ steps.source.outputs.commit }}
+        run: |
+          (cd incoming && shasum -a 256 -c SHA256SUMS.txt)
+          for archive in incoming/*.zip; do ditto -x -k "$archive" extracted; done
+          python3 scripts/build_macos_installer.py build --bundles extracted/bundles --output dist --source-commit "$SOURCE_COMMIT"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mac-beta-installer-candidate
+          path: dist/
+          if-no-files-found: error
+
+  installation:
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          name: mac-beta-installer-candidate
+          path: candidate
+      - name: Install, inspect installed bytes and scan installed Audio Units
+        env:
+          SOURCE_COMMIT: ${{ needs.package.outputs.source_commit }}
+        run: python3 scripts/build_macos_installer.py verify-install --package-dir candidate --source-commit "$SOURCE_COMMIT"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: mac-install-evidence-${{ matrix.runner }}
+          path: candidate/install-validation/
+
+  deliver:
+    needs: installation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: mac-beta-installer-candidate
+          path: installer
+      - uses: actions/upload-artifact@v7
+        with:
+          name: be-digital-mac-beta-installer
+          path: installer/
+          if-no-files-found: error

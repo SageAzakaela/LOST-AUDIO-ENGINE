@@ -1,0 +1,94 @@
+# Mac plugin beta
+
+The Mac build targets macOS 11 or newer and includes native `arm64` and `x86_64`
+code in every bundle. All thirteen products build as VST3 and Audio Units v2
+(`.component`). `AU_SANDBOX_SAFE` permits use in sandboxed AU hosts; existing
+manufacturer, plugin and bundle identifiers remain unchanged.
+
+## Compatibility scope
+
+| Host/system | Included format | Evidence required |
+| --- | --- | --- |
+| Apple silicon Mac | native arm64 AU / VST3 | Mac arm64 CI validation |
+| Intel Mac | native x86_64 AU / VST3 | Mac Intel CI validation |
+| Logic Pro / GarageBand | AU | AU validation plus actual DAW session |
+| DAW with VST3 support | VST3 | pluginval plus actual DAW session |
+| Pro Tools | AAX is not included | Separate AAX implementation/distribution |
+| macOS before 11 | Not targeted | No compatibility claim |
+
+The minimum deployment target is a build constraint, not evidence of testing
+every intervening macOS release. CI uses macOS 15 on both CPU families. Passing
+validators does not prove compatibility with every DAW version or complete
+sonic parity with the browser edition.
+
+References: [Logic Audio Units](https://support.apple.com/guide/logicpro/lgcp22a0dab0/mac),
+[Avid plugin formats](https://resources.avid.com/SupportFiles/PT/Audio_and_MIDI_Plugins_Guide_2024.10.pdf),
+[GitHub runner architectures](https://docs.github.com/en/actions/reference/runners/github-hosted-runners),
+[pluginval](https://github.com/Tracktion/pluginval).
+
+## Reproduce the build
+
+With Xcode command-line tools, CMake 3.22+ and Ninja on a Mac:
+
+```sh
+cmake -S . -B build-mac -G Ninja -DCMAKE_BUILD_TYPE=Release \
+  -DBUILD_TESTING=OFF '-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64' \
+  -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 '-DLAE_PLUGIN_FORMATS=VST3;AU'
+cmake --build build-mac --parallel 3
+python3 scripts/macos_plugins.py stage --build build-mac --output bundles
+```
+
+JUCE remains pinned at the revision in the root CMake file. AU is added only on
+Mac by default; Windows/Linux keep VST3 and Standalone. Individual plugin
+directories share the same defaults. `LAE_PLUGIN_PROJECTS` can select a
+semicolon-separated subset of project directories for development builds.
+Explicit architecture/format/deployment overrides are respected, but the Mac
+distribution checks require both architectures and a deployment target no newer
+than 11.0. Nothing is automatically copied into a user's plugin scan folders.
+
+## Automated gates
+
+`.github/workflows/macos-plugins.yml` builds four groups and tests the exact
+same universal bundles on native Intel and Apple silicon runners. It checks:
+
+- 14 portable DSP test executables on each CPU;
+- both Mach-O architecture slices and minimum OS load commands;
+- system-only runtime library dependencies, intact signatures and identities;
+- Apple `auval` for every Audio Unit;
+- pinned pluginval 1.0.4, strictness 5, for both formats, including editor tests;
+- 44.1/48/96 kHz and 64/128/256/512/1024-sample pluginval coverage;
+- per-binary hash agreement between the validated bundles and packaged files.
+
+Validation logs and exact source commits are retained as CI artifacts. The final
+developer ZIP is emitted only after all required jobs pass. Build-shard artifacts
+alone are compilation evidence, not a validated handoff.
+
+`.github/workflows/macos-installer.yml` accepts a successful build run ID and
+creates a standard Installer `.pkg` from its exact validated ZIP. It checks the
+source SHA and every plugin hash before packaging. The installer is then run on
+fresh Intel and Apple silicon runners, with all installed binary hashes checked
+and every installed AU scanned again. Only after those jobs pass is the
+`be-digital-mac-beta-installer` artifact emitted.
+
+The installer uses standard system plugin directories, disables bundle relocation,
+contains no custom install scripts, and requires normal installer authorization.
+It replaces existing same-name system installations. User-folder duplicates and
+project backups are covered in [installation instructions](../installer/macos/INSTALL.txt).
+
+## Private beta trust and distribution
+
+The current path uses ad-hoc plugin signatures and an unsigned installer. It is
+not Apple notarized. A recipient may need to approve this specific installer
+through macOS Privacy & Security after confirming its origin. Managed Macs may
+disallow this. No global Gatekeeper changes or quarantine-clearing scripts are
+part of the package. See [Apple's approval instructions](https://support.apple.com/102445).
+
+For the smoother public release path, sign all plugin bundles with Developer ID
+Application, sign the installer with Developer ID Installer, submit it using
+`notarytool`, require an Accepted result, staple the installer and verify its
+Gatekeeper assessment. Keep certificates and notarization credentials outside
+source control. See [Apple's Developer ID guidance](https://developer.apple.com/developer-id/).
+
+Before calling a recipient's setup verified, record their DAW/version and macOS
+version, then check scan, insertion, audio, UI resizing, factory presets,
+automation and save/close/reopen. Test on a copy of a project.

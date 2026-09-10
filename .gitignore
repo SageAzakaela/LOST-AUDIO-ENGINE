@@ -13,6 +13,8 @@ Thumbs.db
 /build-tape/
 /build-tape-dev/
 /build-validation/
+/build-check/
+/build-mac/
 .tools/
 **/cmake-build-*/
 **/CMakeFiles/
@@ -52,6 +54,7 @@ Thumbs.db
 
 # Plugin bundles copied into workspace
 **/*.vst3/
+**/*.component/
 
 # Local snapshots of published release artifacts (hashes belong in docs/release-audit.md)
 .artifacts/

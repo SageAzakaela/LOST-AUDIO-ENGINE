@@ -1,0 +1,47 @@
+B&E DIGITAL - MAC PLUGIN BETA
+
+Includes 13 plugins, each as VST3 and Audio Units (AU).
+Works natively on Apple silicon and Intel. Requires macOS 11 or newer.
+Built for both CPU families; automated tests do not cover every DAW/macOS version.
+Pro Tools requires AAX, which is not included.
+
+INSTALL
+1. Close your recording software. Back up any older B&E Digital plugin versions.
+2. Open the BE-Digital-Mac-Beta installer package and follow Installer's prompts.
+3. Reopen your recording software and rescan plugins if needed.
+4. Look for B&E Digital in the audio effects list.
+
+This is an unsigned private beta, not an Apple-notarized release. If macOS says
+the developer cannot be verified, and you have confirmed this is the beta sent
+by Azakaela, use System Settings > Privacy & Security > Open Anyway for this
+installer, then follow the confirmation prompts. On older macOS versions, this
+is under System Preferences > Security & Privacy > General.
+Apple's instructions: https://support.apple.com/102445
+If your Mac is managed by an organization, its policy may prevent this approval.
+If macOS reports malware or damage, stop and report the exact message.
+
+CHOOSE THE FORMAT
+Logic Pro / GarageBand: Audio Units (AU).
+DAWs with VST3 support: VST3. Enable VST3 scanning if the DAW requires it.
+Both formats are installed; you only need one instance of an effect per track.
+If a newly installed AU is missing, log out and back in, then reopen the DAW.
+
+FIRST TRY
+Open a copy of a project, insert an effect on an audio track and play some audio.
+Try a factory preset and adjust the controls. Save, close and reopen the project
+to check recall. Let Azakaela know what sounds good, what feels awkward, and any
+errors, along with your macOS and recording-software versions.
+
+INSTALL LOCATIONS / REMOVAL
+VST3: /Library/Audio/Plug-Ins/VST3/
+AU:   /Library/Audio/Plug-Ins/Components/
+Notes: /Library/Application Support/B&E Digital/Lost Audio Mac Beta/
+To uninstall, close the DAW and move only this beta's named .vst3/.component
+bundles to the Trash. The manifest in the Notes folder lists all included names.
+An existing same-name version in these system folders will be replaced.
+A previous copy in your personal ~/Library plugin folder may cause duplicates;
+back it up and remove that duplicate before scanning the new system installation.
+
+BETA STATUS
+Includes automated plugin and installation checks. Real sessions in your DAW
+and complete sonic parity with the browser edition remain beta testing work.
